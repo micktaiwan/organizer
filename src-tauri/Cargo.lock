@@ -2319,7 +2319,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "organizer-temp"
+name = "organizer"
 version = "0.1.0"
 dependencies = [
  "serde",

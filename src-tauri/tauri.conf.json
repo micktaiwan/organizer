@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "organizer-temp",
+  "productName": "Organizer",
   "version": "0.1.0",
-  "identifier": "com.mickaelfm.organizer-temp",
+  "identifier": "com.organizer.chat",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "organizer-temp",
+        "title": "Organizer",
         "width": 800,
         "height": 600
       }
