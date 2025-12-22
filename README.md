@@ -39,29 +39,6 @@ No cross-compilation. No CI/CD. Each platform is tested natively by its develope
 - Windows uses **WebView2** (Chromium-based)
 - Minor rendering differences may occur — test on both platforms before merging
 
-## Roadmap
-
-### Phase 1: Foundation
-- [x] Initialize Tauri project structure
-- [ ] Setup shared UI components
-- [ ] Basic window with chat layout
-
-### Phase 2: Text Chat
-- [ ] Chat bubbles UI (sent/received styles)
-- [ ] Message input component
-- [ ] Firebase/Supabase integration
-- [ ] Real-time message sync between platforms
-
-### Phase 3: Voice Messages
-- [ ] Audio recording via Web API
-- [ ] Playback component
-- [ ] Audio file upload/download
-
-### Phase 4: Real-time Voice (Advanced)
-- [ ] WebRTC integration
-- [ ] Push-to-talk functionality
-- [ ] Voice activity detection
-
 ## Getting Started
 
 ### Prerequisites
