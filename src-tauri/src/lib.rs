@@ -13,6 +13,7 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Create tray menu
             let show = MenuItem::with_id(app, "show", "Show Organizer", true, None::<&str>)?;
