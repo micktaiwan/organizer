@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import Peer, { DataConnection } from "peerjs";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 import "./App.css";
 
 interface Message {
   id: string;
-  text: string;
+  text?: string;
+  image?: string; // base64 data URL
   sender: "me" | "them";
   timestamp: Date;
   status?: "sending" | "sent" | "delivered" | "failed";
@@ -37,14 +43,44 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [copied, setCopied] = useState(false);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
 
   const peerRef = useRef<Peer | null>(null);
   const connRef = useRef<DataConnection | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isWindowFocusedRef = useRef(true);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const title = import.meta.env.DEV ? "Organizer - Dev mode" : "Organizer";
     getCurrentWindow().setTitle(title);
+  }, []);
+
+  useEffect(() => {
+    const setupNotifications = async () => {
+      let permissionGranted = await isPermissionGranted();
+      if (!permissionGranted) {
+        const permission = await requestPermission();
+        permissionGranted = permission === "granted";
+      }
+    };
+    setupNotifications();
+
+    const window = getCurrentWindow();
+    let unlistenFocus: (() => void) | undefined;
+    let unlistenBlur: (() => void) | undefined;
+
+    const setupListeners = async () => {
+      unlistenFocus = await window.onFocusChanged(({ payload: focused }) => {
+        isWindowFocusedRef.current = focused;
+      });
+    };
+    setupListeners();
+
+    return () => {
+      unlistenFocus?.();
+      unlistenBlur?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -73,13 +109,39 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) continue;
+
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const base64 = event.target?.result as string;
+            setPendingImage(base64);
+          };
+          reader.readAsDataURL(file);
+          break;
+        }
+      }
+    };
+
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
+  }, []);
+
   const setupConnection = (conn: DataConnection) => {
     conn.on("open", () => {
       setConnected(true);
     });
 
     conn.on("data", (data) => {
-      const parsed = typeof data === "string" ? { type: "message", text: data } : data as { type: string; id?: string; messageId?: string; text?: string };
+      const parsed = typeof data === "string" ? { type: "message", text: data } : data as { type: string; id?: string; messageId?: string; text?: string; image?: string };
 
       if (parsed.type === "ping") {
         conn.send({ type: "pong" });
@@ -98,12 +160,24 @@ function App() {
       const messageId = parsed.id || crypto.randomUUID();
       const message: Message = {
         id: messageId,
-        text: parsed.text || String(data),
+        text: parsed.text,
+        image: parsed.image,
         sender: "them",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, message]);
       playNotificationSound();
+
+      // Show system notification if window is not focused
+      if (!isWindowFocusedRef.current) {
+        const notifBody = message.image ? "Image reçue" : (message.text && message.text.length > 100
+          ? message.text.substring(0, 100) + "..."
+          : message.text || "");
+        sendNotification({
+          title: "Nouveau message",
+          body: notifBody,
+        });
+      }
 
       // Send ACK
       conn.send({ type: "ack", messageId });
@@ -147,18 +221,24 @@ function App() {
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMessage.trim()) return;
+
+    const hasText = inputMessage.trim().length > 0;
+    const hasImage = pendingImage !== null;
+
+    if (!hasText && !hasImage) return;
 
     const messageId = crypto.randomUUID();
     const message: Message = {
       id: messageId,
-      text: inputMessage,
+      text: hasText ? inputMessage : undefined,
+      image: hasImage ? pendingImage : undefined,
       sender: "me",
       timestamp: new Date(),
       status: connected ? "sending" : "failed",
     };
     setMessages((prev) => [...prev, message]);
     setInputMessage("");
+    setPendingImage(null);
 
     if (!connRef.current || !connRef.current.open) {
       setMessages((prev) =>
@@ -168,7 +248,12 @@ function App() {
     }
 
     try {
-      connRef.current.send({ type: "message", id: messageId, text: inputMessage });
+      connRef.current.send({
+        type: "message",
+        id: messageId,
+        text: hasText ? inputMessage : undefined,
+        image: hasImage ? pendingImage : undefined,
+      });
       setMessages((prev) =>
         prev.map((m) => (m.id === messageId ? { ...m, status: "sent" } : m))
       );
@@ -177,6 +262,10 @@ function App() {
         prev.map((m) => (m.id === messageId ? { ...m, status: "failed" } : m))
       );
     }
+  };
+
+  const cancelPendingImage = () => {
+    setPendingImage(null);
   };
 
   const copyPeerId = () => {
@@ -241,7 +330,10 @@ function App() {
       <div className="messages">
         {messages.map((msg) => (
           <div key={msg.id} className={`message ${msg.sender} ${msg.status === "failed" ? "failed" : ""}`}>
-            <div className="bubble">{msg.text}</div>
+            <div className="bubble">
+              {msg.image && <img src={msg.image} alt="Image" className="message-image" />}
+              {msg.text && <span>{msg.text}</span>}
+            </div>
             <span className="timestamp">
               {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               {msg.sender === "me" && msg.status === "sent" && " ✓"}
@@ -253,15 +345,25 @@ function App() {
         <div ref={messagesEndRef} />
       </div>
 
+      {pendingImage && (
+        <div className="pending-image-preview">
+          <img src={pendingImage} alt="Preview" />
+          <button type="button" onClick={cancelPendingImage} className="cancel-image">
+            ×
+          </button>
+        </div>
+      )}
+
       <form className="message-input" onSubmit={sendMessage}>
         <input
+          ref={inputRef}
           type="text"
           value={inputMessage}
           onChange={(e) => setInputMessage(e.target.value)}
-          placeholder="Type a message..."
+          placeholder={pendingImage ? "Add a caption..." : "Type a message or paste an image..."}
           autoFocus
         />
-        <button type="submit" disabled={!inputMessage.trim()}>
+        <button type="submit" disabled={!inputMessage.trim() && !pendingImage}>
           Send
         </button>
       </form>
