@@ -111,6 +111,10 @@ button:disabled {
   cursor: not-allowed;
 }
 
+button.copied {
+  background: #34c759;
+}
+
 /* Chat Screen */
 .chat-container {
   height: 100vh;
@@ -205,6 +209,14 @@ button:disabled {
   background: #007aff;
   color: white;
   border-bottom-right-radius: 4px;
+}
+
+.message.me.failed .bubble {
+  background: #ff3b30;
+}
+
+.message.me.failed .timestamp {
+  color: #ff3b30;
 }
 
 .message.them .bubble {
