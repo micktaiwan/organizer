@@ -8,9 +8,11 @@ export const useVoiceRecorder = (onSend: (base64Audio: string) => void) => {
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
+  const isCancelledRef = useRef(false);
 
   const startRecording = async () => {
     try {
+      isCancelledRef.current = false;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordingStreamRef.current = stream;
 
@@ -24,11 +26,13 @@ export const useVoiceRecorder = (onSend: (base64Audio: string) => void) => {
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        if (!isCancelledRef.current && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
       };
 
       mediaRecorder.onstop = () => {
-        if (audioChunksRef.current.length > 0) {
+        if (!isCancelledRef.current && audioChunksRef.current.length > 0) {
           const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
           const reader = new FileReader();
           reader.onloadend = () => {
@@ -62,6 +66,7 @@ export const useVoiceRecorder = (onSend: (base64Audio: string) => void) => {
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      isCancelledRef.current = false;
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
@@ -69,6 +74,7 @@ export const useVoiceRecorder = (onSend: (base64Audio: string) => void) => {
 
   const cancelRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      isCancelledRef.current = true;
       audioChunksRef.current = [];
       mediaRecorderRef.current.stop();
       setIsRecording(false);
@@ -83,4 +89,3 @@ export const useVoiceRecorder = (onSend: (base64Audio: string) => void) => {
     cancelRecording
   };
 };
-
