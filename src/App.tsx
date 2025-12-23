@@ -12,9 +12,20 @@ interface Message {
   id: string;
   text?: string;
   image?: string; // base64 data URL
+  audio?: string; // base64 audio data URL for voice messages
   sender: "me" | "them";
   timestamp: Date;
-  status?: "sending" | "sent" | "delivered" | "failed";
+  status?: "sending" | "sent" | "delivered" | "read" | "failed";
+  readAt?: Date; // when message was read by recipient
+  isSystemMessage?: boolean;
+  systemMessageType?: "missed-call" | "rejected-call" | "ended-call";
+}
+
+interface Contact {
+  id: string;
+  name: string;
+  peerId: string;
+  createdAt: Date;
 }
 
 // Storage keys differ between dev and prod to avoid conflicts
@@ -22,6 +33,59 @@ const STORAGE_PREFIX = import.meta.env.DEV ? "dev_" : "";
 const STORAGE_KEYS = {
   username: `${STORAGE_PREFIX}username`,
   lastPeerId: `${STORAGE_PREFIX}lastPeerId`,
+  contacts: `${STORAGE_PREFIX}contacts`,
+};
+
+// Emoji conversion map
+const EMOJI_MAP: Record<string, string> = {
+  ':)': '😊',
+  ':-)': '😊',
+  ':(': '😢',
+  ':-(': '😢',
+  ':D': '😃',
+  ':-D': '😃',
+  ':P': '😛',
+  ':-P': '😛',
+  ':p': '😛',
+  ';)': '😉',
+  ';-)': '😉',
+  '<3': '❤️',
+  ':o': '😮',
+  ':O': '😮',
+  ':/': '😕',
+  ':-/': '😕',
+  'xD': '😆',
+  'XD': '😆',
+  ':*': '😘',
+  ':-*': '😘',
+  '>:(': '😠',
+  ":'(": '😢',
+  'B)': '😎',
+  'B-)': '😎',
+  'o:)': '😇',
+  'O:)': '😇',
+  ':3': '😺',
+  '</3': '💔',
+  '<33': '💕',
+  ':+1:': '👍',
+  ':-1:': '👎',
+  ':ok:': '👌',
+  ':wave:': '👋',
+  ':clap:': '👏',
+  ':fire:': '🔥',
+  ':100:': '💯',
+};
+
+const convertEmojis = (text: string): string => {
+  let result = text;
+  // Sort by length descending to match longer patterns first (e.g., </3 before <3)
+  const sortedKeys = Object.keys(EMOJI_MAP).sort((a, b) => b.length - a.length);
+  for (const shortcut of sortedKeys) {
+    const escapedShortcut = shortcut.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedShortcut, 'g');
+    result = result.replace(regex, EMOJI_MAP[shortcut]);
+  }
+  return result;
 };
 
 const playNotificationSound = () => {
@@ -91,6 +155,30 @@ function App() {
     return !!localStorage.getItem(STORAGE_KEYS.username);
   });
 
+  // Contacts state
+  const [contacts, setContacts] = useState<Contact[]>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.contacts);
+    if (stored) {
+      try {
+        return JSON.parse(stored).map((c: Contact) => ({
+          ...c,
+          createdAt: new Date(c.createdAt),
+        }));
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [showContactsModal, setShowContactsModal] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactPeerId, setNewContactPeerId] = useState("");
+
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+
   // Call states
   const [callState, setCallState] = useState<'idle' | 'calling' | 'incoming' | 'connected'>('idle');
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
@@ -107,6 +195,12 @@ function App() {
   const lastTypingSentRef = useRef<number>(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
+
+  // Voice recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
 
   // Call refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -242,7 +336,7 @@ function App() {
     });
 
     conn.on("data", (data) => {
-      const parsed = typeof data === "string" ? { type: "message", text: data } : data as { type: string; id?: string; messageId?: string; text?: string; image?: string; username?: string; withCamera?: boolean; enabled?: boolean };
+      const parsed = typeof data === "string" ? { type: "message", text: data } : data as { type: string; id?: string; messageId?: string; text?: string; image?: string; audio?: string; username?: string; withCamera?: boolean; enabled?: boolean; readAt?: string };
 
       if (parsed.type === "ping") {
         conn.send({ type: "pong" });
@@ -271,6 +365,17 @@ function App() {
         );
         return;
       }
+      if (parsed.type === "read" && parsed.messageId) {
+        console.log("📖 Read receipt received for message:", parsed.messageId);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === parsed.messageId
+              ? { ...m, status: "read", readAt: parsed.readAt ? new Date(parsed.readAt) : new Date() }
+              : m
+          )
+        );
+        return;
+      }
 
       // Call signaling
       if (parsed.type === "call-request") {
@@ -289,9 +394,11 @@ function App() {
       if (parsed.type === "call-reject") {
         setCallState('idle');
         stopLocalStream();
+        addCallSystemMessage("missed-call");
         return;
       }
       if (parsed.type === "call-end") {
+        addCallSystemMessage("ended-call");
         endCallInternal();
         return;
       }
@@ -312,6 +419,7 @@ function App() {
         id: messageId,
         text: parsed.text,
         image: parsed.image,
+        audio: parsed.audio,
         sender: "them",
         timestamp: new Date(),
       };
@@ -320,9 +428,13 @@ function App() {
 
       // Show system notification if window is not focused
       if (!isWindowFocusedRef.current) {
-        const notifBody = message.image ? "Image reçue" : (message.text && message.text.length > 100
+        const notifBody = message.audio
+          ? "Message vocal reçu"
+          : message.image
+          ? "Image reçue"
+          : message.text && message.text.length > 100
           ? message.text.substring(0, 100) + "..."
-          : message.text || "");
+          : message.text || "";
         sendNotification({
           title: "Nouveau message",
           body: notifBody,
@@ -331,6 +443,10 @@ function App() {
 
       // Send ACK
       conn.send({ type: "ack", messageId });
+
+      // Send read receipt (always for now - TODO: only when window focused)
+      console.log("📖 Sending read receipt for message:", messageId);
+      conn.send({ type: "read", messageId, readAt: new Date().toISOString() });
     });
 
     const scheduleReconnect = () => {
@@ -511,11 +627,29 @@ function App() {
     }
   };
 
+  const addCallSystemMessage = (type: "missed-call" | "rejected-call" | "ended-call") => {
+    const textMap = {
+      "missed-call": "Appel manqué",
+      "rejected-call": "Appel refusé",
+      "ended-call": "Appel terminé",
+    };
+    const message: Message = {
+      id: crypto.randomUUID(),
+      text: textMap[type],
+      sender: "me",
+      timestamp: new Date(),
+      isSystemMessage: true,
+      systemMessageType: type,
+    };
+    setMessages((prev) => [...prev, message]);
+  };
+
   const rejectCall = () => {
     stopRingtone();
     if (connRef.current?.open) {
       connRef.current.send({ type: "call-reject" });
     }
+    addCallSystemMessage("rejected-call");
     setCallState('idle');
   };
 
@@ -523,6 +657,7 @@ function App() {
     if (connRef.current?.open) {
       connRef.current.send({ type: "call-end" });
     }
+    addCallSystemMessage("ended-call");
     endCallInternal();
   };
 
@@ -638,7 +773,8 @@ function App() {
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputMessage(e.target.value);
+    const converted = convertEmojis(e.target.value);
+    setInputMessage(converted);
     sendTypingSignal();
   };
 
@@ -661,6 +797,187 @@ function App() {
 
   const changeUsername = () => {
     setUsernameSet(false);
+  };
+
+  // Contact management functions
+  const saveContactsToStorage = (contactsList: Contact[]) => {
+    localStorage.setItem(STORAGE_KEYS.contacts, JSON.stringify(contactsList));
+  };
+
+  const addContact = (name: string, peerId: string) => {
+    const newContact: Contact = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      peerId: peerId.trim(),
+      createdAt: new Date(),
+    };
+    const updated = [...contacts, newContact];
+    setContacts(updated);
+    saveContactsToStorage(updated);
+    setNewContactName("");
+    setNewContactPeerId("");
+  };
+
+  const updateContact = (id: string, name: string, peerId: string) => {
+    const updated = contacts.map((c) =>
+      c.id === id ? { ...c, name: name.trim(), peerId: peerId.trim() } : c
+    );
+    setContacts(updated);
+    saveContactsToStorage(updated);
+    setEditingContact(null);
+  };
+
+  const deleteContact = (id: string) => {
+    const updated = contacts.filter((c) => c.id !== id);
+    setContacts(updated);
+    saveContactsToStorage(updated);
+  };
+
+  const connectToContact = (contact: Contact) => {
+    connectToPeer(contact.peerId);
+    setShowContactsModal(false);
+  };
+
+  const getContactName = (peerId: string): string | null => {
+    const contact = contacts.find((c) => c.peerId === peerId);
+    return contact?.name || null;
+  };
+
+  const isCurrentPeerSaved = (): boolean => {
+    return contacts.some((c) => c.peerId === remotePeerId);
+  };
+
+  const saveCurrentPeerAsContact = () => {
+    setNewContactPeerId(remotePeerId);
+    setNewContactName(remoteUsername || "");
+    setShowContactsModal(true);
+  };
+
+  // Voice recording functions
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const sendVoiceMessage = (base64Audio: string) => {
+    if (!base64Audio) return;
+
+    const messageId = crypto.randomUUID();
+    const message: Message = {
+      id: messageId,
+      audio: base64Audio,
+      sender: "me",
+      timestamp: new Date(),
+      status: connected ? "sending" : "failed",
+    };
+
+    setMessages((prev) => [...prev, message]);
+
+    if (!connRef.current || !connRef.current.open) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, status: "failed" } : m))
+      );
+      return;
+    }
+
+    try {
+      connRef.current.send({
+        type: "message",
+        id: messageId,
+        audio: base64Audio,
+      });
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, status: "sent" } : m))
+      );
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, status: "failed" } : m))
+      );
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm",
+      });
+
+      audioChunksRef.current = [];
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        if (audioChunksRef.current.length > 0) {
+          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64Audio = reader.result as string;
+            sendVoiceMessage(base64Audio);
+          };
+          reader.readAsDataURL(audioBlob);
+        }
+
+        // Clean up stream
+        if (recordingStreamRef.current) {
+          recordingStreamRef.current.getTracks().forEach((track) => track.stop());
+          recordingStreamRef.current = null;
+        }
+      };
+
+      mediaRecorder.start(100);
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+      setRecordingDuration(0);
+    }
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      audioChunksRef.current = []; // Clear chunks to prevent sending
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+      setRecordingDuration(0);
+
+      // Clean up stream
+      if (recordingStreamRef.current) {
+        recordingStreamRef.current.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+      }
+    }
   };
 
   // Username screen
@@ -721,12 +1038,122 @@ function App() {
             </form>
           </div>
 
+          <div className="contacts-section">
+            <div className="contacts-header">
+              <p>Contacts sauvegardés :</p>
+              <button
+                className="add-contact-btn"
+                onClick={() => {
+                  setEditingContact(null);
+                  setNewContactName("");
+                  setNewContactPeerId("");
+                  setShowContactsModal(true);
+                }}
+              >
+                + Ajouter
+              </button>
+            </div>
+
+            {contacts.length === 0 ? (
+              <p className="no-contacts">Aucun contact sauvegardé</p>
+            ) : (
+              <div className="contacts-list">
+                {contacts.map((contact) => (
+                  <div key={contact.id} className="contact-item">
+                    <div className="contact-info">
+                      <span className="contact-name">{contact.name}</span>
+                      <span className="contact-peer-id">{contact.peerId.slice(0, 12)}...</span>
+                    </div>
+                    <div className="contact-actions">
+                      <button
+                        className="connect-contact-btn"
+                        onClick={() => connectToContact(contact)}
+                      >
+                        Connecter
+                      </button>
+                      <button
+                        className="edit-contact-btn"
+                        onClick={() => {
+                          setEditingContact(contact);
+                          setNewContactName(contact.name);
+                          setNewContactPeerId(contact.peerId);
+                          setShowContactsModal(true);
+                        }}
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        className="delete-contact-btn"
+                        onClick={() => deleteContact(contact.id)}
+                      >
+                        Suppr.
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="skip-section">
             <button className="skip-button" onClick={() => setSkippedConnection(true)}>
               Skip for now
             </button>
           </div>
         </div>
+
+        {/* Contacts Modal */}
+        {showContactsModal && (
+          <div className="modal-overlay" onClick={() => setShowContactsModal(false)}>
+            <div className="contact-modal" onClick={(e) => e.stopPropagation()}>
+              <h3>{editingContact ? "Modifier le contact" : "Ajouter un contact"}</h3>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (editingContact) {
+                    updateContact(editingContact.id, newContactName, newContactPeerId);
+                  } else {
+                    addContact(newContactName, newContactPeerId);
+                  }
+                  setShowContactsModal(false);
+                }}
+              >
+                <input
+                  type="text"
+                  value={newContactName}
+                  onChange={(e) => setNewContactName(e.target.value)}
+                  placeholder="Nom du contact"
+                  autoFocus
+                />
+                <input
+                  type="text"
+                  value={newContactPeerId}
+                  onChange={(e) => setNewContactPeerId(e.target.value)}
+                  placeholder="Peer ID"
+                />
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowContactsModal(false);
+                      setEditingContact(null);
+                      setNewContactName("");
+                      setNewContactPeerId("");
+                    }}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!newContactName.trim() || !newContactPeerId.trim()}
+                  >
+                    {editingContact ? "Mettre à jour" : "Ajouter"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
     );
   }
@@ -735,7 +1162,7 @@ function App() {
     <main className="chat-container">
       <header className="chat-header">
         <span className={`status-dot ${connected ? "online" : "offline"}`} />
-        <h2>{connected ? (remoteUsername || "Connecté") : "Hors ligne"}</h2>
+        <h2>{connected ? (remoteUsername || getContactName(remotePeerId) || "Connecté") : "Hors ligne"}</h2>
         <div className="header-actions">
           {connected && callState === 'idle' && (
             <>
@@ -745,6 +1172,11 @@ function App() {
               <button className="call-btn" onClick={() => startCall(true)} title="Appel vidéo">
                 📹
               </button>
+              {!isCurrentPeerSaved() && (
+                <button className="save-contact-btn" onClick={saveCurrentPeerAsContact} title="Sauvegarder ce contact">
+                  💾
+                </button>
+              )}
             </>
           )}
           {!connected && (
@@ -760,18 +1192,43 @@ function App() {
 
       <div className="messages">
         {messages.map((msg) => (
-          <div key={msg.id} className={`message ${msg.sender} ${msg.status === "failed" ? "failed" : ""}`}>
-            <div className="bubble">
-              {msg.image && <img src={msg.image} alt="Image" className="message-image" />}
-              {msg.text && <span>{msg.text}</span>}
+          msg.isSystemMessage ? (
+            <div key={msg.id} className="system-message">
+              <span className={`system-message-icon ${msg.systemMessageType}`}>
+                {msg.systemMessageType === "missed-call" && "📵"}
+                {msg.systemMessageType === "rejected-call" && "📵"}
+                {msg.systemMessageType === "ended-call" && "📞"}
+              </span>
+              <span className="system-message-text">{msg.text}</span>
+              <span className="system-message-time">
+                {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
             </div>
-            <span className="timestamp">
-              {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              {msg.sender === "me" && msg.status === "sent" && " ✓"}
-              {msg.sender === "me" && msg.status === "delivered" && " ✓✓"}
-              {msg.sender === "me" && msg.status === "failed" && " ✗"}
-            </span>
-          </div>
+          ) : (
+            <div key={msg.id} className={`message ${msg.sender} ${msg.status === "failed" ? "failed" : ""}`}>
+              <div className="bubble">
+                {msg.image && <img src={msg.image} alt="Image" className="message-image" />}
+                {msg.audio && (
+                  <div className="audio-message">
+                    <audio controls src={msg.audio} className="audio-player" />
+                  </div>
+                )}
+                {msg.text && <span>{msg.text}</span>}
+              </div>
+              <span className="timestamp">
+                {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {msg.sender === "me" && msg.status === "sending" && " ..."}
+                {msg.sender === "me" && msg.status === "sent" && " ✓"}
+                {msg.sender === "me" && msg.status === "delivered" && " ✓✓"}
+                {msg.sender === "me" && msg.status === "read" && (
+                  <span className="read-status">
+                    {" ✓✓ Lu à "}{msg.readAt ? msg.readAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                  </span>
+                )}
+                {msg.sender === "me" && msg.status === "failed" && " ✗"}
+              </span>
+            </div>
+          )
         ))}
         {isRemoteTyping && (
           <div className="typing-indicator">
@@ -793,17 +1250,41 @@ function App() {
       )}
 
       <form className="message-input" onSubmit={sendMessage}>
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputMessage}
-          onChange={handleInputChange}
-          placeholder={pendingImage ? "Add a caption..." : "Type a message or paste an image..."}
-          autoFocus
-        />
-        <button type="submit" disabled={!inputMessage.trim() && !pendingImage}>
-          Send
-        </button>
+        {isRecording ? (
+          <div className="recording-ui">
+            <span className="recording-indicator">🔴</span>
+            <span className="recording-duration">{formatDuration(recordingDuration)}</span>
+            <button type="button" className="cancel-recording" onClick={cancelRecording}>
+              ✕
+            </button>
+            <button type="button" className="stop-recording" onClick={stopRecording}>
+              ✓ Envoyer
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="voice-btn"
+              onClick={startRecording}
+              disabled={!connected}
+              title="Enregistrer un message vocal"
+            >
+              🎤
+            </button>
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputMessage}
+              onChange={handleInputChange}
+              placeholder={pendingImage ? "Ajouter une légende..." : "Tapez un message ou collez une image..."}
+              autoFocus
+            />
+            <button type="submit" disabled={!inputMessage.trim() && !pendingImage}>
+              Envoyer
+            </button>
+          </>
+        )}
       </form>
 
       {/* Incoming call modal */}
@@ -888,6 +1369,59 @@ function App() {
             <button className="end-call-btn" onClick={endCall}>
               Raccrocher
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Contacts Modal (for saving current peer) */}
+      {showContactsModal && (
+        <div className="modal-overlay" onClick={() => setShowContactsModal(false)}>
+          <div className="contact-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{editingContact ? "Modifier le contact" : "Ajouter un contact"}</h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (editingContact) {
+                  updateContact(editingContact.id, newContactName, newContactPeerId);
+                } else {
+                  addContact(newContactName, newContactPeerId);
+                }
+                setShowContactsModal(false);
+              }}
+            >
+              <input
+                type="text"
+                value={newContactName}
+                onChange={(e) => setNewContactName(e.target.value)}
+                placeholder="Nom du contact"
+                autoFocus
+              />
+              <input
+                type="text"
+                value={newContactPeerId}
+                onChange={(e) => setNewContactPeerId(e.target.value)}
+                placeholder="Peer ID"
+              />
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowContactsModal(false);
+                    setEditingContact(null);
+                    setNewContactName("");
+                    setNewContactPeerId("");
+                  }}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newContactName.trim() || !newContactPeerId.trim()}
+                >
+                  {editingContact ? "Mettre à jour" : "Ajouter"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
