@@ -36,6 +36,7 @@ function App() {
   const [newContactInitialPeerId, setNewContactInitialPeerId] = useState("");
 
   const {
+    peer,
     peerId,
     remotePeerId,
     setRemotePeerId,
@@ -47,7 +48,6 @@ function App() {
     connectToPeer,
     sendMessage,
     sendTyping,
-    peerRef,
     connRef
   } = usePeer(username);
 
@@ -81,7 +81,7 @@ function App() {
     endCall,
     toggleMic,
     toggleCamera
-  } = useCall(peerRef, connRef, remotePeerId, addCallSystemMessage);
+  } = useCall(peer, connRef, remotePeerId, addCallSystemMessage);
 
   const {
     contacts,
@@ -113,6 +113,17 @@ function App() {
       }
     };
     loadUsername();
+
+    // Add welcome message with build info
+    const welcomeMessage = {
+      id: "welcome-system-msg",
+      text: `Welcome to Organizer (v${__APP_VERSION__})\nBuild: ${__BUILD_TIMESTAMP__}`,
+      sender: "me" as const,
+      timestamp: new Date(),
+      isSystemMessage: true,
+      systemMessageType: "ended-call" as const, // Reusing existing style for generic system message
+    };
+    setMessages([welcomeMessage]);
   }, []);
 
   useEffect(() => {
