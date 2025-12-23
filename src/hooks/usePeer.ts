@@ -8,6 +8,7 @@ import { sendNotification, isPermissionGranted, requestPermission } from "@tauri
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export const usePeer = (username: string) => {
+  const [peer, setPeer] = useState<Peer | null>(null);
   const [peerId, setPeerId] = useState("");
   const [remotePeerId, setRemotePeerId] = useState("");
   const [connected, setConnected] = useState(false);
@@ -15,7 +16,6 @@ export const usePeer = (username: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isRemoteTyping, setIsRemoteTyping] = useState(false);
   
-  const peerRef = useRef<Peer | null>(null);
   const connRef = useRef<DataConnection | null>(null);
   const isWindowFocusedRef = useRef(true);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -33,25 +33,35 @@ export const usePeer = (username: string) => {
     setupListeners();
 
     const initPeer = async () => {
-      const peer = new Peer();
-      peerRef.current = peer;
-
-      peer.on("open", async (id) => {
+      console.log("Initializing PeerJS...");
+      const newPeer = new Peer();
+      
+      newPeer.on("open", async (id) => {
+        console.log("Peer opened with ID:", id);
         setPeerId(id);
+        setPeer(newPeer);
+        
         const store = await load("settings.json", { autoSave: true, defaults: {} });
         const lastPeer = await store.get<string>(STORAGE_KEYS.lastPeerId);
         if (lastPeer && !connRef.current) {
-          connectToPeer(lastPeer);
+          console.log("Auto-connecting to last peer:", lastPeer);
+          connectToPeer(newPeer, lastPeer);
         }
       });
 
-      peer.on("connection", (conn) => {
+      newPeer.on("connection", (conn) => {
+        console.log("Incoming connection from:", conn.peer);
         connRef.current = conn;
         setupConnection(conn);
       });
 
-      peer.on("error", (err) => {
+      newPeer.on("error", (err) => {
         console.error("Peer error:", err);
+      });
+
+      newPeer.on("disconnected", () => {
+        console.log("Peer disconnected, attempting to reconnect...");
+        newPeer.reconnect();
       });
     };
 
@@ -59,12 +69,13 @@ export const usePeer = (username: string) => {
 
     return () => {
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      peerRef.current?.destroy();
+      // peer will be destroyed by cleanup or by the state being cleared
     };
   }, []);
 
   const setupConnection = (conn: DataConnection, targetPeerId?: string) => {
     conn.on("open", async () => {
+      console.log("Data connection opened with:", conn.peer);
       setConnected(true);
       reconnectAttemptsRef.current = 0;
       const peerToSave = targetPeerId || conn.peer;
@@ -99,13 +110,15 @@ export const usePeer = (username: string) => {
     });
 
     conn.on("close", () => {
+      console.log("Data connection closed");
       setConnected(false);
       setRemoteUsername("");
       connRef.current = null;
       scheduleReconnect();
     });
 
-    conn.on("error", () => {
+    conn.on("error", (err) => {
+      console.error("Data connection error:", err);
       setConnected(false);
       connRef.current = null;
       scheduleReconnect();
@@ -134,9 +147,8 @@ export const usePeer = (username: string) => {
       return;
     }
 
-    // Pass specialized messages to external handlers if needed (handled in App or specialized hooks)
     if (["call-request", "call-accept", "call-reject", "call-end", "call-toggle-camera"].includes(parsed.type)) {
-      // These will be handled by useCall via event listener or callback
+      console.log("Relaying call signaling message:", parsed.type);
       window.dispatchEvent(new CustomEvent("peer-call-event", { detail: parsed }));
       return;
     }
@@ -172,21 +184,27 @@ export const usePeer = (username: string) => {
   const scheduleReconnect = async () => {
     const store = await load("settings.json", { autoSave: true, defaults: {} });
     const lastPeer = await store.get<string>(STORAGE_KEYS.lastPeerId);
-    if (!lastPeer || !peerRef.current) return;
+    if (!lastPeer || !peer) return;
 
     reconnectAttemptsRef.current += 1;
     const delay = Math.min(2000 * Math.pow(2, reconnectAttemptsRef.current - 1), 30000);
 
+    console.log(`Scheduling reconnect in ${delay}ms...`);
     reconnectTimeoutRef.current = setTimeout(() => {
-      if (!peerRef.current || connRef.current?.open) return;
-      connectToPeer(lastPeer);
+      if (!peer || connRef.current?.open) return;
+      connectToPeer(peer, lastPeer);
     }, delay);
   };
 
-  const connectToPeer = (targetId?: string) => {
+  const connectToPeer = (peerInstance: Peer | null, targetId?: string) => {
+    const p = peerInstance || peer;
     const idToConnect = targetId || remotePeerId;
-    if (!peerRef.current || !idToConnect) return;
-    const conn = peerRef.current.connect(idToConnect);
+    if (!p || !idToConnect) {
+      console.error("Cannot connect: peer or targetId missing", { hasPeer: !!p, targetId });
+      return;
+    }
+    console.log("Connecting to peer:", idToConnect);
+    const conn = p.connect(idToConnect);
     connRef.current = conn;
     setupConnection(conn, idToConnect);
   };
@@ -208,7 +226,8 @@ export const usePeer = (username: string) => {
     try {
       connRef.current.send({ type: "message", id: messageId, text, image, audio });
       setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status: "sent" } : m));
-    } catch {
+    } catch (err) {
+      console.error("Failed to send message:", err);
       setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status: "failed" } : m));
     }
   };
@@ -222,6 +241,7 @@ export const usePeer = (username: string) => {
   };
 
   return {
+    peer,
     peerId,
     remotePeerId,
     setRemotePeerId,
@@ -230,10 +250,9 @@ export const usePeer = (username: string) => {
     messages,
     setMessages,
     isRemoteTyping,
-    connectToPeer,
+    connectToPeer: (id?: string) => connectToPeer(peer, id),
     sendMessage,
     sendTyping,
-    peerRef,
     connRef
   };
 };
