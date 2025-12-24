@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Room, Message as ServerMessage } from '../services/api';
+import { Room, Message as ServerMessage, getApiBaseUrl } from '../services/api';
 import { Message } from '../types';
 import { api } from '../services/api';
 import { socketService } from '../services/socket';
@@ -20,6 +20,13 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
+  // Reload data when API server changes (even if userId stays the same)
+  useEffect(() => {
+    setCurrentRoomId(null);
+    setMessages([]);
+    setRooms([]);
+    setIsLoadingRooms(true);
+  }, [getApiBaseUrl()]);
 
   // Load rooms on mount and when user changes
   useEffect(() => {

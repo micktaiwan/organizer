@@ -21,8 +21,8 @@ module.exports = {
       host: '51.210.150.25',
       ref: 'origin/main',
 
-      // Repo Git (à modifier avec ton repo)
-      repo: 'git@github.com:TON_USER/organizer.git',
+      // Repo Git
+      repo: 'https://github.com/micktaiwan/organizer.git',
 
       // Dossier sur le serveur
       path: '/var/www/organizer',
