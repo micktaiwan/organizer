@@ -48,11 +48,11 @@ export const useContacts = () => {
     setContacts(newContacts);
   };
 
-  const addContact = (name: string, peerId: string) => {
+  const addContact = (name: string, userId: string) => {
     const newContact: Contact = {
       id: crypto.randomUUID(),
       name: name.trim(),
-      peerId: peerId.trim(),
+      userId: userId.trim(),
       createdAt: new Date(),
     };
     const updated = [...contacts, newContact];
@@ -60,9 +60,9 @@ export const useContacts = () => {
     return newContact;
   };
 
-  const updateContact = (id: string, name: string, peerId: string) => {
+  const updateContact = (id: string, name: string, userId: string) => {
     const updated = contacts.map((c) =>
-      c.id === id ? { ...c, name: name.trim(), peerId: peerId.trim() } : c
+      c.id === id ? { ...c, name: name.trim(), userId: userId.trim() } : c
     );
     saveContacts(updated);
   };
@@ -72,14 +72,20 @@ export const useContacts = () => {
     saveContacts(updated);
   };
 
+  // Helper to find contact by userId or peerId (for backwards compatibility)
+  const findContact = (identifier: string) =>
+    contacts.find(c => c.userId === identifier || c.peerId === identifier);
+
   return {
     contacts,
     isLoaded,
     addContact,
     updateContact,
     deleteContact,
-    getContactName: (peerId: string) => contacts.find(c => c.peerId === peerId)?.name || null,
-    isPeerSaved: (peerId: string) => contacts.some(c => c.peerId === peerId)
+    getContactName: (userId: string) => findContact(userId)?.name || null,
+    isUserSaved: (userId: string) => !!findContact(userId),
+    // Deprecated - kept for backwards compatibility
+    isPeerSaved: (peerId: string) => !!findContact(peerId),
   };
 };
 
