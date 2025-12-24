@@ -68,11 +68,13 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
         const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
         const convertedMessages = serverMessages.map((msg: ServerMessage): Message => {
           const actualSenderId = typeof msg.senderId === 'string' ? msg.senderId : msg.senderId.id;
+          const isSender = actualSenderId === userId;
+          console.debug('Message comparison:', { actualSenderId, userId, isSender, msgContent: msg.content?.substring(0, 20) });
           return {
             id: msg._id,
             serverMessageId: msg._id,
             text: msg.content,
-            sender: actualSenderId === userId ? 'me' : 'them',
+            sender: isSender ? 'me' : 'them',
             senderName: typeof msg.senderId === 'object' ? msg.senderId.displayName : undefined,
             senderId: actualSenderId,
             timestamp: new Date(msg.createdAt),
@@ -118,11 +120,13 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
       const convertedMessages = serverMessages.map((msg: ServerMessage): Message => {
         const actualSenderId = typeof msg.senderId === 'string' ? msg.senderId : msg.senderId.id;
+        const isSender = actualSenderId === userId;
+        console.debug('Message comparison (loadMessages):', { actualSenderId, userId, isSender, msgContent: msg.content?.substring(0, 20) });
         return {
           id: msg._id,
           serverMessageId: msg._id,
           text: msg.content,
-          sender: actualSenderId === userId ? 'me' : 'them',
+          sender: isSender ? 'me' : 'them',
           senderName: typeof msg.senderId === 'object' ? msg.senderId.displayName : undefined,
           senderId: actualSenderId,
           timestamp: new Date(msg.createdAt),
