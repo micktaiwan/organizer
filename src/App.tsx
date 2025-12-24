@@ -1,55 +1,57 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { Settings, Globe, LogOut } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { load } from "@tauri-apps/plugin-store";
-import { STORAGE_KEYS } from "./constants";
-import { usePeer } from "./hooks/usePeer";
-import { useCall } from "./hooks/useCall";
-import { useContacts } from "./hooks/useContacts";
+import { useAuth } from "./contexts/AuthContext";
+import { useServerConfig } from "./contexts/ServerConfigContext";
+import { useWebRTCCall } from "./hooks/useWebRTCCall";
+// import { useContacts } from "./hooks/useContacts";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder";
-import { convertEmojis } from "./utils/emojis";
-import { Contact } from "./types";
+import { useRooms } from "./hooks/useRooms";
+import { Button } from "./components/ui/Button";
+// TODO: Restore Contact-related features in room context
+// import { Contact } from "./types";
 
 // Components
-import { UsernameScreen } from "./components/Connection/UsernameScreen";
-import { ConnectionScreen } from "./components/Connection/ConnectionScreen";
-import { ChatHeader } from "./components/Chat/ChatHeader";
-import { MessageList } from "./components/Chat/MessageList";
-import { MessageInput } from "./components/Chat/MessageInput";
+import { AuthScreen } from "./components/Auth/AuthScreen";
+import { ServerConfigScreen } from "./components/ServerConfig/ServerConfigScreen";
+import { RoomList } from "./components/Chat/RoomList";
+import { RoomMessaging } from "./components/Chat/RoomMessaging";
+import { RoomMembers } from "./components/Chat/RoomMembers";
 import { CallOverlay } from "./components/Call/CallOverlay";
 import { IncomingCallModal } from "./components/Call/IncomingCallModal";
-import { ContactModal } from "./components/Contact/ContactModal";
+// import { ContactModal } from "./components/Contact/ContactModal";
+import { AdminPanel } from "./components/Admin/AdminPanel";
 
 import "./App.css";
 
 function App() {
-  const [username, setUsername] = useState("");
-  const [usernameSet, setUsernameSet] = useState(false);
-  const [skippedConnection, setSkippedConnection] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
+  const { isLoading: serverLoading, isConfigured, resetConfig, selectedServer } = useServerConfig();
   const [inputMessage, setInputMessage] = useState("");
   const [pendingImage, setPendingImage] = useState<string | null>(null);
-  
-  // Modals state
-  const [showContactsModal, setShowContactsModal] = useState(false);
-  const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [newContactInitialName, setNewContactInitialName] = useState("");
-  const [newContactInitialPeerId, setNewContactInitialPeerId] = useState("");
 
+  // Modals state
+  // TODO: Implement contact management in room context
+  // const [showContactsModal, setShowContactsModal] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  // TODO: Implement contact editing in room context
+  // const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  // const [newContactInitialName, setNewContactInitialName] = useState("");
+  // const [newContactInitialUserId, setNewContactInitialUserId] = useState("");
+
+  const username = user?.displayName || "";
+
+  // Room and messaging
   const {
-    peer,
-    peerId,
-    remotePeerId,
-    setRemotePeerId,
-    connected,
-    remoteUsername,
+    rooms,
+    currentRoomId,
+    currentRoom,
+    isLoadingRooms,
     messages,
     setMessages,
-    isRemoteTyping,
-    connectToPeer,
     sendMessage,
-    sendTyping,
-    connRef
-  } = usePeer(username);
+    selectRoom,
+  } = useRooms({ userId: user?.id, username });
 
   const addCallSystemMessage = (type: "missed-call" | "rejected-call" | "ended-call") => {
     const textMap = {
@@ -67,6 +69,10 @@ function App() {
     }]);
   };
 
+  // Create empty pcRef for future calls implementation
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+
+  // TODO: Adapt useWebRTCCall for room context
   const {
     callState,
     isCameraEnabled,
@@ -80,17 +86,16 @@ function App() {
     rejectCall,
     endCall,
     toggleMic,
-    toggleCamera
-  } = useCall(peer, connRef, remotePeerId, addCallSystemMessage);
+    toggleCamera,
+  } = useWebRTCCall({ pcRef, addSystemMessage: addCallSystemMessage });
 
-  const {
-    contacts,
-    addContact,
-    updateContact,
-    deleteContact,
-    isPeerSaved,
-    getContactName
-  } = useContacts();
+  // TODO: Implement contact management in room context
+  // const {
+  //   addContact,
+  //   updateContact,
+  //   isUserSaved,
+  //   getContactName
+  // } = useContacts();
 
   const {
     isRecording,
@@ -104,16 +109,6 @@ function App() {
     const title = import.meta.env.DEV ? "Organizer - Dev mode" : "Organizer";
     getCurrentWindow().setTitle(title);
 
-    const loadUsername = async () => {
-      const store = await load("settings.json", { autoSave: true, defaults: {} });
-      const saved = await store.get<string>(STORAGE_KEYS.username);
-      if (saved) {
-        setUsername(saved);
-        setUsernameSet(true);
-      }
-    };
-    loadUsername();
-
     // Add welcome message with build info
     const welcomeMessage = {
       id: "welcome-system-msg",
@@ -121,7 +116,7 @@ function App() {
       sender: "me" as const,
       timestamp: new Date(),
       isSystemMessage: true,
-      systemMessageType: "ended-call" as const, // Reusing existing style for generic system message
+      systemMessageType: "ended-call" as const,
     };
     setMessages([welcomeMessage]);
   }, []);
@@ -146,120 +141,104 @@ function App() {
     return () => document.removeEventListener("paste", handlePaste);
   }, []);
 
-  const handleSaveUsername = async (newUsername: string) => {
-    const store = await load("settings.json", { autoSave: true, defaults: {} });
-    await store.set(STORAGE_KEYS.username, newUsername);
-    setUsername(newUsername);
-    setUsernameSet(true);
-    if (connRef.current?.open) {
-      connRef.current.send({ type: "userinfo", username: newUsername });
-    }
+  const handleChangeServer = async () => {
+    await logout();
+    await resetConfig();
   };
 
-  const handleCopyPeerId = () => {
-    navigator.clipboard.writeText(peerId);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputMessage.trim() && !pendingImage) return;
-    sendMessage(inputMessage || undefined, pendingImage || undefined);
-    setInputMessage("");
-    setPendingImage(null);
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const converted = convertEmojis(e.target.value);
-    setInputMessage(converted);
-    sendTyping();
-  };
-
-  if (!usernameSet) {
-    return <UsernameScreen initialUsername={username} onSave={handleSaveUsername} />;
+  // Loading state
+  if (serverLoading || (isConfigured && authLoading)) {
+    return (
+      <div className="loading-screen">
+        <div className="loading-spinner" />
+        <p>Chargement...</p>
+      </div>
+    );
   }
 
-  if (!connected && !skippedConnection) {
-    return (
-      <>
-        <ConnectionScreen
-          peerId={peerId}
-          remotePeerId={remotePeerId}
-          setRemotePeerId={setRemotePeerId}
-          onConnect={connectToPeer}
-          onCopyPeerId={handleCopyPeerId}
-          copied={copied}
-          contacts={contacts}
-          onAddContact={() => {
-            setEditingContact(null);
-            setNewContactInitialName("");
-            setNewContactInitialPeerId("");
-            setShowContactsModal(true);
-          }}
-          onEditContact={(c) => {
-            setEditingContact(c);
-            setShowContactsModal(true);
-          }}
-          onDeleteContact={deleteContact}
-          onSkip={() => setSkippedConnection(true)}
-        />
-        {showContactsModal && (
-          <ContactModal
-            editingContact={editingContact}
-            initialName={newContactInitialName}
-            initialPeerId={newContactInitialPeerId}
-            onSave={(name, pid) => {
-              if (editingContact) updateContact(editingContact.id, name, pid);
-              else addContact(name, pid);
-              setShowContactsModal(false);
-            }}
-            onCancel={() => setShowContactsModal(false)}
-          />
-        )}
-      </>
-    );
+  // Server not configured - show server selection
+  if (!isConfigured) {
+    return <ServerConfigScreen />;
+  }
+
+  // Not authenticated - show login/register
+  if (!isAuthenticated) {
+    return <AuthScreen />;
   }
 
   return (
     <main className="chat-container">
-      <ChatHeader
-        connected={connected}
-        remoteUsername={remoteUsername || getContactName(remotePeerId) || ""}
-        callState={callState}
-        onStartCall={startCall}
-        isSaved={isPeerSaved(remotePeerId)}
-        onSaveContact={() => {
-          setNewContactInitialName(remoteUsername);
-          setNewContactInitialPeerId(remotePeerId);
-          setEditingContact(null);
-          setShowContactsModal(true);
-        }}
-        onConnect={() => setSkippedConnection(false)}
-        onChangeUsername={() => setUsernameSet(false)}
-        username={username}
-      />
+      <div className="chat-layout">
+        <RoomList
+          rooms={rooms}
+          currentRoomId={currentRoomId}
+          onSelectRoom={selectRoom}
+          isLoading={isLoadingRooms}
+        />
 
-      <MessageList messages={messages} isRemoteTyping={isRemoteTyping} />
+        <div className="chat-main">
+          {currentRoom && (
+            <div className="chat-room-header">
+              <h2>{currentRoom.name}</h2>
+              <div className="room-header-actions">
+                <RoomMembers
+                  room={currentRoom}
+                  currentUserId={user?.id}
+                  onStartCall={startCall}
+                  callState={callState}
+                />
+                <div className="header-group header-secondary">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Settings size={18} />}
+                    onClick={() => setShowAdminPanel(true)}
+                    title="Administration"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Globe size={18} />}
+                    onClick={handleChangeServer}
+                    title={`Serveur: ${selectedServer?.name || 'Inconnu'}`}
+                  />
+                </div>
+                <div className="header-group header-user">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<LogOut size={18} />}
+                    onClick={logout}
+                  >
+                    {username}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
-      <MessageInput
-        inputMessage={inputMessage}
-        setInputMessage={setInputMessage}
-        onSendMessage={handleSendMessage}
-        onInputChange={handleInputChange}
-        pendingImage={pendingImage}
-        cancelPendingImage={() => setPendingImage(null)}
-        connected={connected}
-        isRecording={isRecording}
-        recordingDuration={recordingDuration}
-        startRecording={startRecording}
-        stopRecording={stopRecording}
-        cancelRecording={cancelRecording}
-      />
+          <RoomMessaging
+            currentRoom={currentRoom}
+            messages={messages}
+            onSendMessage={(text, image, audio) => {
+              sendMessage(text, image, audio);
+            }}
+            inputMessage={inputMessage}
+            setInputMessage={setInputMessage}
+            pendingImage={pendingImage}
+            cancelPendingImage={() => setPendingImage(null)}
+            isRecording={isRecording}
+            recordingDuration={recordingDuration}
+            startRecording={startRecording}
+            stopRecording={stopRecording}
+            cancelRecording={cancelRecording}
+          />
+        </div>
+      </div>
 
       {callState === 'incoming' && (
         <IncomingCallModal
-          remoteUsername={remoteUsername}
+          remoteUsername="Appel entrant"
           incomingCallWithCamera={incomingCallWithCamera}
           onAccept={acceptCall}
           onReject={rejectCall}
@@ -268,7 +247,7 @@ function App() {
 
       <CallOverlay
         callState={callState}
-        remoteUsername={remoteUsername}
+        remoteUsername="En appel"
         isCameraEnabled={isCameraEnabled}
         isMicEnabled={isMicEnabled}
         remoteHasCamera={remoteHasCamera}
@@ -279,18 +258,23 @@ function App() {
         onEndCall={endCall}
       />
 
-      {showContactsModal && (
+      {/* TODO: Implement contact management in room context */}
+      {/* {showContactsModal && (
         <ContactModal
           editingContact={editingContact}
           initialName={newContactInitialName}
-          initialPeerId={newContactInitialPeerId}
-          onSave={(name, pid) => {
-            if (editingContact) updateContact(editingContact.id, name, pid);
-            else addContact(name, pid);
+          initialUserId={newContactInitialUserId}
+          onSave={(name, uid) => {
+            if (editingContact) updateContact(editingContact.id, name, uid);
+            else addContact(name, uid);
             setShowContactsModal(false);
           }}
           onCancel={() => setShowContactsModal(false)}
         />
+      )} */}
+
+      {showAdminPanel && (
+        <AdminPanel onClose={() => setShowAdminPanel(false)} />
       )}
     </main>
   );

@@ -8,7 +8,7 @@ interface MessageInputProps {
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   pendingImage: string | null;
   cancelPendingImage: () => void;
-  connected: boolean;
+  canSend: boolean;
   isRecording: boolean;
   recordingDuration: number;
   startRecording: () => void;
@@ -22,7 +22,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onInputChange,
   pendingImage,
   cancelPendingImage,
-  connected,
+  canSend,
   isRecording,
   recordingDuration,
   startRecording,
@@ -66,7 +66,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               type="button"
               className="voice-btn"
               onClick={startRecording}
-              disabled={!connected}
+              disabled={!canSend}
               title="Enregistrer un message vocal"
             >
               🎤

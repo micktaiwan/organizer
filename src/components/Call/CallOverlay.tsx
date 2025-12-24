@@ -1,4 +1,5 @@
 import React from "react";
+import { Phone, Headphones, Mic, MicOff, Video, VideoOff } from "lucide-react";
 import { CallState } from "../../types";
 
 interface CallOverlayProps {
@@ -30,7 +31,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     return (
       <div className="call-overlay">
         <div className="calling-info">
-          <div className="caller-avatar pulse">📞</div>
+          <div className="caller-avatar pulse" style={{ fontSize: '3rem' }}>
+            <Phone size={48} />
+          </div>
           <h3>Appel en cours...</h3>
           <p>{remoteUsername || "En attente de réponse"}</p>
           <button className="end-call-btn" onClick={onEndCall}>
@@ -53,7 +56,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           />
           {!remoteHasCamera && (
             <div className="audio-only-avatar">
-              <span>🎧</span>
+              <Headphones size={64} />
               <p>{remoteUsername || "Connecté"}</p>
             </div>
           )}
@@ -73,14 +76,14 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             onClick={onToggleMic}
             title={isMicEnabled ? "Couper le micro" : "Activer le micro"}
           >
-            {isMicEnabled ? "🎤" : "🔇"}
+            {isMicEnabled ? <Mic size={20} /> : <MicOff size={20} />}
           </button>
           <button
             className={`control-btn ${!isCameraEnabled ? 'disabled' : ''}`}
             onClick={onToggleCamera}
             title={isCameraEnabled ? "Couper la caméra" : "Activer la caméra"}
           >
-            {isCameraEnabled ? "📹" : "📷"}
+            {isCameraEnabled ? <Video size={20} /> : <VideoOff size={20} />}
           </button>
           <button className="end-call-btn" onClick={onEndCall}>
             Raccrocher

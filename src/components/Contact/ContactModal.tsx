@@ -4,32 +4,32 @@ import { Contact } from "../../types";
 interface ContactModalProps {
   editingContact: Contact | null;
   initialName?: string;
-  initialPeerId?: string;
-  onSave: (name: string, peerId: string) => void;
+  initialUserId?: string;
+  onSave: (name: string, userId: string) => void;
   onCancel: () => void;
 }
 
 export const ContactModal: React.FC<ContactModalProps> = ({
   editingContact,
   initialName = "",
-  initialPeerId = "",
+  initialUserId = "",
   onSave,
   onCancel
 }) => {
   const [name, setName] = useState(initialName || editingContact?.name || "");
-  const [peerId, setPeerId] = useState(initialPeerId || editingContact?.peerId || "");
+  const [userId, setUserId] = useState(initialUserId || editingContact?.userId || editingContact?.peerId || "");
 
   useEffect(() => {
     if (editingContact) {
       setName(editingContact.name);
-      setPeerId(editingContact.peerId);
+      setUserId(editingContact.userId || editingContact.peerId || "");
     }
   }, [editingContact]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim() && peerId.trim()) {
-      onSave(name, peerId);
+    if (name.trim() && userId.trim()) {
+      onSave(name, userId);
     }
   };
 
@@ -47,15 +47,15 @@ export const ContactModal: React.FC<ContactModalProps> = ({
           />
           <input
             type="text"
-            value={peerId}
-            onChange={(e) => setPeerId(e.target.value)}
-            placeholder="Peer ID"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            placeholder="User ID"
           />
           <div className="modal-actions">
             <button type="button" onClick={onCancel}>
               Annuler
             </button>
-            <button type="submit" disabled={!name.trim() || !peerId.trim()}>
+            <button type="submit" disabled={!name.trim() || !userId.trim()}>
               {editingContact ? "Mettre à jour" : "Ajouter"}
             </button>
           </div>

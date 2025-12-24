@@ -1,4 +1,5 @@
 import React from "react";
+import { Phone } from "lucide-react";
 
 interface IncomingCallModalProps {
   remoteUsername: string;
@@ -17,7 +18,9 @@ export const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
     <div className="call-overlay incoming-call">
       <div className="incoming-call-modal">
         <div className="caller-info">
-          <div className="caller-avatar">📞</div>
+          <div className="caller-avatar">
+            <Phone size={48} />
+          </div>
           <h3>Appel de {remoteUsername || "inconnu"}</h3>
           <p>{incomingCallWithCamera ? "Appel vidéo" : "Appel audio"}</p>
         </div>

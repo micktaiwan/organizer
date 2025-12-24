@@ -7,9 +7,12 @@ interface ChatHeaderProps {
   onStartCall: (video: boolean) => void;
   isSaved: boolean;
   onSaveContact: () => void;
-  onConnect: () => void;
-  onChangeUsername: () => void;
+  onLogout: () => void;
+  onOpenAdmin?: () => void;
+  onChangeServer?: () => void;
+  isAdmin: boolean;
   username: string;
+  serverName?: string;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -19,9 +22,12 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   onStartCall,
   isSaved,
   onSaveContact,
-  onConnect,
-  onChangeUsername,
-  username
+  onLogout,
+  onOpenAdmin,
+  onChangeServer,
+  isAdmin,
+  username,
+  serverName
 }) => {
   return (
     <header className="chat-header">
@@ -43,13 +49,18 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             )}
           </>
         )}
-        {!connected && (
-          <button className="connect-btn" onClick={onConnect}>
-            Connecter
+        {isAdmin && onOpenAdmin && (
+          <button className="admin-btn" onClick={onOpenAdmin} title="Administration">
+            ⚙️
           </button>
         )}
-        <button className="settings-btn" onClick={onChangeUsername} title="Changer de pseudo">
-          {username}
+        {onChangeServer && (
+          <button className="server-btn" onClick={onChangeServer} title={`Serveur: ${serverName || 'Inconnu'}`}>
+            🌐
+          </button>
+        )}
+        <button className="settings-btn" onClick={onLogout} title="Se déconnecter">
+          {username} ⏻
         </button>
       </div>
     </header>

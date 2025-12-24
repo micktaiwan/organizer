@@ -18,13 +18,15 @@ export const ContactList: React.FC<ContactListProps> = ({
     return <p className="no-contacts">Aucun contact sauvegardé</p>;
   }
 
+  const getContactId = (contact: Contact) => contact.userId || contact.peerId || "";
+
   return (
     <div className="contacts-list">
       {contacts.map((contact) => (
         <div key={contact.id} className="contact-item">
           <div className="contact-info">
             <span className="contact-name">{contact.name}</span>
-            <span className="contact-peer-id">{contact.peerId.slice(0, 12)}...</span>
+            <span className="contact-peer-id">{getContactId(contact).slice(0, 12)}...</span>
           </div>
           <div className="contact-actions">
             <button
