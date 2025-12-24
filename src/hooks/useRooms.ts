@@ -67,15 +67,26 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
         // Load message history
         const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
         const convertedMessages = serverMessages.map((msg: ServerMessage): Message => {
-          const actualSenderId = typeof msg.senderId === 'string' ? msg.senderId : msg.senderId.id;
+          let actualSenderId: string;
+          let senderName: string | undefined;
+
+          if (typeof msg.senderId === 'string') {
+            actualSenderId = msg.senderId;
+          } else {
+            // senderId is an object with _id (MongoDB) or id
+            actualSenderId = (msg.senderId as any)._id || (msg.senderId as any).id || '';
+            senderName = (msg.senderId as any).displayName;
+          }
+
           const isSender = actualSenderId === userId;
           console.debug('Message comparison:', { actualSenderId, userId, isSender, msgContent: msg.content?.substring(0, 20) });
+
           return {
             id: msg._id,
             serverMessageId: msg._id,
             text: msg.content,
             sender: isSender ? 'me' : 'them',
-            senderName: typeof msg.senderId === 'object' ? msg.senderId.displayName : undefined,
+            senderName,
             senderId: actualSenderId,
             timestamp: new Date(msg.createdAt),
             status: msg.status as 'sent' | 'delivered' | 'read',
@@ -119,15 +130,26 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     try {
       const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
       const convertedMessages = serverMessages.map((msg: ServerMessage): Message => {
-        const actualSenderId = typeof msg.senderId === 'string' ? msg.senderId : msg.senderId.id;
+        let actualSenderId: string;
+        let senderName: string | undefined;
+
+        if (typeof msg.senderId === 'string') {
+          actualSenderId = msg.senderId;
+        } else {
+          // senderId is an object with _id (MongoDB) or id
+          actualSenderId = (msg.senderId as any)._id || (msg.senderId as any).id || '';
+          senderName = (msg.senderId as any).displayName;
+        }
+
         const isSender = actualSenderId === userId;
         console.debug('Message comparison (loadMessages):', { actualSenderId, userId, isSender, msgContent: msg.content?.substring(0, 20) });
+
         return {
           id: msg._id,
           serverMessageId: msg._id,
           text: msg.content,
           sender: isSender ? 'me' : 'them',
-          senderName: typeof msg.senderId === 'object' ? msg.senderId.displayName : undefined,
+          senderName,
           senderId: actualSenderId,
           timestamp: new Date(msg.createdAt),
           status: msg.status as 'sent' | 'delivered' | 'read',
