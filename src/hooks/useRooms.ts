@@ -81,10 +81,25 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
           const isSender = actualSenderId === userId;
           console.debug('Message comparison:', { actualSenderId, userId, isSender, msgContent: msg.content?.substring(0, 20) });
 
+          // Map content based on message type
+          let text: string | undefined;
+          let image: string | undefined;
+          let audio: string | undefined;
+
+          if (msg.type === 'image') {
+            image = msg.content;
+          } else if (msg.type === 'audio') {
+            audio = msg.content;
+          } else {
+            text = msg.content;
+          }
+
           return {
             id: msg._id,
             serverMessageId: msg._id,
-            text: msg.content,
+            text,
+            image,
+            audio,
             sender: isSender ? 'me' : 'them',
             senderName,
             senderId: actualSenderId,
@@ -144,10 +159,25 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
         const isSender = actualSenderId === userId;
         console.debug('Message comparison (loadMessages):', { actualSenderId, userId, isSender, msgContent: msg.content?.substring(0, 20) });
 
+        // Map content based on message type
+        let text: string | undefined;
+        let image: string | undefined;
+        let audio: string | undefined;
+
+        if (msg.type === 'image') {
+          image = msg.content;
+        } else if (msg.type === 'audio') {
+          audio = msg.content;
+        } else {
+          text = msg.content;
+        }
+
         return {
           id: msg._id,
           serverMessageId: msg._id,
-          text: msg.content,
+          text,
+          image,
+          audio,
           sender: isSender ? 'me' : 'them',
           senderName,
           senderId: actualSenderId,
