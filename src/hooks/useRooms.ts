@@ -66,17 +66,20 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
         // Load message history
         const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
-        const convertedMessages = serverMessages.map((msg: ServerMessage): Message => ({
-          id: msg._id,
-          serverMessageId: msg._id,
-          text: typeof msg.senderId === 'string' ? msg.content : msg.content,
-          sender: msg.senderId === userId ? 'me' : 'them',
-          senderName: typeof msg.senderId === 'object' ? msg.senderId.displayName : undefined,
-          senderId: typeof msg.senderId === 'string' ? msg.senderId : msg.senderId.id,
-          timestamp: new Date(msg.createdAt),
-          status: msg.status as 'sent' | 'delivered' | 'read',
-          readBy: msg.readBy,
-        }));
+        const convertedMessages = serverMessages.map((msg: ServerMessage): Message => {
+          const actualSenderId = typeof msg.senderId === 'string' ? msg.senderId : msg.senderId.id;
+          return {
+            id: msg._id,
+            serverMessageId: msg._id,
+            text: msg.content,
+            sender: actualSenderId === userId ? 'me' : 'them',
+            senderName: typeof msg.senderId === 'object' ? msg.senderId.displayName : undefined,
+            senderId: actualSenderId,
+            timestamp: new Date(msg.createdAt),
+            status: msg.status as 'sent' | 'delivered' | 'read',
+            readBy: msg.readBy,
+          };
+        });
         setMessages(convertedMessages);
       } catch (error) {
         console.error('Failed to load room:', error);
@@ -113,17 +116,20 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     if (!currentRoomId) return;
     try {
       const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
-      const convertedMessages = serverMessages.map((msg: ServerMessage): Message => ({
-        id: msg._id,
-        serverMessageId: msg._id,
-        text: typeof msg.senderId === 'string' ? msg.content : msg.content,
-        sender: msg.senderId === userId ? 'me' : 'them',
-        senderName: typeof msg.senderId === 'object' ? msg.senderId.displayName : undefined,
-        senderId: typeof msg.senderId === 'string' ? msg.senderId : msg.senderId.id,
-        timestamp: new Date(msg.createdAt),
-        status: msg.status as 'sent' | 'delivered' | 'read',
-        readBy: msg.readBy,
-      }));
+      const convertedMessages = serverMessages.map((msg: ServerMessage): Message => {
+        const actualSenderId = typeof msg.senderId === 'string' ? msg.senderId : msg.senderId.id;
+        return {
+          id: msg._id,
+          serverMessageId: msg._id,
+          text: msg.content,
+          sender: actualSenderId === userId ? 'me' : 'them',
+          senderName: typeof msg.senderId === 'object' ? msg.senderId.displayName : undefined,
+          senderId: actualSenderId,
+          timestamp: new Date(msg.createdAt),
+          status: msg.status as 'sent' | 'delivered' | 'read',
+          readBy: msg.readBy,
+        };
+      });
       setMessages(convertedMessages);
     } catch (error) {
       console.error('Failed to load messages:', error);
