@@ -87,7 +87,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     const user = await User.findOne({ username: data.username.toLowerCase() });
 
     if (!user) {
-      res.status(401).json({ error: 'Identifiants invalides' });
+      console.log(`[AUTH] Login failed: user "${data.username}" not found`);
+      res.status(401).json({ error: 'Utilisateur non trouvé' });
       return;
     }
 
@@ -95,7 +96,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     const isValidPassword = await bcrypt.compare(data.password, user.passwordHash);
 
     if (!isValidPassword) {
-      res.status(401).json({ error: 'Identifiants invalides' });
+      console.log(`[AUTH] Login failed: wrong password for user "${data.username}"`);
+      res.status(401).json({ error: 'Mot de passe incorrect' });
       return;
     }
 
@@ -105,6 +107,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
     // Générer le token
     const token = generateToken(user._id.toString(), user.username);
+
+    console.log(`[AUTH] Login successful: user "${data.username}"`);
 
     res.json({
       token,
