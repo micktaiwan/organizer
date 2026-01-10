@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Phone, Video, Users } from 'lucide-react';
+import { Phone, Video, Users, Volume2, VolumeX } from 'lucide-react';
 import { Room } from '../../services/api';
+import { UserStatus } from '../../types';
 
 interface RoomMembersProps {
   room: Room | null;
@@ -49,11 +50,22 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
               const user = typeof member.userId === 'object' ? member.userId : null;
               if (!user) return null;
 
+              const status: UserStatus = (member.userId as any).status || 'available';
+              const statusMessage = (member.userId as any).statusMessage;
+              const isMuted = (member.userId as any).isMuted;
+
               return (
                 <div key={user.id} className="room-member-item">
                   <div className="member-info">
-                    <div className="member-name">{user.displayName}</div>
+                    <div className="member-name">
+                      <span className={`status-dot ${status}`} />
+                      {user.displayName}
+                      {isMuted && <VolumeX size={14} style={{ marginLeft: '0.25rem', opacity: 0.6 }} />}
+                    </div>
                     <div className="member-username">@{user.username}</div>
+                    {statusMessage && (
+                      <div className="member-status-message">"{statusMessage}"</div>
+                    )}
                   </div>
                   <div className="member-actions">
                     <button

@@ -8,6 +8,7 @@ interface RoomMessagingProps {
   currentRoom: Room | null;
   messages: Message[];
   onSendMessage: (text?: string, image?: string, audio?: string) => void;
+  onDeleteMessage?: (messageId: string) => void;
   inputMessage: string;
   setInputMessage: (text: string) => void;
   pendingImage: string | null;
@@ -23,6 +24,7 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   currentRoom,
   messages,
   onSendMessage,
+  onDeleteMessage,
   inputMessage,
   setInputMessage,
   pendingImage,
@@ -55,7 +57,7 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
 
   return (
     <div className="room-messaging">
-      <MessageList messages={messages} isRemoteTyping={false} />
+      <MessageList messages={messages} isRemoteTyping={false} onDeleteMessage={onDeleteMessage} />
 
       <MessageInput
         inputMessage={inputMessage}

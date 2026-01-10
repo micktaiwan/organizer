@@ -5,9 +5,10 @@ import { MessageItem } from "./MessageItem";
 interface MessageListProps {
   messages: Message[];
   isRemoteTyping: boolean;
+  onDeleteMessage?: (messageId: string) => void;
 }
 
-export const MessageList: React.FC<MessageListProps> = ({ messages, isRemoteTyping }) => {
+export const MessageList: React.FC<MessageListProps> = ({ messages, isRemoteTyping, onDeleteMessage }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -17,7 +18,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isRemoteTypi
   return (
     <div className="messages">
       {messages.map((msg) => (
-        <MessageItem key={msg.id} msg={msg} />
+        <MessageItem key={msg.id} msg={msg} onDelete={onDeleteMessage} />
       ))}
       {isRemoteTyping && (
         <div className="typing-indicator">

@@ -198,12 +198,20 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  flex-shrink: 0;
 }
 
-.header-group.header-secondary,
+.header-group.header-secondary {
+  padding-left: var(--spacing-lg);
+  border-left: 1px solid var(--color-border);
+}
+
 .header-group.header-user {
   padding-left: var(--spacing-lg);
   border-left: 1px solid var(--color-border);
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Message Avatar and Sender Name */
@@ -342,20 +350,29 @@ button.copied {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1rem;
   background: white;
   border-bottom: 1px solid #e0e0e0;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  min-height: 60px;
 }
 
 .chat-header h2 {
   font-size: 1.1rem;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .status-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .status-dot.online {
@@ -364,6 +381,23 @@ button.copied {
 
 .status-dot.offline {
   background: #ff9500;
+}
+
+/* New user status colors */
+.status-dot.available {
+  background: #34c759; /* Green */
+}
+
+.status-dot.busy {
+  background: #ff9500; /* Orange */
+}
+
+.status-dot.away {
+  background: #ff3b30; /* Red */
+}
+
+.status-dot.dnd {
+  background: #8e8e93; /* Gray */
 }
 
 .skip-section {
@@ -389,6 +423,8 @@ button.copied {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .connect-btn {
@@ -2086,21 +2122,31 @@ button.copied {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1rem;
   background: white;
   border-bottom: 1px solid #e0e0e0;
+  overflow: hidden;
+  min-height: 60px;
 }
 
 .chat-room-header h2 {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .room-header-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .room-header-actions button {
@@ -2364,5 +2410,231 @@ button.copied {
 
   .call-button.video:hover {
     background: #244a24;
+  }
+
+  /* Status Selector */
+  .status-selector-trigger {
+    background: #2a2a2a;
+    color: #f5f5f5;
+    border: 1px solid #444;
+  }
+
+  .status-selector-trigger:hover {
+    background: #333;
+  }
+
+  .status-selector-dropdown {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+
+  .status-option {
+    color: #f5f5f5;
+  }
+
+  .status-option:hover {
+    background: #333;
+  }
+
+  .status-option.active {
+    background: #1a3a4a;
+  }
+
+  .status-message-input input {
+    background: #1a1a1a;
+    border-color: #444;
+    color: #f5f5f5;
+  }
+
+  .status-mute-toggle {
+    color: #999;
+  }
+
+  .member-status-message {
+    color: #777;
+  }
+}
+
+/* Status Selector Styles */
+.status-selector {
+  position: relative;
+}
+
+.status-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.status-selector-trigger:hover {
+  background: #e0e0e0;
+}
+
+.status-label {
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.status-message {
+  font-size: 0.75rem;
+  color: #666;
+  font-style: italic;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-selector-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.5rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 1rem;
+  min-width: 300px;
+  z-index: 1000;
+}
+
+.status-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.status-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  text-align: left;
+  transition: background 0.2s;
+}
+
+.status-option:hover {
+  background: #f5f5f5;
+}
+
+.status-option.active {
+  background: #e3f2fd;
+  font-weight: 500;
+}
+
+.status-message-input {
+  margin-bottom: 1rem;
+}
+
+.status-message-input input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.status-message-input input:focus {
+  outline: none;
+  border-color: #007aff;
+}
+
+.status-mute-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: #666;
+  cursor: pointer;
+}
+
+.status-mute-toggle input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.status-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.status-actions .btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+
+.member-status-message {
+  font-size: 0.8rem;
+  color: #666;
+  font-style: italic;
+  margin-top: 0.25rem;
+}
+
+/* Message Delete Button */
+.message {
+  position: relative;
+}
+
+.message.me {
+  flex-direction: row;
+}
+
+.message-delete-btn {
+  position: absolute;
+  left: -32px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 59, 48, 0.1);
+  color: #ff3b30;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.message-delete-btn:hover {
+  background: rgba(255, 59, 48, 0.2);
+}
+
+.message-deleting {
+  position: absolute;
+  left: -32px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  color: #999;
+}
+
+@media (prefers-color-scheme: dark) {
+  .message-delete-btn {
+    background: rgba(255, 59, 48, 0.15);
+  }
+
+  .message-delete-btn:hover {
+    background: rgba(255, 59, 48, 0.3);
   }
 }
