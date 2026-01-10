@@ -4,7 +4,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { connectDB } from './config/db.js';
 import { setupSocket } from './socket/index.js';
-import { authRoutes, usersRoutes, contactsRoutes, messagesRoutes, roomsRoutes, adminRoutes } from './routes/index.js';
+import { authRoutes, usersRoutes, contactsRoutes, messagesRoutes, roomsRoutes, adminRoutes, apkRoutes } from './routes/index.js';
 import { Room, User } from './models/index.js';
 
 const app = express();
@@ -24,6 +24,7 @@ app.use('/contacts', contactsRoutes);
 app.use('/messages', messagesRoutes);
 app.use('/rooms', roomsRoutes);
 app.use('/admin', adminRoutes);
+app.use('/apk', apkRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {

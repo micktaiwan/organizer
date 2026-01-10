@@ -4,3 +4,4 @@ export { default as contactsRoutes } from './contacts.js';
 export { default as messagesRoutes } from './messages.js';
 export { default as roomsRoutes } from './rooms.js';
 export { default as adminRoutes } from './admin.js';
+export { default as apkRoutes } from './apk.js';
