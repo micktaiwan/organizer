@@ -10,7 +10,8 @@ Cross-platform chat application built with Tauri 2.0 and Node.js backend. Client
 organizer/
 ├── src/                 # React frontend application
 ├── src-tauri/          # Tauri configuration and Rust code
-└── server/             # Express.js backend API
+├── server/             # Express.js backend API
+└── android/            # Android native app (Kotlin/Jetpack Compose)
 ```
 
 ## Commands
@@ -29,6 +30,33 @@ cd server
 npm run dev              # Start backend with hot reload (tsx watch)
 npm run build            # Compile TypeScript to JavaScript
 npm start                # Run compiled backend
+```
+
+### Server Deployment
+```bash
+cd server
+./deploy.sh              # Deploy to production server (51.210.150.25)
+```
+The deploy script syncs files via rsync and rebuilds Docker containers on the remote server.
+
+### Android Development
+
+See [android/ARCHITECTURE.md](android/ARCHITECTURE.md) for detailed architecture documentation.
+
+```bash
+cd android
+
+# Build debug APK
+JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
+
+# Install on connected device
+~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+# View logs
+~/Library/Android/sdk/platform-tools/adb logcat -s "ChatService" "SocketManager" "ChatViewModel"
+
+# Uninstall app
+~/Library/Android/sdk/platform-tools/adb uninstall com.organizer.chat
 ```
 
 ## Tech Stack
@@ -106,3 +134,50 @@ npm start                # Run compiled backend
 - **Voice Features**: Voice recording and playback
 - **WebRTC Integration**: Voice/video call capabilities (in development)
 - **Persistent Storage**: Local storage of messages and settings
+- **Android Auto-Update**: Self-update mechanism for APK distribution outside Play Store
+
+## Android APK Auto-Update
+
+The Android app can check for updates and download new versions from the server.
+
+### How it works
+1. App checks `/apk/latest` endpoint at launch (after 2s delay) and via Settings screen
+2. If `versionCode` on server > installed version, update dialog appears
+3. User downloads APK via Android DownloadManager
+4. User confirms installation (Android security requirement)
+
+### Upload a new APK version
+
+```bash
+cd server
+
+# 1. Get admin token (first time or if expired)
+export APK_ADMIN_TOKEN=$(./get-token.sh username password)
+
+# 2. Upload APK (increment versionCode in build.gradle.kts first!)
+./upload-apk.sh ../android/app/build/outputs/apk/debug/app-debug.apk <version> <versionCode> "Release notes"
+
+# Example:
+./upload-apk.sh ../android/app/build/outputs/apk/debug/app-debug.apk 1.0.1 2 "Bug fixes"
+```
+
+### API Endpoints
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /apk/latest` | Public | Get latest version info |
+| `GET /apk/download/:filename` | Public | Download APK file |
+| `POST /apk/upload` | Admin | Upload new APK (multipart form: apk, version, versionCode, releaseNotes) |
+| `GET /apk/versions` | Admin | List all versions |
+| `DELETE /apk/:version` | Admin | Delete a version |
+
+### Important notes
+- Token expires after 7 days, regenerate with `get-token.sh`
+- Always increment `versionCode` in `android/app/build.gradle.kts` before building
+- APK files are stored in `server/public/apk/` (gitignored)
+- `get-token.sh` is gitignored - if missing, get token manually:
+  ```bash
+  curl -s -X POST http://51.210.150.25:3001/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"username": "xxx", "password": "xxx"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])"
+  ```
