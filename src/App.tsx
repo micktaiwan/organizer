@@ -8,6 +8,8 @@ import { useWebRTCCall } from "./hooks/useWebRTCCall";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder";
 import { useRooms } from "./hooks/useRooms";
 import { Button } from "./components/ui/Button";
+import { StatusSelector } from "./components/ui/StatusSelector";
+import { UserStatus } from "./types";
 // TODO: Restore Contact-related features in room context
 // import { Contact } from "./types";
 
@@ -41,6 +43,17 @@ function App() {
 
   const username = user?.displayName || "";
 
+  // User status
+  const [userStatus, setUserStatus] = useState<UserStatus>('available');
+  const [userStatusMessage, setUserStatusMessage] = useState<string | null>(null);
+  const [userIsMuted, setUserIsMuted] = useState(false);
+
+  const handleStatusChange = (status: UserStatus, statusMessage: string | null, isMuted: boolean) => {
+    setUserStatus(status);
+    setUserStatusMessage(statusMessage);
+    setUserIsMuted(isMuted);
+  };
+
   // Room and messaging
   const {
     rooms,
@@ -50,6 +63,7 @@ function App() {
     messages,
     setMessages,
     sendMessage,
+    deleteMessage,
     selectRoom,
   } = useRooms({ userId: user?.id, username });
 
@@ -204,6 +218,12 @@ function App() {
                   />
                 </div>
                 <div className="header-group header-user">
+                  <StatusSelector
+                    currentStatus={userStatus}
+                    currentStatusMessage={userStatusMessage}
+                    currentIsMuted={userIsMuted}
+                    onStatusChange={handleStatusChange}
+                  />
                   <Button
                     variant="ghost"
                     size="sm"
@@ -223,6 +243,7 @@ function App() {
             onSendMessage={(text, image, audio) => {
               sendMessage(text, image, audio);
             }}
+            onDeleteMessage={deleteMessage}
             inputMessage={inputMessage}
             setInputMessage={setInputMessage}
             pendingImage={pendingImage}

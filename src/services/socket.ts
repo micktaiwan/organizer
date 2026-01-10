@@ -35,12 +35,14 @@ class SocketService {
     const events = [
       'user:online',
       'user:offline',
+      'user:status-changed',
       'user:joined-room',
       'user:left-room',
       'typing:start',
       'typing:stop',
       'message:new',
       'message:read',
+      'message:deleted',
       // WebRTC signaling events
       'webrtc:offer',
       'webrtc:answer',
@@ -100,6 +102,10 @@ class SocketService {
 
   notifyRead(roomId: string, messageIds: string[]) {
     this.socket?.emit('message:read', { roomId, messageIds });
+  }
+
+  notifyDelete(roomId: string, messageId: string) {
+    this.socket?.emit('message:delete', { roomId, messageId });
   }
 
   joinRoom(roomId: string) {

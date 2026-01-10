@@ -1,4 +1,6 @@
 import React from "react";
+import { StatusSelector } from "../ui/StatusSelector";
+import { UserStatus } from "../../types";
 
 interface ChatHeaderProps {
   connected: boolean;
@@ -13,6 +15,10 @@ interface ChatHeaderProps {
   isAdmin: boolean;
   username: string;
   serverName?: string;
+  userStatus?: UserStatus;
+  userStatusMessage?: string | null;
+  userIsMuted?: boolean;
+  onStatusChange?: (status: UserStatus, statusMessage: string | null, isMuted: boolean) => void;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -27,7 +33,11 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   onChangeServer,
   isAdmin,
   username,
-  serverName
+  serverName,
+  userStatus = 'available',
+  userStatusMessage = null,
+  userIsMuted = false,
+  onStatusChange,
 }) => {
   return (
     <header className="chat-header">
@@ -59,6 +69,12 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             🌐
           </button>
         )}
+        <StatusSelector
+          currentStatus={userStatus}
+          currentStatusMessage={userStatusMessage}
+          currentIsMuted={userIsMuted}
+          onStatusChange={onStatusChange}
+        />
         <button className="settings-btn" onClick={onLogout} title="Se déconnecter">
           {username} ⏻
         </button>

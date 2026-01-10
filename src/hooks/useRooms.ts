@@ -146,6 +146,22 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     return () => unsubNewMessage();
   }, [currentRoomId]);
 
+  // Listen for deleted messages in current room
+  useEffect(() => {
+    if (!currentRoomId) return;
+
+    const unsubDeletedMessage = socketService.on('message:deleted', (data: any) => {
+      if (data.roomId === currentRoomId) {
+        // Remove the deleted message from local state
+        setMessages(prev => prev.filter(m =>
+          m.serverMessageId !== data.messageId && m.id !== data.messageId
+        ));
+      }
+    });
+
+    return () => unsubDeletedMessage();
+  }, [currentRoomId]);
+
   // Load message history
   const loadMessages = useCallback(async () => {
     if (!currentRoomId) return;
@@ -259,6 +275,26 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     }
   }, [currentRoomId]);
 
+  // Delete a message
+  const deleteMessage = useCallback(async (messageId: string) => {
+    if (!currentRoomId) return;
+
+    try {
+      const response = await api.deleteMessage(messageId);
+
+      // Remove message from local state
+      setMessages(prev => prev.filter(m =>
+        m.serverMessageId !== messageId && m.id !== messageId
+      ));
+
+      // Notify other users via socket
+      socketService.notifyDelete(response.roomId, messageId);
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+      throw error;
+    }
+  }, [currentRoomId]);
+
   // Join room
   const joinRoom = useCallback(async (roomId: string) => {
     try {
@@ -305,6 +341,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     setMessages,
     sendMessage,
     markAsRead,
+    deleteMessage,
     loadMessages,
 
     // Room management

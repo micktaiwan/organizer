@@ -1,13 +1,28 @@
-import React from "react";
-import { Phone, PhoneOff } from "lucide-react";
+import React, { useState } from "react";
+import { Phone, PhoneOff, Trash2 } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Message } from "../../types";
+import { formatMessageTimestamp } from "../../utils/dateFormat";
 
 interface MessageItemProps {
   msg: Message;
+  onDelete?: (messageId: string) => void;
 }
 
-export const MessageItem: React.FC<MessageItemProps> = ({ msg }) => {
+export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete }) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!onDelete || !msg.serverMessageId) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(msg.serverMessageId);
+    } catch (error) {
+      console.error("Failed to delete message:", error);
+      setIsDeleting(false);
+    }
+  };
+
   if (msg.isSystemMessage) {
     return (
       <div className="system-message">
@@ -18,14 +33,16 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg }) => {
         </span>
         <span className="system-message-text">{msg.text}</span>
         <span className="system-message-time">
-          {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          {formatMessageTimestamp(msg.timestamp)}
         </span>
       </div>
     );
   }
 
   return (
-    <div className={`message ${msg.sender} ${msg.status === "failed" ? "failed" : ""}`}>
+    <div
+      className={`message ${msg.sender} ${msg.status === "failed" ? "failed" : ""}`}
+    >
       {msg.sender === "them" && (
         <Avatar
           name={msg.senderName || "User"}
@@ -47,7 +64,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg }) => {
           {msg.text && <span>{msg.text}</span>}
         </div>
         <span className="timestamp">
-          {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          {formatMessageTimestamp(msg.timestamp)}
           {msg.sender === "me" && msg.status === "sending" && " ..."}
           {msg.sender === "me" && msg.status === "sent" && " ✓"}
           {msg.sender === "me" && msg.status === "delivered" && " ✓✓"}
@@ -59,7 +76,18 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg }) => {
           {msg.sender === "me" && msg.status === "failed" && " ✗"}
         </span>
       </div>
+      {msg.sender === "me" && msg.serverMessageId && !isDeleting && (
+        <button
+          className="message-delete-btn"
+          onClick={handleDelete}
+          title="Supprimer le message"
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
+      {isDeleting && (
+        <span className="message-deleting">...</span>
+      )}
     </div>
   );
 };
-

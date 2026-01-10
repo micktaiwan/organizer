@@ -19,6 +19,9 @@ export interface RoomMember {
   username: string;
   displayName: string;
   isOnline: boolean;
+  status?: UserStatus;
+  statusMessage?: string | null;
+  isMuted?: boolean;
   joinedAt: Date;
   lastReadAt: Date | null;
 }
@@ -43,3 +46,11 @@ export interface Contact {
 }
 
 export type CallState = 'idle' | 'calling' | 'incoming' | 'connected';
+
+export type UserStatus = 'available' | 'busy' | 'away' | 'dnd';
+
+export interface UserStatusInfo {
+  status: UserStatus;
+  statusMessage: string | null;
+  isMuted: boolean;
+}

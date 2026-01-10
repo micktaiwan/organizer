@@ -154,6 +154,13 @@ class ApiService {
     });
   }
 
+  async updateStatus(status?: string, statusMessage?: string | null, isMuted?: boolean): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>('/users/status', {
+      method: 'PUT',
+      body: JSON.stringify({ status, statusMessage, isMuted }),
+    });
+  }
+
   // Contacts
   async getContacts(): Promise<{ contacts: Contact[] }> {
     return this.request<{ contacts: Contact[] }>('/contacts');
@@ -231,6 +238,12 @@ class ApiService {
     return this.request<{ success: boolean }>('/messages/read-bulk', {
       method: 'POST',
       body: JSON.stringify({ messageIds }),
+    });
+  }
+
+  async deleteMessage(id: string): Promise<{ success: boolean; roomId: string; messageId: string }> {
+    return this.request<{ success: boolean; roomId: string; messageId: string }>(`/messages/${id}`, {
+      method: 'DELETE',
     });
   }
 
