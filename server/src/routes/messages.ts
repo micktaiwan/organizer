@@ -111,4 +111,30 @@ router.post('/read-bulk', async (req: AuthRequest, res: Response): Promise<void>
   }
 });
 
+// DELETE /messages/:id - Delete a message
+router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const message = await Message.findById(req.params.id);
+
+    if (!message) {
+      res.status(404).json({ error: 'Message non trouvé' });
+      return;
+    }
+
+    // Only sender can delete their own message
+    if (message.senderId.toString() !== req.userId) {
+      res.status(403).json({ error: 'Non autorisé à supprimer ce message' });
+      return;
+    }
+
+    const roomId = message.roomId.toString();
+    await Message.findByIdAndDelete(req.params.id);
+
+    res.json({ success: true, roomId, messageId: req.params.id });
+  } catch (error) {
+    console.error('Delete message error:', error);
+    res.status(500).json({ error: 'Erreur lors de la suppression' });
+  }
+});
+
 export default router;
