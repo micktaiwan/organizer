@@ -8,6 +8,9 @@ export interface IUser extends Document {
   peerId?: string | null; // DEPRECATED: No longer used (WebRTC via Socket.io)
   isOnline: boolean;
   isAdmin: boolean;
+  status: 'available' | 'busy' | 'away' | 'dnd';
+  statusMessage: string | null;
+  isMuted: boolean;
   lastSeen: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -50,6 +53,20 @@ const UserSchema = new Schema<IUser>(
       default: false,
     },
     isAdmin: {
+      type: Boolean,
+      default: false,
+    },
+    status: {
+      type: String,
+      enum: ['available', 'busy', 'away', 'dnd'],
+      default: 'available',
+    },
+    statusMessage: {
+      type: String,
+      default: null,
+      maxlength: 100,
+    },
+    isMuted: {
       type: Boolean,
       default: false,
     },

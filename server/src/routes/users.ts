@@ -57,6 +57,51 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
+// PUT /users/status - Mettre à jour son statut
+router.put('/status', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { status, statusMessage, isMuted } = req.body;
+
+    // Validation
+    const validStatuses = ['available', 'busy', 'away', 'dnd'];
+    if (status && !validStatuses.includes(status)) {
+      res.status(400).json({ error: 'Statut invalide' });
+      return;
+    }
+
+    const updates: Record<string, unknown> = {};
+    if (status !== undefined) updates.status = status;
+    if (statusMessage !== undefined) updates.statusMessage = statusMessage;
+    if (isMuted !== undefined) updates.isMuted = isMuted;
+
+    const user = await User.findByIdAndUpdate(req.userId, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'Utilisateur non trouvé' });
+      return;
+    }
+
+    // Émettre via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('user:status-changed', {
+        userId: req.userId,
+        status: user.status,
+        statusMessage: user.statusMessage,
+        isMuted: user.isMuted,
+      });
+    }
+
+    res.json({ success: true, user: { status: user.status, statusMessage: user.statusMessage, isMuted: user.isMuted } });
+  } catch (error) {
+    console.error('Update status error:', error);
+    res.status(500).json({ error: 'Erreur lors de la mise à jour du statut' });
+  }
+});
+
 // PATCH /users/me - Mettre à jour son profil
 router.patch('/me', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
