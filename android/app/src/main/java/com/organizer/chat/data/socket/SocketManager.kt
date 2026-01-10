@@ -44,6 +44,32 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _messageDeleted = MutableSharedFlow<MessageDeletedEvent>(replay = 1, extraBufferCapacity = 10)
     val messageDeleted: SharedFlow<MessageDeletedEvent> = _messageDeleted.asSharedFlow()
 
+    private val _messageReacted = MutableSharedFlow<MessageReactedEvent>(replay = 1, extraBufferCapacity = 10)
+    val messageReacted: SharedFlow<MessageReactedEvent> = _messageReacted.asSharedFlow()
+
+    // Notes events
+    private val _noteCreated = MutableSharedFlow<NoteEvent>(replay = 1, extraBufferCapacity = 10)
+    val noteCreated: SharedFlow<NoteEvent> = _noteCreated.asSharedFlow()
+
+    private val _noteUpdated = MutableSharedFlow<NoteEvent>(replay = 1, extraBufferCapacity = 10)
+    val noteUpdated: SharedFlow<NoteEvent> = _noteUpdated.asSharedFlow()
+
+    private val _noteDeleted = MutableSharedFlow<NoteDeletedEvent>(replay = 1, extraBufferCapacity = 10)
+    val noteDeleted: SharedFlow<NoteDeletedEvent> = _noteDeleted.asSharedFlow()
+
+    private val _labelCreated = MutableSharedFlow<LabelEvent>(replay = 1, extraBufferCapacity = 10)
+    val labelCreated: SharedFlow<LabelEvent> = _labelCreated.asSharedFlow()
+
+    private val _labelUpdated = MutableSharedFlow<LabelEvent>(replay = 1, extraBufferCapacity = 10)
+    val labelUpdated: SharedFlow<LabelEvent> = _labelUpdated.asSharedFlow()
+
+    private val _labelDeleted = MutableSharedFlow<LabelDeletedEvent>(replay = 1, extraBufferCapacity = 10)
+    val labelDeleted: SharedFlow<LabelDeletedEvent> = _labelDeleted.asSharedFlow()
+
+    // Location events
+    private val _userLocationUpdated = MutableSharedFlow<UserLocationUpdatedEvent>(replay = 1, extraBufferCapacity = 10)
+    val userLocationUpdated: SharedFlow<UserLocationUpdatedEvent> = _userLocationUpdated.asSharedFlow()
+
     fun connect() {
         val token = tokenManager.getTokenSync()
         if (token == null) {
@@ -93,8 +119,13 @@ class SocketManager(private val tokenManager: TokenManager) {
                     val data = args[0] as JSONObject
                     val event = NewMessageEvent(
                         from = data.getString("from"),
+                        fromName = data.optString("fromName", "Utilisateur"),
+                        roomName = data.optString("roomName", "Chat"),
                         roomId = data.getString("roomId"),
-                        messageId = data.getString("messageId")
+                        messageId = data.getString("messageId"),
+                        content = data.optString("content", ""),
+                        audioUrl = if (data.isNull("audioUrl")) null else data.optString("audioUrl"),
+                        imageUrl = if (data.isNull("imageUrl")) null else data.optString("imageUrl")
                     )
                     _newMessage.tryEmit(event)
                 } catch (e: Exception) {
@@ -185,6 +216,134 @@ class SocketManager(private val tokenManager: TokenManager) {
                     Log.e(TAG, "Error parsing message:deleted", e)
                 }
             }
+
+            on("message:reacted") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = MessageReactedEvent(
+                        from = data.getString("from"),
+                        roomId = data.getString("roomId"),
+                        messageId = data.getString("messageId"),
+                        emoji = data.getString("emoji"),
+                        action = data.getString("action")
+                    )
+                    Log.d(TAG, "Message reacted: ${event.messageId} with ${event.emoji} (${event.action})")
+                    _messageReacted.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing message:reacted", e)
+                }
+            }
+
+            // Notes events
+            on("note:created") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val noteJson = data.getJSONObject("note")
+                    val createdBy = data.optString("createdBy", "")
+                    val event = NoteEvent(
+                        noteId = noteJson.getString("_id"),
+                        triggeredBy = createdBy
+                    )
+                    Log.d(TAG, "Note created: ${event.noteId} by ${event.triggeredBy}")
+                    _noteCreated.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing note:created", e)
+                }
+            }
+
+            on("note:updated") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val noteJson = data.getJSONObject("note")
+                    val updatedBy = data.optString("updatedBy", "")
+                    val event = NoteEvent(
+                        noteId = noteJson.getString("_id"),
+                        triggeredBy = updatedBy
+                    )
+                    Log.d(TAG, "Note updated: ${event.noteId} by ${event.triggeredBy}")
+                    _noteUpdated.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing note:updated", e)
+                }
+            }
+
+            on("note:deleted") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val deletedBy = data.optString("deletedBy", "")
+                    val event = NoteDeletedEvent(
+                        noteId = data.getString("noteId"),
+                        deletedBy = deletedBy
+                    )
+                    Log.d(TAG, "Note deleted: ${event.noteId} by ${event.deletedBy}")
+                    _noteDeleted.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing note:deleted", e)
+                }
+            }
+
+            on("label:created") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val labelJson = data.getJSONObject("label")
+                    val event = LabelEvent(labelId = labelJson.getString("_id"))
+                    Log.d(TAG, "Label created: ${event.labelId}")
+                    _labelCreated.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing label:created", e)
+                }
+            }
+
+            on("label:updated") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val labelJson = data.getJSONObject("label")
+                    val event = LabelEvent(labelId = labelJson.getString("_id"))
+                    Log.d(TAG, "Label updated: ${event.labelId}")
+                    _labelUpdated.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing label:updated", e)
+                }
+            }
+
+            on("label:deleted") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = LabelDeletedEvent(labelId = data.getString("labelId"))
+                    Log.d(TAG, "Label deleted: ${event.labelId}")
+                    _labelDeleted.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing label:deleted", e)
+                }
+            }
+
+            // Location events
+            on("user:location-updated") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val locationObj = data.optJSONObject("location")
+                    val event = UserLocationUpdatedEvent(
+                        userId = data.getString("userId"),
+                        username = data.optString("username", ""),
+                        displayName = data.optString("displayName", ""),
+                        isOnline = data.optBoolean("isOnline", false),
+                        location = locationObj?.let {
+                            UserLocationData(
+                                lat = it.getDouble("lat"),
+                                lng = it.getDouble("lng"),
+                                street = if (it.isNull("street")) null else it.optString("street"),
+                                city = if (it.isNull("city")) null else it.optString("city"),
+                                country = if (it.isNull("country")) null else it.optString("country"),
+                                updatedAt = it.optString("updatedAt")
+                            )
+                        }
+                    )
+                    Log.d(TAG, "User location updated: ${event.userId}")
+                    _userLocationUpdated.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing user:location-updated", e)
+                }
+            }
         }
     }
 
@@ -225,6 +384,35 @@ class SocketManager(private val tokenManager: TokenManager) {
         })
     }
 
+    fun notifyReaction(roomId: String, messageId: String, emoji: String, action: String) {
+        socket?.emit("message:react", JSONObject().apply {
+            put("roomId", roomId)
+            put("messageId", messageId)
+            put("emoji", emoji)
+            put("action", action)
+        })
+    }
+
+    fun subscribeToNotes() {
+        socket?.emit("note:subscribe")
+        Log.d(TAG, "Subscribed to notes")
+    }
+
+    fun unsubscribeFromNotes() {
+        socket?.emit("note:unsubscribe")
+        Log.d(TAG, "Unsubscribed from notes")
+    }
+
+    fun subscribeToLocations() {
+        socket?.emit("location:subscribe")
+        Log.d(TAG, "Subscribed to locations")
+    }
+
+    fun unsubscribeFromLocations() {
+        socket?.emit("location:unsubscribe")
+        Log.d(TAG, "Unsubscribed from locations")
+    }
+
     fun isConnected(): Boolean = socket?.connected() == true
 }
 
@@ -237,8 +425,13 @@ sealed class ConnectionState {
 
 data class NewMessageEvent(
     val from: String,
+    val fromName: String = "Utilisateur",
+    val roomName: String = "Chat",
     val roomId: String,
-    val messageId: String
+    val messageId: String,
+    val content: String = "",
+    val audioUrl: String? = null,
+    val imageUrl: String? = null
 )
 
 data class UserStatusEvent(
@@ -267,4 +460,49 @@ data class MessageDeletedEvent(
     val from: String,
     val roomId: String,
     val messageId: String
+)
+
+data class MessageReactedEvent(
+    val from: String,
+    val roomId: String,
+    val messageId: String,
+    val emoji: String,
+    val action: String
+)
+
+// Notes events
+data class NoteEvent(
+    val noteId: String,
+    val triggeredBy: String = "" // userId who triggered the event
+)
+
+data class NoteDeletedEvent(
+    val noteId: String,
+    val deletedBy: String = ""
+)
+
+data class LabelEvent(
+    val labelId: String
+)
+
+data class LabelDeletedEvent(
+    val labelId: String
+)
+
+// Location events
+data class UserLocationUpdatedEvent(
+    val userId: String,
+    val username: String,
+    val displayName: String,
+    val isOnline: Boolean,
+    val location: UserLocationData?
+)
+
+data class UserLocationData(
+    val lat: Double,
+    val lng: Double,
+    val street: String?,
+    val city: String?,
+    val country: String?,
+    val updatedAt: String?
 )

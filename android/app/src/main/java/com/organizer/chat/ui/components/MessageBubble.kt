@@ -1,41 +1,63 @@
 package com.organizer.chat.ui.components
 
+import android.graphics.BitmapFactory
 import android.media.MediaPlayer
 import android.util.Base64
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
 import java.io.File
 import java.io.FileOutputStream
+import com.organizer.chat.data.api.ApiClient
 import com.organizer.chat.data.model.Message
+import com.organizer.chat.data.model.Reaction
 import com.organizer.chat.ui.theme.MessageReceived
 import com.organizer.chat.ui.theme.MessageSent
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.Add
 
 // Fixed colors for message bubbles (readable on both light/dark backgrounds)
 private val MessageTextColor = androidx.compose.ui.graphics.Color(0xFF1A1A1A)
 private val MessageSecondaryColor = androidx.compose.ui.graphics.Color(0xFF666666)
 
+// Available reaction emojis
+val ALLOWED_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "😡", "✅", "⚠️", "🙏", "🎉", "👋", "😘")
+
 @Composable
 fun MessageBubble(
     message: Message,
-    isMyMessage: Boolean
+    isMyMessage: Boolean,
+    currentUserId: String? = null,
+    onReact: ((String) -> Unit)? = null
 ) {
+    var showReactionPicker by remember { mutableStateOf(false) }
+
     val bubbleShape = if (isMyMessage) {
         RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
     } else {
@@ -72,7 +94,7 @@ fun MessageBubble(
                 // Content based on message type
                 when (message.type) {
                     "audio" -> AudioMessageContent(message.content, message.id)
-                    "image" -> ImageMessageContent()
+                    "image" -> ImageMessageContent(message.content)
                     else -> TextMessageContent(message.content)
                 }
 
@@ -86,6 +108,30 @@ fun MessageBubble(
                 )
             }
         }
+
+        // Reaction bar
+        if (message.reactions.isNotEmpty() || onReact != null) {
+            ReactionBar(
+                reactions = message.reactions,
+                currentUserId = currentUserId,
+                onReact = { emoji ->
+                    onReact?.invoke(emoji)
+                },
+                onShowPicker = { showReactionPicker = true },
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+
+    // Reaction picker dialog
+    if (showReactionPicker) {
+        ReactionPickerDialog(
+            onReact = { emoji ->
+                onReact?.invoke(emoji)
+                showReactionPicker = false
+            },
+            onDismiss = { showReactionPicker = false }
+        )
     }
 }
 
@@ -166,23 +212,129 @@ private fun AudioMessageContent(base64Content: String, messageId: String) {
 }
 
 @Composable
-private fun ImageMessageContent() {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 4.dp)
+private fun ImageMessageContent(imageUrl: String) {
+    var showFullscreen by remember { mutableStateOf(false) }
+
+    if (imageUrl.startsWith("data:")) {
+        // Base64 data URL (clipboard paste) - decode manually
+        val base64Data = imageUrl.substringAfter(",")
+        val imageBytes = try {
+            Base64.decode(base64Data, Base64.DEFAULT)
+        } catch (e: Exception) {
+            null
+        }
+
+        if (imageBytes != null) {
+            val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Image",
+                    modifier = Modifier
+                        .widthIn(max = 250.dp)
+                        .heightIn(max = 300.dp)
+                        .clickable { showFullscreen = true },
+                    contentScale = ContentScale.Crop
+                )
+
+                if (showFullscreen) {
+                    FullscreenImageDialog(
+                        imageUrl = imageUrl,
+                        onDismiss = { showFullscreen = false }
+                    )
+                }
+            }
+        }
+    } else {
+        // HTTP URL - use Coil
+        val fullImageUrl = if (imageUrl.startsWith("/")) {
+            // Relative URL from server - prefix with API base URL
+            ApiClient.getBaseUrl().trimEnd('/') + imageUrl
+        } else {
+            // Full URL - use as-is
+            imageUrl
+        }
+
+        AsyncImage(
+            model = fullImageUrl,
+            contentDescription = "Image",
+            modifier = Modifier
+                .widthIn(max = 250.dp)
+                .heightIn(max = 300.dp)
+                .clickable { showFullscreen = true },
+            contentScale = ContentScale.Crop
+        )
+
+        if (showFullscreen) {
+            FullscreenImageDialog(
+                imageUrl = fullImageUrl,
+                onDismiss = { showFullscreen = false }
+            )
+        }
+    }
+}
+
+@Composable
+private fun FullscreenImageDialog(
+    imageUrl: String,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Icon(
-            imageVector = Icons.Default.Image,
-            contentDescription = null,
-            tint = MessageSecondaryColor,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "Image",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MessageTextColor
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable { onDismiss() }
+        ) {
+            if (imageUrl.startsWith("data:")) {
+                // Base64 data URL
+                val base64Data = imageUrl.substringAfter(",")
+                val imageBytes = try {
+                    Base64.decode(base64Data, Base64.DEFAULT)
+                } catch (e: Exception) {
+                    null
+                }
+
+                if (imageBytes != null) {
+                    val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Image fullscreen",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+            } else {
+                // HTTP URL
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = "Image fullscreen",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color.White
+                )
+            }
+        }
     }
 }
 
@@ -196,5 +348,120 @@ private fun formatTime(isoDate: String): String {
         outputFormat.format(date)
     } catch (e: Exception) {
         ""
+    }
+}
+
+// Aggregate reactions by emoji
+private data class ReactionCount(
+    val emoji: String,
+    val count: Int,
+    val userIds: List<String>
+)
+
+private fun aggregateReactions(reactions: List<Reaction>): List<ReactionCount> {
+    return reactions.groupBy { it.emoji }
+        .map { (emoji, list) ->
+            ReactionCount(
+                emoji = emoji,
+                count = list.size,
+                userIds = list.map { it.userId }
+            )
+        }
+}
+
+@Composable
+private fun ReactionBar(
+    reactions: List<Reaction>,
+    currentUserId: String?,
+    onReact: (String) -> Unit,
+    onShowPicker: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val aggregated = aggregateReactions(reactions)
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        aggregated.forEach { reaction ->
+            val isActive = currentUserId != null && reaction.userIds.contains(currentUserId)
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (isActive) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.clickable { onReact(reaction.emoji) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = reaction.emoji, style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = reaction.count.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // Add reaction button
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color.Transparent,
+            modifier = Modifier
+                .size(28.dp)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .clickable { onShowPicker() }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add reaction",
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReactionPickerDialog(
+    onReact: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ALLOWED_EMOJIS.chunked(6).forEach { rowEmojis ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        rowEmojis.forEach { emoji ->
+                            Text(
+                                text = emoji,
+                                style = MaterialTheme.typography.headlineMedium,
+                                modifier = Modifier.clickable { onReact(emoji) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

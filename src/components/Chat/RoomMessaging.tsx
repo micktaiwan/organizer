@@ -9,6 +9,8 @@ interface RoomMessagingProps {
   messages: Message[];
   onSendMessage: (text?: string, image?: string, audio?: string) => void;
   onDeleteMessage?: (messageId: string) => void;
+  onReactMessage?: (messageId: string, emoji: string) => void;
+  currentUserId?: string;
   inputMessage: string;
   setInputMessage: (text: string) => void;
   pendingImage: string | null;
@@ -18,6 +20,7 @@ interface RoomMessagingProps {
   startRecording: () => void;
   stopRecording: () => void;
   cancelRecording: () => void;
+  onSelectImageFile: () => void;
 }
 
 export const RoomMessaging: React.FC<RoomMessagingProps> = ({
@@ -25,6 +28,8 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   messages,
   onSendMessage,
   onDeleteMessage,
+  onReactMessage,
+  currentUserId,
   inputMessage,
   setInputMessage,
   pendingImage,
@@ -34,6 +39,7 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   startRecording,
   stopRecording,
   cancelRecording,
+  onSelectImageFile,
 }) => {
   if (!currentRoom) {
     return (
@@ -57,7 +63,13 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
 
   return (
     <div className="room-messaging">
-      <MessageList messages={messages} isRemoteTyping={false} onDeleteMessage={onDeleteMessage} />
+      <MessageList
+        messages={messages}
+        isRemoteTyping={false}
+        onDeleteMessage={onDeleteMessage}
+        onReactMessage={onReactMessage}
+        currentUserId={currentUserId}
+      />
 
       <MessageInput
         inputMessage={inputMessage}
@@ -70,6 +82,7 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
         isRecording={isRecording}
         recordingDuration={recordingDuration}
         startRecording={startRecording}
+        onSelectImageFile={onSelectImageFile}
         stopRecording={stopRecording}
         cancelRecording={cancelRecording}
       />

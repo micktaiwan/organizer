@@ -1,12 +1,14 @@
 package com.organizer.chat.ui.screens.chat
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.organizer.chat.data.model.Message
 import com.organizer.chat.data.repository.MessageRepository
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.util.ImageCompressor
 import com.organizer.chat.util.TokenManager
 import com.organizer.chat.util.VoiceRecorder
 import kotlinx.coroutines.Job
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 
 data class ChatUiState(
     val messages: List<Message> = emptyList(),
@@ -26,7 +29,10 @@ data class ChatUiState(
     val messageInput: String = "",
     val typingUsers: Set<String> = emptySet(),
     val isRecording: Boolean = false,
-    val recordingDuration: Int = 0
+    val recordingDuration: Int = 0,
+    val selectedImageUri: Uri? = null,
+    val isCompressingImage: Boolean = false,
+    val isUploadingImage: Boolean = false
 )
 
 class ChatViewModel(
@@ -45,7 +51,10 @@ class ChatViewModel(
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     private val voiceRecorder = VoiceRecorder(context)
+    private val imageCompressor = ImageCompressor(context)
     private var recordingTimerJob: Job? = null
+    private var compressingJob: Job? = null
+    private var tempCompressedFile: File? = null
 
     init {
         loadCurrentUser()
@@ -131,6 +140,16 @@ class ChatViewModel(
                     }
                 }
             }
+
+            viewModelScope.launch {
+                service.socketManager.messageReacted.collect { event ->
+                    if (event.roomId == roomId) {
+                        Log.d(TAG, "Message reacted in current room: ${event.messageId} with ${event.emoji}")
+                        // Reload messages to get updated reactions
+                        loadMessages()
+                    }
+                }
+            }
         }
     }
 
@@ -181,6 +200,36 @@ class ChatViewModel(
 
     fun isMyMessage(message: Message): Boolean {
         return message.senderId.id == _uiState.value.currentUserId
+    }
+
+    fun reactToMessage(messageId: String, emoji: String) {
+        viewModelScope.launch {
+            val result = messageRepository.reactToMessage(messageId, emoji)
+
+            result.fold(
+                onSuccess = { response ->
+                    Log.d(TAG, "Reaction ${response.action}: $emoji on message $messageId")
+                    // Update local message with new reactions
+                    val updatedMessages = _uiState.value.messages.map { msg ->
+                        if (msg.id == messageId) response.message else msg
+                    }
+                    _uiState.value = _uiState.value.copy(messages = updatedMessages)
+                    // Notify other users via socket
+                    chatService?.socketManager?.notifyReaction(
+                        response.roomId,
+                        messageId,
+                        emoji,
+                        response.action
+                    )
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Failed to react to message: ${error.message}")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = error.message ?: "Erreur lors de la reaction"
+                    )
+                }
+            )
+        }
     }
 
     fun startRecording(): Boolean {
@@ -256,10 +305,88 @@ class ChatViewModel(
         }
     }
 
+    fun selectImage(uri: Uri) {
+        _uiState.value = _uiState.value.copy(selectedImageUri = uri)
+        sendImageMessage(uri)
+    }
+
+    fun clearSelectedImage() {
+        tempCompressedFile?.let { imageCompressor.cleanup(it) }
+        tempCompressedFile = null
+        _uiState.value = _uiState.value.copy(
+            selectedImageUri = null,
+            isCompressingImage = false,
+            isUploadingImage = false
+        )
+    }
+
+    private fun sendImageMessage(imageUri: Uri) {
+        compressingJob?.cancel()
+        compressingJob = viewModelScope.launch {
+            try {
+                _uiState.value = _uiState.value.copy(isCompressingImage = true)
+                Log.d(TAG, "Compressing image...")
+
+                // Compress image
+                val compressedFile = imageCompressor.compressImage(imageUri)
+                if (compressedFile == null) {
+                    Log.e(TAG, "Failed to compress image")
+                    _uiState.value = _uiState.value.copy(
+                        isCompressingImage = false,
+                        errorMessage = "Erreur lors de la compression"
+                    )
+                    clearSelectedImage()
+                    return@launch
+                }
+
+                tempCompressedFile = compressedFile
+                Log.d(TAG, "Image compressed: ${compressedFile.length()} bytes")
+
+                _uiState.value = _uiState.value.copy(
+                    isCompressingImage = false,
+                    isUploadingImage = true
+                )
+
+                // Upload image
+                val result = messageRepository.uploadAndSendImage(roomId, compressedFile)
+
+                result.fold(
+                    onSuccess = { message ->
+                        Log.d(TAG, "Image uploaded successfully: ${message.id}")
+                        _uiState.value = _uiState.value.copy(
+                            messages = _uiState.value.messages + message,
+                            isUploadingImage = false
+                        )
+                        chatService?.socketManager?.notifyNewMessage(roomId, message.id)
+                        clearSelectedImage()
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Failed to upload image: ${error.message}")
+                        _uiState.value = _uiState.value.copy(
+                            isUploadingImage = false,
+                            errorMessage = error.message ?: "Erreur lors de l'envoi"
+                        )
+                        clearSelectedImage()
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending image: ${e.message}")
+                _uiState.value = _uiState.value.copy(
+                    isCompressingImage = false,
+                    isUploadingImage = false,
+                    errorMessage = e.message ?: "Erreur"
+                )
+                clearSelectedImage()
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         recordingTimerJob?.cancel()
+        compressingJob?.cancel()
         voiceRecorder.release()
+        tempCompressedFile?.let { imageCompressor.cleanup(it) }
         chatService?.socketManager?.notifyTypingStop(roomId)
         chatService?.socketManager?.leaveRoom(roomId)
     }

@@ -39,6 +39,11 @@ cd server
 ```
 The deploy script syncs files via rsync and rebuilds Docker containers on the remote server.
 
+**SSH Access**: Use `ubuntu@51.210.150.25` (not `root@`). Example:
+```bash
+ssh ubuntu@51.210.150.25 "docker logs organizer-server --tail 50"
+```
+
 ### Android Development
 
 See [android/ARCHITECTURE.md](android/ARCHITECTURE.md) for detailed architecture documentation.
@@ -58,6 +63,12 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 # Uninstall app
 ~/Library/Android/sdk/platform-tools/adb uninstall com.organizer.chat
 ```
+
+**IMPORTANT - Version Management:**
+- **DO NOT** increment `versionCode` and `versionName` in `build.gradle.kts` for every build
+- Only update versions when preparing a release to be published via the auto-update system
+- Many intermediate builds are for testing and won't be published
+- Update version numbers only when explicitly requested by the user
 
 ## Tech Stack
 

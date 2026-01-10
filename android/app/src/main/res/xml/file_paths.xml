@@ -6,4 +6,7 @@
     <external-path
         name="external_downloads"
         path="Download/" />
+    <cache-path
+        name="camera_images"
+        path="images/" />
 </paths>

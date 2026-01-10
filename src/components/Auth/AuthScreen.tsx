@@ -51,6 +51,9 @@ export const AuthScreen: React.FC = () => {
     e.preventDefault();
     setError(null);
 
+    console.log('=== DEBUG AUTH: handleSubmit appelé ===');
+    console.log('Mode:', mode, 'Username:', username);
+
     if (mode === 'register') {
       if (password !== confirmPassword) {
         setError('Les mots de passe ne correspondent pas');
@@ -71,7 +74,48 @@ export const AuthScreen: React.FC = () => {
         await register(username, displayName || username, email, password);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+      // FORCER L'AFFICHAGE DE L'ERREUR BRUTE POUR DEBUGGING
+      if (import.meta.env.DEV) {
+        const rawError = err instanceof Error ? err.message : String(err);
+        setError(`ERREUR BRUTE: ${rawError}`);
+        setIsLoading(false);
+        return;
+      }
+
+      // Améliorer les messages d'erreur
+      let errorMessage = 'Une erreur est survenue';
+
+      if (err instanceof Error) {
+        const msg = err.message.toLowerCase();
+
+        // Erreurs d'authentification
+        if (msg.includes('invalid credentials') || msg.includes('identifiants invalides') || msg.includes('incorrect')) {
+          errorMessage = 'Nom d\'utilisateur ou mot de passe incorrect';
+        } else if (msg.includes('user not found') || msg.includes('utilisateur non trouvé')) {
+          errorMessage = 'Nom d\'utilisateur ou mot de passe incorrect';
+        } else if (msg.includes('username already exists') || msg.includes('existe déjà')) {
+          errorMessage = 'Ce nom d\'utilisateur est déjà pris';
+        } else if (msg.includes('email already exists')) {
+          errorMessage = 'Cette adresse email est déjà utilisée';
+        }
+        // Erreurs réseau
+        else if (msg.includes('fetch') || msg.includes('network') || msg.includes('réseau')) {
+          errorMessage = 'Impossible de se connecter au serveur. Vérifiez votre connexion internet.';
+        } else if (msg.includes('timeout')) {
+          errorMessage = 'Le serveur ne répond pas. Veuillez réessayer.';
+        }
+        // Autres erreurs avec message du serveur
+        else if (err.message) {
+          errorMessage = err.message;
+        }
+      }
+
+      // Afficher aussi l'erreur technique complète en mode dev
+      if (err instanceof Error && import.meta.env.DEV) {
+        setError(`${errorMessage}\n\n[DEBUG] ${err.message}`);
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -99,7 +143,7 @@ export const AuthScreen: React.FC = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="auth-form">
-          {error && <div className="auth-error">{error}</div>}
+          {error && <div className="auth-error" style={{ whiteSpace: 'pre-wrap' }}>{error}</div>}
 
           <div className="form-group">
             <label htmlFor="username">Nom d'utilisateur</label>

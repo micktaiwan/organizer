@@ -49,6 +49,65 @@ interface Pagination {
   pages: number;
 }
 
+// Notes types
+interface NoteUser {
+  _id: string;
+  username: string;
+  displayName?: string;
+}
+
+interface ChecklistItem {
+  _id: string;
+  text: string;
+  checked: boolean;
+  order: number;
+}
+
+interface Label {
+  _id: string;
+  name: string;
+  color: string;
+}
+
+interface Note {
+  _id: string;
+  type: 'note' | 'checklist';
+  title: string;
+  content: string;
+  items: ChecklistItem[];
+  color: string;
+  labels: Label[];
+  assignedTo: NoteUser | null;
+  createdBy: NoteUser;
+  order: number;
+  isPinned: boolean;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CreateNoteRequest {
+  type?: 'note' | 'checklist';
+  title?: string;
+  content?: string;
+  items?: { text: string }[];
+  color?: string;
+  labels?: string[];
+  assignedTo?: string | null;
+}
+
+interface UpdateNoteRequest {
+  type?: 'note' | 'checklist';
+  title?: string;
+  content?: string;
+  items?: { _id?: string; text: string; checked?: boolean; order: number }[];
+  color?: string;
+  labels?: string[];
+  assignedTo?: string | null;
+  isPinned?: boolean;
+  isArchived?: boolean;
+}
+
 interface AuthResponse {
   token: string;
   user: User;
@@ -61,6 +120,12 @@ interface Contact {
   createdAt: string;
 }
 
+interface Reaction {
+  userId: string;
+  emoji: string;
+  createdAt: string;
+}
+
 interface Message {
   _id: string;
   roomId: string;
@@ -69,6 +134,7 @@ interface Message {
   content: string;
   status: 'sent' | 'delivered' | 'read';
   readBy: string[];
+  reactions?: Reaction[];
   createdAt: string;
 }
 
@@ -109,9 +175,45 @@ class ApiService {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${this.token}`;
     }
 
+    try {
+      const response = await fetch(`${apiBaseUrl}${endpoint}`, {
+        ...options,
+        headers,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error((data as ApiError).error || 'Une erreur est survenue');
+      }
+
+      return data as T;
+    } catch (error) {
+      // Si c'est une erreur réseau (pas une erreur HTTP)
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Impossible de se connecter au serveur. Vérifiez votre connexion internet.');
+      }
+      // Sinon, relancer l'erreur originale
+      throw error;
+    }
+  }
+
+  private async uploadRequest<T>(
+    endpoint: string,
+    formData: FormData
+  ): Promise<T> {
+    const headers: HeadersInit = {};
+
+    if (this.token) {
+      (headers as Record<string, string>)['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    // NOTE: Don't set Content-Type header - browser sets it with boundary for multipart
+
     const response = await fetch(`${apiBaseUrl}${endpoint}`, {
-      ...options,
+      method: 'POST',
       headers,
+      body: formData,
     });
 
     const data = await response.json();
@@ -221,7 +323,17 @@ class ApiService {
   }
 
   // Messages
-  async sendMessage(roomId: string, type: string, content: string): Promise<{ message: Message }> {
+  async sendMessage(roomId: string, type: string, content: string, imageBlob?: Blob | null): Promise<{ message: Message }> {
+    // If we have an image blob, upload via multipart first
+    if (type === 'image' && imageBlob) {
+      const formData = new FormData();
+      formData.append('roomId', roomId);
+      formData.append('image', imageBlob, 'image.jpg');
+
+      return this.uploadRequest<{ message: Message }>('/upload/image', formData);
+    }
+
+    // Otherwise, use JSON (for text, audio, or clipboard paste Base64 images)
     return this.request<{ message: Message }>('/messages', {
       method: 'POST',
       body: JSON.stringify({ roomId, type, content }),
@@ -244,6 +356,13 @@ class ApiService {
   async deleteMessage(id: string): Promise<{ success: boolean; roomId: string; messageId: string }> {
     return this.request<{ success: boolean; roomId: string; messageId: string }>(`/messages/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  async reactToMessage(messageId: string, emoji: string): Promise<{ message: Message; action: string; roomId: string }> {
+    return this.request<{ message: Message; action: string; roomId: string }>(`/messages/${messageId}/react`, {
+      method: 'POST',
+      body: JSON.stringify({ emoji }),
     });
   }
 
@@ -276,7 +395,105 @@ class ApiService {
   async getAdminMessagesStats(): Promise<{ totalMessages: number; todayMessages: number; messagesByType: Record<string, number> }> {
     return this.request<{ totalMessages: number; todayMessages: number; messagesByType: Record<string, number> }>('/admin/messages/stats');
   }
+
+  // Notes
+  async getNotes(archived = false, labelId?: string): Promise<{ notes: Note[] }> {
+    let url = `/notes?archived=${archived}`;
+    if (labelId) url += `&labelId=${labelId}`;
+    return this.request<{ notes: Note[] }>(url);
+  }
+
+  async getNote(noteId: string): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>(`/notes/${noteId}`);
+  }
+
+  async createNote(data: CreateNoteRequest): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>('/notes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateNote(noteId: string, data: UpdateNoteRequest): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>(`/notes/${noteId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async patchNote(noteId: string, data: Partial<UpdateNoteRequest>): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>(`/notes/${noteId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteNote(noteId: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(`/notes/${noteId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async reorderNote(noteId: string, newOrder: number): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>('/notes/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ noteId, newOrder }),
+    });
+  }
+
+  // Checklist items
+  async addChecklistItem(noteId: string, text: string): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>(`/notes/${noteId}/items`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  }
+
+  async updateChecklistItem(noteId: string, itemId: string, data: { text?: string; checked?: boolean }): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>(`/notes/${noteId}/items/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteChecklistItem(noteId: string, itemId: string): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>(`/notes/${noteId}/items/${itemId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async reorderChecklistItems(noteId: string, items: { _id: string; order: number }[]): Promise<{ note: Note }> {
+    return this.request<{ note: Note }>(`/notes/${noteId}/items/reorder`, {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  }
+
+  // Labels
+  async getLabels(): Promise<{ labels: Label[] }> {
+    return this.request<{ labels: Label[] }>('/labels');
+  }
+
+  async createLabel(name: string, color?: string): Promise<{ label: Label }> {
+    return this.request<{ label: Label }>('/labels', {
+      method: 'POST',
+      body: JSON.stringify({ name, color }),
+    });
+  }
+
+  async updateLabel(labelId: string, data: { name?: string; color?: string }): Promise<{ label: Label }> {
+    return this.request<{ label: Label }>(`/labels/${labelId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteLabel(labelId: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(`/labels/${labelId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const api = new ApiService();
-export type { User, AuthResponse, Contact, Message, Room, RoomMember, ApiError, AdminStats, AdminUser, Pagination };
+export type { User, AuthResponse, Contact, Message, Room, RoomMember, ApiError, AdminStats, AdminUser, Pagination, Note, Label, ChecklistItem, CreateNoteRequest, UpdateNoteRequest, Reaction };

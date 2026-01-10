@@ -7,6 +7,11 @@
 
 set -e
 
+# Load credentials if available
+if [ -f "$(dirname "$0")/.credentials" ]; then
+    source "$(dirname "$0")/.credentials"
+fi
+
 # Configuration
 SERVER_URL="${APK_SERVER_URL:-http://51.210.150.25:3001}"
 TOKEN="${APK_ADMIN_TOKEN:-}"
@@ -49,11 +54,25 @@ if [ ! -f "$APK_FILE" ]; then
     exit 1
 fi
 
-# Validate token is set
+# Get token if not set
 if [ -z "$TOKEN" ]; then
-    echo -e "${RED}Error: APK_ADMIN_TOKEN environment variable is required${NC}"
-    echo "Set it with: export APK_ADMIN_TOKEN=your-jwt-token"
-    exit 1
+    # Try to get token from credentials file
+    if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
+        echo -e "${YELLOW}Getting auth token...${NC}"
+        TOKEN=$(curl -s -X POST "${SERVER_URL}/auth/login" \
+          -H "Content-Type: application/json" \
+          -d "{\"username\": \"$ADMIN_USERNAME\", \"password\": \"$ADMIN_PASSWORD\"}" | \
+          python3 -c "import sys,json; print(json.load(sys.stdin)['token'])" 2>/dev/null)
+
+        if [ -z "$TOKEN" ]; then
+            echo -e "${RED}Error: Failed to get authentication token${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${RED}Error: APK_ADMIN_TOKEN environment variable is required${NC}"
+        echo "Or create a .credentials file with ADMIN_USERNAME and ADMIN_PASSWORD"
+        exit 1
+    fi
 fi
 
 # Get file size (macOS compatible)

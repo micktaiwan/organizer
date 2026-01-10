@@ -11,12 +11,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.organizer.chat.data.model.Room
 import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.RoomRepository
 import com.organizer.chat.ui.theme.OnlineGreen
+import com.organizer.chat.util.AppPreferences
 import com.organizer.chat.util.TokenManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -25,6 +29,29 @@ fun RoomsScreen(
     roomRepository: RoomRepository,
     tokenManager: TokenManager,
     authRepository: AuthRepository,
+    appPreferences: AppPreferences,
+    onRoomClick: (Room) -> Unit,
+    onSettingsClick: () -> Unit,
+    onLogout: () -> Unit
+) {
+    RoomsContent(
+        roomRepository = roomRepository,
+        tokenManager = tokenManager,
+        authRepository = authRepository,
+        appPreferences = appPreferences,
+        onRoomClick = onRoomClick,
+        onSettingsClick = onSettingsClick,
+        onLogout = onLogout
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RoomsContent(
+    roomRepository: RoomRepository,
+    tokenManager: TokenManager,
+    authRepository: AuthRepository,
+    appPreferences: AppPreferences,
     onRoomClick: (Room) -> Unit,
     onSettingsClick: () -> Unit,
     onLogout: () -> Unit
@@ -100,6 +127,43 @@ fun RoomsScreen(
                                 subtitle = viewModel.getRoomSubtitle(room),
                                 onClick = { onRoomClick(room) }
                             )
+                        }
+
+                        // Easter egg footer
+                        item {
+                            val context = LocalContext.current
+                            val versionName = try {
+                                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                            } catch (e: Exception) {
+                                "unknown"
+                            }
+
+                            val releaseNotes by appPreferences.releaseNotes.collectAsState(initial = null)
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "\uD83D\uDC7B",
+                                    fontSize = 64.sp
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Boo! Tu as tout scrollé!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = if (releaseNotes != null) "v$versionName - $releaseNotes" else "v$versionName",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                 }

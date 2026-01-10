@@ -8,23 +8,31 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.MessageRepository
+import com.organizer.chat.data.repository.NoteRepository
 import com.organizer.chat.data.repository.RoomRepository
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.screens.chat.ChatScreen
+import com.organizer.chat.ui.screens.home.HomeScreen
 import com.organizer.chat.ui.screens.login.LoginScreen
+import com.organizer.chat.ui.screens.notes.NoteDetailScreen
 import com.organizer.chat.ui.screens.register.RegisterScreen
 import com.organizer.chat.ui.screens.rooms.RoomsScreen
 import com.organizer.chat.ui.screens.settings.SettingsScreen
+import com.organizer.chat.util.AppPreferences
 import com.organizer.chat.util.TokenManager
 
 object Routes {
     const val LOGIN = "login"
     const val REGISTER = "register"
-    const val ROOMS = "rooms"
+    const val HOME = "home"
+    const val ROOMS = "rooms"  // Keep for backwards compatibility
     const val SETTINGS = "settings"
     const val CHAT = "chat/{roomId}/{roomName}"
+    const val NOTE_DETAIL = "note/{noteId}"
+    const val NOTE_CREATE = "note/create"
 
     fun chat(roomId: String, roomName: String) = "chat/$roomId/$roomName"
+    fun noteDetail(noteId: String) = "note/$noteId"
 }
 
 @Composable
@@ -36,6 +44,8 @@ fun NavGraph(
     authRepository: AuthRepository,
     roomRepository: RoomRepository,
     messageRepository: MessageRepository,
+    noteRepository: NoteRepository,
+    appPreferences: AppPreferences,
     onLoginSuccess: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -48,7 +58,7 @@ fun NavGraph(
                 authRepository = authRepository,
                 onLoginSuccess = {
                     onLoginSuccess()
-                    navController.navigate(Routes.ROOMS) {
+                    navController.navigate(Routes.HOME) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 },
@@ -63,7 +73,7 @@ fun NavGraph(
                 authRepository = authRepository,
                 onRegisterSuccess = {
                     onLoginSuccess()
-                    navController.navigate(Routes.ROOMS) {
+                    navController.navigate(Routes.HOME) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 },
@@ -73,11 +83,42 @@ fun NavGraph(
             )
         }
 
+        composable(Routes.HOME) {
+            HomeScreen(
+                roomRepository = roomRepository,
+                noteRepository = noteRepository,
+                tokenManager = tokenManager,
+                authRepository = authRepository,
+                appPreferences = appPreferences,
+                chatService = chatService,
+                onRoomClick = { room ->
+                    navController.navigate(Routes.chat(room.id, room.name))
+                },
+                onSettingsClick = {
+                    navController.navigate(Routes.SETTINGS)
+                },
+                onNoteClick = { noteId ->
+                    navController.navigate(Routes.noteDetail(noteId))
+                },
+                onCreateNote = {
+                    navController.navigate(Routes.NOTE_CREATE)
+                },
+                onLogout = {
+                    onLogout()
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(Routes.HOME) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // Keep ROOMS route for backwards compatibility
         composable(Routes.ROOMS) {
             RoomsScreen(
                 roomRepository = roomRepository,
                 tokenManager = tokenManager,
                 authRepository = authRepository,
+                appPreferences = appPreferences,
                 onRoomClick = { room ->
                     navController.navigate(Routes.chat(room.id, room.name))
                 },
@@ -87,7 +128,7 @@ fun NavGraph(
                 onLogout = {
                     onLogout()
                     navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.ROOMS) { inclusive = true }
+                        popUpTo(Routes.HOME) { inclusive = true }
                     }
                 }
             )
@@ -99,7 +140,7 @@ fun NavGraph(
                 onLogout = {
                     onLogout()
                     navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.ROOMS) { inclusive = true }
+                        popUpTo(Routes.HOME) { inclusive = true }
                     }
                 }
             )
@@ -122,6 +163,37 @@ fun NavGraph(
                 chatService = chatService,
                 tokenManager = tokenManager,
                 onBackClick = { navController.popBackStack() }
+            )
+        }
+
+        // Note detail screen
+        composable(
+            route = Routes.NOTE_DETAIL,
+            arguments = listOf(
+                navArgument("noteId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val noteId = backStackEntry.arguments?.getString("noteId") ?: return@composable
+
+            NoteDetailScreen(
+                noteId = noteId,
+                noteRepository = noteRepository,
+                chatService = chatService,
+                tokenManager = tokenManager,
+                onBackClick = { navController.popBackStack() },
+                onNoteDeleted = { navController.popBackStack() }
+            )
+        }
+
+        // Create new note screen
+        composable(Routes.NOTE_CREATE) {
+            NoteDetailScreen(
+                noteId = null,
+                noteRepository = noteRepository,
+                chatService = chatService,
+                tokenManager = tokenManager,
+                onBackClick = { navController.popBackStack() },
+                onNoteDeleted = { navController.popBackStack() }
             )
         }
     }

@@ -13,8 +13,8 @@ android {
         applicationId = "com.organizer.chat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 14
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -82,4 +82,14 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+
+    // Image loading
+    implementation(libs.coil.compose)
+    implementation(libs.androidx.exifinterface)
+
+    // Location
+    implementation(libs.play.services.location)
+
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
 }

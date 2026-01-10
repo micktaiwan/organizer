@@ -1,16 +1,57 @@
 import React, { useState } from "react";
-import { Phone, PhoneOff, Trash2 } from "lucide-react";
+import { Phone, PhoneOff, Trash2, X, SmilePlus } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
-import { Message } from "../../types";
+import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji } from "../../types";
 import { formatMessageTimestamp } from "../../utils/dateFormat";
+import { getApiBaseUrl } from "../../services/api";
+
+interface ReactionCount {
+  emoji: ReactionEmoji;
+  count: number;
+  userIds: string[];
+}
+
+// Aggregate reactions by emoji
+const aggregateReactions = (reactions: Reaction[] | undefined): ReactionCount[] => {
+  if (!reactions || reactions.length === 0) return [];
+
+  const map = new Map<ReactionEmoji, { count: number; userIds: string[] }>();
+  reactions.forEach(r => {
+    const existing = map.get(r.emoji) || { count: 0, userIds: [] };
+    existing.count++;
+    existing.userIds.push(r.userId);
+    map.set(r.emoji, existing);
+  });
+
+  return Array.from(map.entries()).map(([emoji, data]) => ({
+    emoji,
+    count: data.count,
+    userIds: data.userIds,
+  }));
+};
 
 interface MessageItemProps {
   msg: Message;
   onDelete?: (messageId: string) => void;
+  onReact?: (messageId: string, emoji: string) => void;
+  currentUserId?: string;
 }
 
-export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete }) => {
+export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact, currentUserId }) => {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showFullscreenImage, setShowFullscreenImage] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+
+  // Build full image URL (handle relative URLs from server)
+  const getImageUrl = (imageUrl: string | undefined): string | undefined => {
+    if (!imageUrl) return undefined;
+    // If it's a data URL (base64), return as-is
+    if (imageUrl.startsWith('data:')) return imageUrl;
+    // If it's a relative URL from server, prefix with API base URL
+    if (imageUrl.startsWith('/')) return `${getApiBaseUrl()}${imageUrl}`;
+    // Otherwise, return as-is (full URL)
+    return imageUrl;
+  };
 
   const handleDelete = async () => {
     if (!onDelete || !msg.serverMessageId) return;
@@ -22,6 +63,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete }) => {
       setIsDeleting(false);
     }
   };
+
+  const handleReact = (emoji: string) => {
+    if (!onReact || !msg.serverMessageId) return;
+    onReact(msg.serverMessageId, emoji);
+    setShowReactionPicker(false);
+  };
+
+  const aggregatedReactions = aggregateReactions(msg.reactions);
 
   if (msg.isSystemMessage) {
     return (
@@ -55,10 +104,18 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete }) => {
           <span className="message-sender-name">{msg.senderName}</span>
         )}
         <div className="bubble">
-          {msg.image && <img src={msg.image} alt="Image" className="message-image" />}
+          {msg.image && (
+            <img
+              src={getImageUrl(msg.image)}
+              alt="Image"
+              className="message-image"
+              onClick={() => setShowFullscreenImage(true)}
+              style={{ cursor: 'pointer' }}
+            />
+          )}
           {msg.audio && (
             <div className="audio-message">
-              <audio controls src={msg.audio} className="audio-player" />
+              <audio controls src={getImageUrl(msg.audio)} className="audio-player" />
             </div>
           )}
           {msg.text && <span>{msg.text}</span>}
@@ -75,6 +132,44 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete }) => {
           )}
           {msg.sender === "me" && msg.status === "failed" && " ✗"}
         </span>
+        {/* Reaction Bar */}
+        {(aggregatedReactions.length > 0 || msg.serverMessageId) && (
+          <div className="reaction-bar">
+            {aggregatedReactions.map((r) => (
+              <button
+                key={r.emoji}
+                className={`reaction-chip ${r.userIds.includes(currentUserId || '') ? 'active' : ''}`}
+                onClick={() => handleReact(r.emoji)}
+              >
+                {r.emoji} {r.count}
+              </button>
+            ))}
+            {msg.serverMessageId && (
+              <div className="reaction-add-container">
+                <button
+                  className="reaction-add"
+                  onClick={() => setShowReactionPicker(!showReactionPicker)}
+                  title="Ajouter une reaction"
+                >
+                  <SmilePlus size={14} />
+                </button>
+                {showReactionPicker && (
+                  <div className="reaction-picker">
+                    {ALLOWED_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        className="reaction-picker-emoji"
+                        onClick={() => handleReact(emoji)}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {msg.sender === "me" && msg.serverMessageId && !isDeleting && (
         <button
@@ -87,6 +182,19 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete }) => {
       )}
       {isDeleting && (
         <span className="message-deleting">...</span>
+      )}
+      {showFullscreenImage && msg.image && (
+        <div className="image-fullscreen-overlay" onClick={() => setShowFullscreenImage(false)}>
+          <button className="image-fullscreen-close" onClick={() => setShowFullscreenImage(false)}>
+            <X size={24} />
+          </button>
+          <img
+            src={getImageUrl(msg.image)}
+            alt="Image fullscreen"
+            className="image-fullscreen"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
       )}
     </div>
   );

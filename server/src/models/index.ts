@@ -1,5 +1,7 @@
 export { User, type IUser } from './User.js';
 export { Contact, type IContact } from './Contact.js';
-export { Message, type IMessage, type MessageType, type MessageStatus } from './Message.js';
+export { Message, type IMessage, type IReaction, type MessageType, type MessageStatus, type ReactionEmoji, ALLOWED_EMOJIS } from './Message.js';
 export { Room, type IRoom } from './Room.js';
 export { ApkVersion, type IApkVersion } from './ApkVersion.js';
+export { Note, type INote, type NoteType, type IChecklistItem } from './Note.js';
+export { Label, type ILabel } from './Label.js';

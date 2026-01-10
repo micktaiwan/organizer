@@ -11,8 +11,15 @@ data class Message(
     val content: String,
     val status: String = "sent",  // "sent", "delivered", "read"
     val readBy: List<String> = emptyList(),
+    val reactions: List<Reaction> = emptyList(),
     val createdAt: String,
     val updatedAt: String? = null
+)
+
+data class Reaction(
+    val userId: String,
+    val emoji: String,
+    val createdAt: String
 )
 
 data class MessageSender(
@@ -34,4 +41,14 @@ data class SendMessageRequest(
 
 data class MessageResponse(
     val message: Message
+)
+
+data class ReactRequest(
+    val emoji: String
+)
+
+data class ReactResponse(
+    val message: Message,
+    val action: String,
+    val roomId: String
 )

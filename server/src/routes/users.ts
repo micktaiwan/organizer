@@ -38,6 +38,21 @@ router.get('/search', async (req: AuthRequest, res: Response): Promise<void> => 
   }
 });
 
+// GET /users/locations - Récupérer tous les utilisateurs avec leur position
+// IMPORTANT: Cette route doit être AVANT /users/:id sinon "locations" sera interprété comme un id
+router.get('/locations', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const users = await User.find({ 'location.lat': { $exists: true } })
+      .select('username displayName isOnline location')
+      .sort({ 'location.updatedAt': -1 });
+
+    res.json({ users });
+  } catch (error) {
+    console.error('Get locations error:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des positions' });
+  }
+});
+
 // GET /users/:id - Profil public d'un utilisateur
 router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -99,6 +114,63 @@ router.put('/status', async (req: AuthRequest, res: Response): Promise<void> => 
   } catch (error) {
     console.error('Update status error:', error);
     res.status(500).json({ error: 'Erreur lors de la mise à jour du statut' });
+  }
+});
+
+// PUT /users/location - Mettre à jour sa position
+router.put('/location', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { lat, lng, street, city, country } = req.body;
+
+    // Validation: lat/lng sont requis
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      res.status(400).json({ error: 'Latitude et longitude requises' });
+      return;
+    }
+
+    // Validation: lat entre -90 et 90, lng entre -180 et 180
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      res.status(400).json({ error: 'Coordonnées invalides' });
+      return;
+    }
+
+    const locationUpdate = {
+      location: {
+        lat,
+        lng,
+        street: street || null,
+        city: city || null,
+        country: country || null,
+        updatedAt: new Date(),
+      },
+    };
+
+    const user = await User.findByIdAndUpdate(req.userId, locationUpdate, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'Utilisateur non trouvé' });
+      return;
+    }
+
+    // Émettre via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('user:location-updated', {
+        userId: req.userId,
+        username: user.username,
+        displayName: user.displayName,
+        isOnline: user.isOnline,
+        location: user.location,
+      });
+    }
+
+    res.json({ success: true, location: user.location });
+  } catch (error) {
+    console.error('Update location error:', error);
+    res.status(500).json({ error: 'Erreur lors de la mise à jour de la position' });
   }
 });
 

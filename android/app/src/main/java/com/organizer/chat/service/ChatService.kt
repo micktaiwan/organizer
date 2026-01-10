@@ -5,8 +5,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.media.AudioAttributes
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.organizer.chat.MainActivity
@@ -79,6 +83,9 @@ class ChatService : Service() {
             socketManager.newMessage.collect { event ->
                 Log.d(TAG, "New message received: roomId=${event.roomId}, from=${event.from}")
 
+                // Vibrate for incoming messages
+                vibrateForMessage()
+
                 // Relay to UI
                 _messages.emit(event)
 
@@ -107,6 +114,28 @@ class ChatService : Service() {
             .build()
     }
 
+    private fun vibrateForMessage() {
+        Log.d(TAG, "vibrateForMessage() called, SDK: ${Build.VERSION.SDK_INT}")
+        try {
+            @Suppress("DEPRECATION")
+            val vibrator = getSystemService(VIBRATOR_SERVICE) as? Vibrator
+            Log.d(TAG, "Vibrator: $vibrator, hasVibrator: ${vibrator?.hasVibrator()}")
+
+            if (vibrator?.hasVibrator() == true) {
+                val effect = VibrationEffect.createOneShot(100L, VibrationEffect.DEFAULT_AMPLITUDE)
+                val audioAttributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_REQUEST)
+                    .build()
+
+                Log.d(TAG, "Vibrating with AudioAttributes!")
+                vibrator.vibrate(effect, audioAttributes)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Vibration error", e)
+        }
+    }
+
     private fun showMessageNotification(event: NewMessageEvent) {
         val roomName = getRoomName(event.roomId)
         val intent = Intent(this, MainActivity::class.java).apply {
@@ -119,9 +148,17 @@ class ChatService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Prepare message preview based on type
+        val messagePreview = when {
+            event.audioUrl != null -> "\uD83C\uDFA4 Message audio"
+            event.imageUrl != null -> "\uD83D\uDDBC\uFE0F Image"
+            else -> event.content
+        }
+
         val notification = NotificationCompat.Builder(this, CHANNEL_MESSAGES)
-            .setContentTitle("Organizer")
-            .setContentText("Nouveau message dans $roomName")
+            .setContentTitle("${event.roomName} - ${event.fromName}")
+            .setContentText(messagePreview)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(messagePreview))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
