@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -20,6 +21,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,10 +35,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import com.organizer.chat.data.repository.MessageRepository
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.components.MessageBubble
 import com.organizer.chat.util.TokenManager
+import com.organizer.chat.util.rememberImagePickerLaunchers
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,11 +69,42 @@ fun ChatScreen(
                 PackageManager.PERMISSION_GRANTED
         )
     }
-    val permissionLauncher = rememberLauncherForActivityResult(
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         hasAudioPermission = isGranted
     }
+
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission = isGranted
+    }
+
+    var hasGalleryPermission by remember {
+        mutableStateOf(
+            android.os.Build.VERSION.SDK_INT >= 33 ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val galleryPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasGalleryPermission = isGranted
+    }
+
+    // Image picker launchers
+    val imagePickers = rememberImagePickerLaunchers(
+        onImageCaptured = { uri -> viewModel.selectImage(uri) },
+        onImageSelected = { uri -> viewModel.selectImage(uri) }
+    )
 
     // Notify service that we're in this room
     DisposableEffect(roomId, roomName, chatService) {
@@ -77,12 +114,12 @@ fun ChatScreen(
         }
     }
 
-    // Auto-scroll to bottom when new messages arrive
-    LaunchedEffect(uiState.messages.size) {
+    // Auto-scroll to bottom when messages change
+    LaunchedEffect(uiState.messages) {
         if (uiState.messages.isNotEmpty()) {
-            coroutineScope.launch {
-                listState.animateScrollToItem(uiState.messages.size - 1)
-            }
+            // Small delay to let LazyColumn layout the new items
+            delay(50)
+            listState.animateScrollToItem(uiState.messages.size - 1)
         }
     }
 
@@ -112,7 +149,8 @@ fun ChatScreen(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
                     navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                ),
+                windowInsets = WindowInsets.statusBars
             )
         },
         bottomBar = {
@@ -120,13 +158,43 @@ fun ChatScreen(
                 value = uiState.messageInput,
                 onValueChange = viewModel::updateMessageInput,
                 onSend = viewModel::sendMessage,
-                isSending = uiState.isSending,
+                isSending = uiState.isSending || uiState.isUploadingImage,
                 isRecording = uiState.isRecording,
                 recordingDuration = uiState.recordingDuration,
                 hasAudioPermission = hasAudioPermission,
-                onRequestPermission = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                onRequestAudioPermission = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
                 onStartRecording = viewModel::startRecording,
-                onStopRecording = viewModel::stopRecordingAndSend
+                onStopRecording = viewModel::stopRecordingAndSend,
+                hasCameraPermission = hasCameraPermission,
+                hasGalleryPermission = hasGalleryPermission,
+                onRequestCameraPermission = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) },
+                onRequestGalleryPermission = {
+                    if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        galleryPermissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                    } else {
+                        galleryPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    }
+                },
+                onCameraClick = {
+                    if (hasCameraPermission) {
+                        imagePickers.cameraLauncher.launch(imagePickers.createCameraUri())
+                    } else {
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                },
+                onGalleryClick = {
+                    if (hasGalleryPermission) {
+                        imagePickers.galleryLauncher.launch(
+                            PickVisualMediaRequest(PickVisualMedia.ImageOnly)
+                        )
+                    } else {
+                        if (android.os.Build.VERSION.SDK_INT >= 33) {
+                            galleryPermissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                        } else {
+                            galleryPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                        }
+                    }
+                }
             )
         }
     ) { paddingValues ->
@@ -179,7 +247,9 @@ fun ChatScreen(
                         items(uiState.messages, key = { it.id }) { message ->
                             MessageBubble(
                                 message = message,
-                                isMyMessage = viewModel.isMyMessage(message)
+                                isMyMessage = viewModel.isMyMessage(message),
+                                currentUserId = uiState.currentUserId,
+                                onReact = { emoji -> viewModel.reactToMessage(message.id, emoji) }
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                         }
@@ -199,9 +269,15 @@ private fun ChatInputBar(
     isRecording: Boolean,
     recordingDuration: Int,
     hasAudioPermission: Boolean,
-    onRequestPermission: () -> Unit,
+    onRequestAudioPermission: () -> Unit,
     onStartRecording: () -> Boolean,
-    onStopRecording: () -> Unit
+    onStopRecording: () -> Unit,
+    hasCameraPermission: Boolean,
+    hasGalleryPermission: Boolean,
+    onRequestCameraPermission: () -> Unit,
+    onRequestGalleryPermission: () -> Unit,
+    onCameraClick: () -> Unit,
+    onGalleryClick: () -> Unit
 ) {
     val currentOnStartRecording by rememberUpdatedState(onStartRecording)
     val currentOnStopRecording by rememberUpdatedState(onStopRecording)
@@ -209,12 +285,14 @@ private fun ChatInputBar(
     val currentIsSending by rememberUpdatedState(isSending)
 
     val micColor by animateColorAsState(
-        targetValue = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        targetValue = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
         label = "micColor"
     )
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
         shadowElevation = 8.dp
     ) {
         // Always same layout structure to keep pointerInput alive
@@ -224,6 +302,34 @@ private fun ChatInputBar(
                 .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Camera button
+            if (!isRecording) {
+                IconButton(
+                    onClick = onCameraClick,
+                    enabled = !isSending
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CameraAlt,
+                        contentDescription = "Camera",
+                        tint = if (!isSending) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Gallery button
+            if (!isRecording) {
+                IconButton(
+                    onClick = onGalleryClick,
+                    enabled = !isSending
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = "Gallery",
+                        tint = if (!isSending) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             if (isRecording) {
                 // Recording info instead of text field
                 Row(
@@ -271,7 +377,7 @@ private fun ChatInputBar(
 
                             if (!currentHasPermission) {
                                 waitForUpOrCancellation()
-                                onRequestPermission()
+                                onRequestAudioPermission()
                                 return@awaitEachGesture
                             }
 

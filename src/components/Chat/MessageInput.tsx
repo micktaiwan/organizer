@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from "react";
+import { Paperclip } from "lucide-react";
 import { formatDuration } from "../../utils/audio";
 
 interface MessageInputProps {
@@ -14,6 +15,7 @@ interface MessageInputProps {
   startRecording: () => void;
   stopRecording: () => void;
   cancelRecording: () => void;
+  onSelectImageFile: () => void;
 }
 
 export const MessageInput: React.FC<MessageInputProps> = ({
@@ -27,7 +29,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   recordingDuration,
   startRecording,
   stopRecording,
-  cancelRecording
+  cancelRecording,
+  onSelectImageFile
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +65,15 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           </div>
         ) : (
           <>
+            <button
+              type="button"
+              className="attach-btn"
+              onClick={onSelectImageFile}
+              disabled={!canSend}
+              title="Joindre une image"
+            >
+              <Paperclip size={20} />
+            </button>
             <button
               type="button"
               className="voice-btn"

@@ -567,6 +567,49 @@ button.copied {
   margin-top: 0.5rem;
 }
 
+/* Fullscreen image overlay */
+.image-fullscreen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.image-fullscreen {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  cursor: default;
+}
+
+.image-fullscreen-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.image-fullscreen-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 /* Pending image preview */
 .pending-image-preview {
   position: relative;
@@ -872,6 +915,28 @@ button.copied {
 
 .message.me .audio-player {
   filter: invert(1) hue-rotate(180deg);
+}
+
+/* Attachment button */
+.attach-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+.attach-btn:hover:not(:disabled) {
+  opacity: 0.7;
+}
+
+.attach-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* Voice recording UI */
@@ -2636,5 +2701,1406 @@ button.copied {
 
   .message-delete-btn:hover {
     background: rgba(255, 59, 48, 0.3);
+  }
+}
+
+/* Reaction Bar Styles */
+.reaction-bar {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.reaction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reaction-chip:hover {
+  background: #e0e0e0;
+}
+
+.reaction-chip.active {
+  background: #e3f2fd;
+  border-color: #2196f3;
+}
+
+.reaction-add-container {
+  position: relative;
+}
+
+.reaction-add {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px dashed #ccc;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.reaction-add:hover {
+  border-color: #999;
+  color: #666;
+  background: #f5f5f5;
+}
+
+.reaction-picker {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  z-index: 100;
+  margin-bottom: 4px;
+}
+
+.reaction-picker-emoji {
+  font-size: 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.reaction-picker-emoji:hover {
+  background: #f0f0f0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .reaction-chip {
+    background: #3a3a3c;
+    border-color: #48484a;
+    color: #fff;
+  }
+
+  .reaction-chip:hover {
+    background: #48484a;
+  }
+
+  .reaction-chip.active {
+    background: #1a3a5c;
+    border-color: #2196f3;
+  }
+
+  .reaction-add {
+    border-color: #48484a;
+    color: #8e8e93;
+  }
+
+  .reaction-add:hover {
+    border-color: #8e8e93;
+    color: #fff;
+    background: #3a3a3c;
+  }
+
+  .reaction-picker {
+    background: #2c2c2e;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .reaction-picker-emoji:hover {
+    background: #3a3a3c;
+  }
+}
+
+/* Loading overlay for image compression */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-overlay p {
+  color: white;
+  margin-top: 1rem;
+  font-size: 1.1rem;
+}
+
+/* ===== APP TABS NAVIGATION ===== */
+.app-tabs {
+  display: flex;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.app-tab {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.app-tab:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.app-tab.active {
+  color: #007aff;
+  border-bottom-color: #007aff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-tabs {
+    background: #2a2a2a;
+    border-color: #444;
+  }
+
+  .app-tab {
+    color: #999;
+  }
+
+  .app-tab:hover {
+    background: #333;
+    color: #f5f5f5;
+  }
+
+  .app-tab.active {
+    color: #007aff;
+  }
+}
+
+/* ===== NOTES STYLES ===== */
+
+/* Notes Container */
+.notes-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #f5f5f5;
+  position: relative;
+}
+
+.notes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.notes-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.notes-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.notes-header-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: #f0f0f0;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.notes-header-btn:hover {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.notes-header-btn .spinning {
+  animation: spin 1s linear infinite;
+}
+
+/* Label Filters */
+.notes-label-filters {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+
+.notes-label-filter-all {
+  padding: 0.35rem 0.75rem;
+  border-radius: 16px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.notes-label-filter-all:hover {
+  background: #e0e0e0;
+}
+
+.notes-label-filter-all.selected {
+  background: #007aff;
+  color: white;
+  border-color: #007aff;
+}
+
+/* Notes Content */
+.notes-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.notes-section {
+  margin-bottom: 1.5rem;
+}
+
+.notes-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #666;
+  margin: 0 0 0.75rem 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+/* States */
+.notes-loading,
+.notes-empty,
+.notes-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #999;
+  text-align: center;
+}
+
+.notes-empty svg {
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.notes-empty p {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem 0;
+  color: #666;
+}
+
+.notes-empty span {
+  font-size: 0.9rem;
+}
+
+.notes-error {
+  color: #ff3b30;
+}
+
+.notes-error button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: #ff3b30;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* FAB (Floating Action Button) */
+.notes-fab-container {
+  position: absolute;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.notes-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #007aff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+  transition: all 0.2s;
+}
+
+.notes-fab:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 122, 255, 0.5);
+}
+
+.notes-fab-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.notes-fab-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 24px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s;
+}
+
+.notes-fab-menu button:hover {
+  background: #f5f5f5;
+}
+
+/* Note Card */
+.note-card {
+  background: #1a1a1a;
+  border-radius: 12px;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
+  position: relative;
+}
+
+.note-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.note-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.note-card-pin {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.note-card-menu-wrapper {
+  position: relative;
+  margin-left: auto;
+}
+
+.note-card-menu-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.note-card-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.note-card-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  z-index: 10;
+  min-width: 140px;
+}
+
+.note-card-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  color: #f5f5f5;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.note-card-menu button:hover {
+  background: #333;
+}
+
+.note-card-menu button.danger {
+  color: #ff3b30;
+}
+
+.note-card-menu button.danger:hover {
+  background: rgba(255, 59, 48, 0.1);
+}
+
+.note-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f5f5f5;
+  margin: 0 0 0.5rem 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.note-card-content {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+}
+
+.note-card-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.note-card-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.note-card-checklist-item.checked {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.note-card-checklist-item .checklist-icon {
+  flex-shrink: 0;
+}
+
+.note-card-checklist-item .checklist-icon.checked {
+  color: #34c759;
+}
+
+.note-card-extra {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.25rem;
+}
+
+.note-card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.note-card-extra-labels {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 0.15rem 0.35rem;
+}
+
+.note-card-assigned {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.note-card-assigned-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: #f5f5f5;
+  text-transform: uppercase;
+}
+
+.note-card-assigned-name {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Label Chip */
+.label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  border: 1px solid;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.label-chip.clickable {
+  cursor: pointer;
+}
+
+.label-chip.clickable:hover {
+  opacity: 0.8;
+}
+
+.label-chip.selected {
+  color: white;
+}
+
+.label-chip-sm {
+  padding: 0.15rem 0.35rem;
+  font-size: 0.7rem;
+}
+
+.label-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.label-chip-sm .label-chip-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.label-chip-name {
+  white-space: nowrap;
+}
+
+.label-chip-remove {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+}
+
+.label-chip-remove:hover {
+  opacity: 1;
+}
+
+/* Note Editor */
+.note-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: #f5f5f5;
+}
+
+.note-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-back {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.note-editor-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.note-editor-pin-btn,
+.note-editor-delete-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.note-editor-pin-btn:hover,
+.note-editor-delete-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-pin-btn.active {
+  color: #ffd700;
+}
+
+.note-editor-delete-btn:hover {
+  color: #ff3b30;
+}
+
+.note-editor-title {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #f5f5f5;
+  outline: none;
+}
+
+.note-editor-title::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.note-editor-content {
+  flex: 1;
+  width: 100%;
+  padding: 0 1.5rem 1rem;
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.9);
+  outline: none;
+  resize: none;
+  line-height: 1.6;
+  min-height: 200px;
+}
+
+.note-editor-content::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Checklist in Editor */
+.note-editor-checklist {
+  flex: 1;
+  padding: 0 1rem 1rem;
+  overflow-y: auto;
+}
+
+.note-editor-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.note-editor-checklist-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.note-editor-checklist-item.checked {
+  opacity: 0.5;
+}
+
+.checklist-checkbox {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.note-editor-checklist-item.checked .checklist-checkbox {
+  color: #34c759;
+}
+
+.checklist-item-text {
+  flex: 1;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  color: #f5f5f5;
+  font-size: 1rem;
+  outline: none;
+}
+
+.note-editor-checklist-item.checked .checklist-item-text {
+  text-decoration: line-through;
+}
+
+.checklist-item-delete {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.note-editor-checklist-item:hover .checklist-item-delete {
+  opacity: 1;
+}
+
+.checklist-item-delete:hover {
+  color: #ff3b30;
+}
+
+.note-editor-checklist-add {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.note-editor-checklist-add input {
+  flex: 1;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  color: #f5f5f5;
+  font-size: 1rem;
+  outline: none;
+}
+
+.note-editor-checklist-add input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.note-editor-checklist-placeholder {
+  padding: 2rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Editor Toolbar */
+.note-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.note-editor-tool {
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.note-editor-tool:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-tool:disabled,
+.note-editor-tool.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.note-editor-colors {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.note-editor-color {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.note-editor-color:hover {
+  transform: scale(1.1);
+}
+
+.note-editor-color.selected {
+  border-color: white;
+}
+
+/* Label Picker in Editor */
+.note-editor-label-picker {
+  position: relative;
+}
+
+.note-editor-label-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 0.5rem;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 200px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.note-editor-no-labels {
+  padding: 1rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+  text-align: center;
+  margin: 0;
+}
+
+.note-editor-label-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  color: #f5f5f5;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.note-editor-label-option:hover {
+  background: #333;
+}
+
+.note-editor-label-option.selected {
+  background: rgba(0, 122, 255, 0.2);
+}
+
+.note-editor-label-option .label-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.note-editor-selected-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Delete Dialog */
+.note-editor-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.note-editor-dialog {
+  background: #2a2a2a;
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 320px;
+  text-align: center;
+}
+
+.note-editor-dialog h3 {
+  margin: 0 0 0.5rem 0;
+  color: #f5f5f5;
+}
+
+.note-editor-dialog p {
+  margin: 0 0 1.5rem 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9rem;
+}
+
+.note-editor-dialog-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.note-editor-dialog-actions button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.note-editor-dialog-actions button:first-child {
+  background: #444;
+  color: #f5f5f5;
+}
+
+.note-editor-dialog-actions button.danger {
+  background: #ff3b30;
+  color: white;
+}
+
+/* Label Manager */
+.label-manager {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1a1a1a;
+  color: #f5f5f5;
+}
+
+.label-manager-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #333;
+}
+
+.label-manager-back {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.label-manager-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.label-manager-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.label-manager-add {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: #007aff;
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.label-manager-add:hover {
+  background: #0056b3;
+}
+
+/* Label Form */
+.label-manager-form {
+  padding: 1rem;
+  border-bottom: 1px solid #333;
+  background: #222;
+}
+
+.label-manager-form input {
+  width: 100%;
+  padding: 0.75rem;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  color: #f5f5f5;
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.label-manager-colors {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.label-color-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.label-color-btn:hover {
+  transform: scale(1.1);
+}
+
+.label-color-btn.selected {
+  border-color: white;
+}
+
+.label-manager-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.label-manager-form-actions button {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  background: #333;
+  color: #f5f5f5;
+}
+
+.label-manager-form-actions button.primary {
+  background: #007aff;
+  color: white;
+}
+
+/* Label List */
+.label-manager-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+.label-manager-empty {
+  padding: 2rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.label-manager-empty p {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+.label-manager-empty span {
+  font-size: 0.85rem;
+}
+
+.label-manager-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.label-manager-item:hover {
+  background: #222;
+}
+
+.label-manager-item-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.label-manager-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.label-manager-name {
+  font-size: 0.95rem;
+}
+
+.label-manager-item-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.label-manager-item-actions button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.label-manager-item-actions button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.label-manager-item-actions button.danger:hover {
+  background: rgba(255, 59, 48, 0.1);
+  color: #ff3b30;
+}
+
+/* Label Edit */
+.label-manager-edit {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label-manager-edit input {
+  width: 100%;
+  padding: 0.5rem;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #f5f5f5;
+  font-size: 0.95rem;
+}
+
+.label-manager-edit-actions {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: flex-end;
+}
+
+.label-manager-edit-actions button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: #333;
+  border: none;
+  color: #f5f5f5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.label-manager-edit-actions button.primary {
+  background: #007aff;
+  color: white;
+}
+
+/* Label Manager Dialog */
+.label-manager-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.label-manager-dialog {
+  background: #2a2a2a;
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 320px;
+  text-align: center;
+}
+
+.label-manager-dialog h3 {
+  margin: 0 0 0.5rem 0;
+  color: #f5f5f5;
+}
+
+.label-manager-dialog p {
+  margin: 0 0 1.5rem 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9rem;
+}
+
+.label-manager-dialog-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.label-manager-dialog-actions button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  background: #444;
+  color: #f5f5f5;
+}
+
+.label-manager-dialog-actions button.danger {
+  background: #ff3b30;
+  color: white;
+}
+
+/* Dark mode adjustments for notes */
+@media (prefers-color-scheme: dark) {
+  .notes-container {
+    background: #1a1a1a;
+  }
+
+  .notes-header {
+    background: #2a2a2a;
+    border-color: #444;
+  }
+
+  .notes-header-btn {
+    background: #333;
+    color: #999;
+  }
+
+  .notes-header-btn:hover {
+    background: #444;
+    color: #f5f5f5;
+  }
+
+  .notes-label-filters {
+    background: #2a2a2a;
+    border-color: #444;
+  }
+
+  .notes-label-filter-all {
+    background: #333;
+    border-color: #444;
+    color: #f5f5f5;
+  }
+
+  .notes-label-filter-all:hover {
+    background: #444;
+  }
+
+  .notes-fab-menu button {
+    background: #2a2a2a;
+    border-color: #444;
+    color: #f5f5f5;
+  }
+
+  .notes-fab-menu button:hover {
+    background: #333;
   }
 }

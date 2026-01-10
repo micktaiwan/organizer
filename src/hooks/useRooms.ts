@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Room, Message as ServerMessage, getApiBaseUrl } from '../services/api';
-import { Message } from '../types';
+import { Message, Reaction } from '../types';
 import { api } from '../services/api';
 import { socketService } from '../services/socket';
 
@@ -86,7 +86,6 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
           }
 
           const isSender = actualSenderId === userId;
-          console.debug('Message comparison:', { actualSenderId, userId, isSender, msgContent: msg.content?.substring(0, 20) });
 
           // Map content based on message type
           let text: string | undefined;
@@ -101,6 +100,13 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
             text = msg.content;
           }
 
+          // Convert reactions
+          const reactions: Reaction[] | undefined = msg.reactions?.map((r: any) => ({
+            userId: typeof r.userId === 'string' ? r.userId : r.userId._id || r.userId.id,
+            emoji: r.emoji,
+            createdAt: new Date(r.createdAt),
+          }));
+
           return {
             id: msg._id,
             serverMessageId: msg._id,
@@ -113,6 +119,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
             timestamp: new Date(msg.createdAt),
             status: msg.status as 'sent' | 'delivered' | 'read',
             readBy: msg.readBy,
+            reactions,
           };
         });
         setMessages(convertedMessages);
@@ -162,6 +169,20 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     return () => unsubDeletedMessage();
   }, [currentRoomId]);
 
+  // Listen for message reactions in current room
+  useEffect(() => {
+    if (!currentRoomId) return;
+
+    const unsubReacted = socketService.on('message:reacted', (data: any) => {
+      if (data.roomId === currentRoomId) {
+        // Reload messages to get updated reactions
+        loadMessages();
+      }
+    });
+
+    return () => unsubReacted();
+  }, [currentRoomId]);
+
   // Load message history
   const loadMessages = useCallback(async () => {
     if (!currentRoomId) return;
@@ -180,7 +201,6 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
         }
 
         const isSender = actualSenderId === userId;
-        console.debug('Message comparison (loadMessages):', { actualSenderId, userId, isSender, msgContent: msg.content?.substring(0, 20) });
 
         // Map content based on message type
         let text: string | undefined;
@@ -195,6 +215,13 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
           text = msg.content;
         }
 
+        // Convert reactions
+        const reactions: Reaction[] | undefined = msg.reactions?.map((r: any) => ({
+          userId: typeof r.userId === 'string' ? r.userId : r.userId._id || r.userId.id,
+          emoji: r.emoji,
+          createdAt: new Date(r.createdAt),
+        }));
+
         return {
           id: msg._id,
           serverMessageId: msg._id,
@@ -207,6 +234,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
           timestamp: new Date(msg.createdAt),
           status: msg.status as 'sent' | 'delivered' | 'read',
           readBy: msg.readBy,
+          reactions,
         };
       });
       setMessages(convertedMessages);
@@ -216,7 +244,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   }, [currentRoomId, userId]);
 
   // Send message to current room
-  const sendMessage = useCallback(async (text?: string, image?: string, audio?: string) => {
+  const sendMessage = useCallback(async (text?: string, image?: string, audio?: string, imageBlob?: Blob | null) => {
     if (!currentRoomId || (!text?.trim() && !image && !audio)) return;
 
     const messageId = crypto.randomUUID();
@@ -227,7 +255,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     const optimisticMessage: Message = {
       id: messageId,
       text,
-      image,
+      image, // Show preview (Data URL)
       audio,
       sender: 'me',
       senderName: username,
@@ -237,12 +265,20 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     setMessages(prev => [...prev, optimisticMessage]);
 
     try {
-      const response = await api.sendMessage(currentRoomId, type, content);
+      const response = await api.sendMessage(currentRoomId, type, content, imageBlob);
 
-      // Update message with server ID
+      // Update message with server response
+      // If uploaded via multipart, backend returns image URL in content
+      const finalImage = imageBlob && type === 'image' ? response.message.content : image;
+
       setMessages(prev => prev.map(m =>
         m.id === messageId
-          ? { ...m, serverMessageId: response.message._id, status: 'sent' }
+          ? {
+              ...m,
+              serverMessageId: response.message._id,
+              status: 'sent',
+              image: finalImage // Update with server URL if multipart
+            }
           : m
       ));
 
@@ -295,6 +331,34 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     }
   }, [currentRoomId]);
 
+  // React to a message
+  const reactToMessage = useCallback(async (messageId: string, emoji: string) => {
+    if (!currentRoomId) return;
+
+    try {
+      const response = await api.reactToMessage(messageId, emoji);
+
+      // Update local message with new reactions
+      const newReactions: Reaction[] = response.message.reactions?.map((r: any) => ({
+        userId: typeof r.userId === 'string' ? r.userId : r.userId._id || r.userId.id,
+        emoji: r.emoji,
+        createdAt: new Date(r.createdAt),
+      })) || [];
+
+      setMessages(prev => prev.map(m =>
+        (m.serverMessageId === messageId || m.id === messageId)
+          ? { ...m, reactions: newReactions }
+          : m
+      ));
+
+      // Notify other users via socket
+      socketService.notifyReaction(response.roomId, messageId, emoji, response.action);
+    } catch (error) {
+      console.error('Failed to react to message:', error);
+      throw error;
+    }
+  }, [currentRoomId]);
+
   // Join room
   const joinRoom = useCallback(async (roomId: string) => {
     try {
@@ -342,6 +406,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     sendMessage,
     markAsRead,
     deleteMessage,
+    reactToMessage,
     loadMessages,
 
     // Room management

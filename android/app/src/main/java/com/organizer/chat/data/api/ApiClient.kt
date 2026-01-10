@@ -39,4 +39,6 @@ object ApiClient {
     fun getService(): ApiService {
         return apiService ?: throw IllegalStateException("ApiClient not initialized. Call initialize() first.")
     }
+
+    fun getBaseUrl(): String = BASE_URL
 }

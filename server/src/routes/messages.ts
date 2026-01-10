@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { Message, Room } from '../models/index.js';
+import fs from 'fs';
+import path from 'path';
+import { Message, Room, ALLOWED_EMOJIS } from '../models/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -84,6 +86,68 @@ router.patch('/:id/read', async (req: AuthRequest, res: Response): Promise<void>
   }
 });
 
+const reactSchema = z.object({
+  emoji: z.enum(['👍', '❤️', '😂', '😮', '😢', '😡', '✅', '⚠️', '🙏', '🎉', '👋', '😘']),
+});
+
+// POST /messages/:id/react - Toggle reaction on message
+router.post('/:id/react', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { emoji } = reactSchema.parse(req.body);
+    const message = await Message.findById(req.params.id);
+
+    if (!message) {
+      res.status(404).json({ error: 'Message non trouvé' });
+      return;
+    }
+
+    // Find existing reaction from this user
+    const existingIndex = message.reactions.findIndex(
+      r => r.userId.toString() === req.userId
+    );
+
+    let action: 'added' | 'removed' | 'replaced';
+
+    if (existingIndex >= 0) {
+      if (message.reactions[existingIndex].emoji === emoji) {
+        // Same emoji - remove reaction (toggle off)
+        message.reactions.splice(existingIndex, 1);
+        action = 'removed';
+      } else {
+        // Different emoji - replace
+        message.reactions[existingIndex].emoji = emoji;
+        message.reactions[existingIndex].createdAt = new Date();
+        action = 'replaced';
+      }
+    } else {
+      // No existing reaction - add new
+      message.reactions.push({
+        userId: req.userId as any,
+        emoji,
+        createdAt: new Date(),
+      });
+      action = 'added';
+    }
+
+    await message.save();
+    await message.populate('senderId', 'username displayName');
+    await message.populate('reactions.userId', 'username displayName');
+
+    res.json({
+      message,
+      action,
+      roomId: message.roomId.toString(),
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Emoji invalide', details: error.errors });
+      return;
+    }
+    console.error('React to message error:', error);
+    res.status(500).json({ error: 'Erreur lors de la réaction' });
+  }
+});
+
 // POST /messages/read-bulk - Mark multiple messages as read
 router.post('/read-bulk', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -125,6 +189,26 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
     if (message.senderId.toString() !== req.userId) {
       res.status(403).json({ error: 'Non autorisé à supprimer ce message' });
       return;
+    }
+
+    // Delete associated file if it's an image or audio (not a Base64 data URL)
+    if ((message.type === 'image' || message.type === 'audio') && message.content) {
+      const content = message.content;
+
+      // Only delete if it's a file path (starts with /uploads/), not a Base64 data URL
+      if (content.startsWith('/uploads/')) {
+        const filePath = path.join(process.cwd(), 'public', content);
+
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`✓ Deleted file: ${filePath}`);
+          }
+        } catch (fileError) {
+          console.error('Failed to delete file:', fileError);
+          // Continue with message deletion even if file deletion fails
+        }
+      }
     }
 
     const roomId = message.roomId.toString();

@@ -1,15 +1,20 @@
-import { useState, useEffect, useRef } from "react";
-import { Settings, Globe, LogOut } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Settings, Globe, LogOut, MessageCircle, StickyNote } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open } from '@tauri-apps/plugin-dialog';
+import { readFile } from '@tauri-apps/plugin-fs';
+import { compressImage, blobToDataUrl, isImageFile, formatFileSize } from "./utils/imageCompression";
 import { useAuth } from "./contexts/AuthContext";
 import { useServerConfig } from "./contexts/ServerConfigContext";
 import { useWebRTCCall } from "./hooks/useWebRTCCall";
 // import { useContacts } from "./hooks/useContacts";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder";
 import { useRooms } from "./hooks/useRooms";
+import { useNotes } from "./hooks/useNotes";
 import { Button } from "./components/ui/Button";
 import { StatusSelector } from "./components/ui/StatusSelector";
 import { UserStatus } from "./types";
+import { UpdateNoteRequest } from "./services/api";
 // TODO: Restore Contact-related features in room context
 // import { Contact } from "./types";
 
@@ -23,6 +28,7 @@ import { CallOverlay } from "./components/Call/CallOverlay";
 import { IncomingCallModal } from "./components/Call/IncomingCallModal";
 // import { ContactModal } from "./components/Contact/ContactModal";
 import { AdminPanel } from "./components/Admin/AdminPanel";
+import { NotesList, NoteEditor, LabelManager } from "./components/Notes";
 
 import "./App.css";
 
@@ -31,6 +37,8 @@ function App() {
   const { isLoading: serverLoading, isConfigured, resetConfig, selectedServer } = useServerConfig();
   const [inputMessage, setInputMessage] = useState("");
   const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [pendingImageBlob, setPendingImageBlob] = useState<Blob | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
 
   // Modals state
   // TODO: Implement contact management in room context
@@ -40,6 +48,13 @@ function App() {
   // const [editingContact, setEditingContact] = useState<Contact | null>(null);
   // const [newContactInitialName, setNewContactInitialName] = useState("");
   // const [newContactInitialUserId, setNewContactInitialUserId] = useState("");
+
+  // App tabs state
+  const [activeTab, setActiveTab] = useState<'chat' | 'notes'>('chat');
+
+  // Notes view state
+  const [notesView, setNotesView] = useState<'list' | 'editor' | 'labels'>('list');
+  const [creatingNoteType, setCreatingNoteType] = useState<'note' | 'checklist'>('note');
 
   const username = user?.displayName || "";
 
@@ -64,6 +79,7 @@ function App() {
     setMessages,
     sendMessage,
     deleteMessage,
+    reactToMessage,
     selectRoom,
   } = useRooms({ userId: user?.id, username });
 
@@ -119,6 +135,70 @@ function App() {
     cancelRecording
   } = useVoiceRecorder((base64) => sendMessage(undefined, undefined, base64));
 
+  // Notes - only load when authenticated
+  const {
+    notes,
+    labels,
+    selectedNote,
+    selectedLabelId,
+    isLoading: isLoadingNotes,
+    error: notesError,
+    loadNotes,
+    selectNote,
+    createNote,
+    updateNote,
+    deleteNote,
+    togglePin,
+    toggleChecklistItem,
+    addChecklistItem,
+    updateChecklistItemText,
+    deleteChecklistItem,
+    filterByLabel,
+    createLabel,
+    updateLabel,
+    deleteLabel,
+  } = useNotes({ enabled: isAuthenticated });
+
+  // Notes handlers
+  const handleCreateNote = useCallback((type: 'note' | 'checklist') => {
+    setCreatingNoteType(type);
+    selectNote(null);
+    setNotesView('editor');
+  }, [selectNote]);
+
+  const handleSelectNote = useCallback((noteId: string) => {
+    selectNote(noteId);
+    setNotesView('editor');
+  }, [selectNote]);
+
+  const handleSaveNote = useCallback(async (noteId: string | null, data: UpdateNoteRequest) => {
+    if (noteId) {
+      await updateNote(noteId, data);
+    } else {
+      const newNote = await createNote({
+        type: data.type || creatingNoteType,
+        title: data.title,
+        content: data.content,
+        color: data.color,
+        labels: data.labels,
+        assignedTo: data.assignedTo,
+      });
+      if (newNote) {
+        selectNote(newNote._id);
+      }
+    }
+  }, [updateNote, createNote, creatingNoteType, selectNote]);
+
+  const handleDeleteNoteFromEditor = useCallback(async (noteId: string) => {
+    await deleteNote(noteId);
+    setNotesView('list');
+  }, [deleteNote]);
+
+  const handleCloseNoteEditor = useCallback(() => {
+    selectNote(null);
+    setNotesView('list');
+  }, [selectNote]);
+
   useEffect(() => {
     const title = import.meta.env.DEV ? "Organizer - Dev mode" : "Organizer";
     getCurrentWindow().setTitle(title);
@@ -155,6 +235,77 @@ function App() {
     return () => document.removeEventListener("paste", handlePaste);
   }, []);
 
+  // File picker handler
+  const handleSelectImageFile = async () => {
+    try {
+      const filePath = await open({
+        multiple: false,
+        directory: false,
+        filters: [
+          {
+            name: 'Images',
+            extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic']
+          }
+        ]
+      });
+
+      if (!filePath) return; // User cancelled
+
+      console.log('Selected file:', filePath);
+      setIsCompressing(true);
+
+      // Read file as Uint8Array
+      const fileData = await readFile(filePath as string);
+
+      // Validate file size before compression
+      if (fileData.byteLength > 10 * 1024 * 1024) {
+        alert('L\'image est trop volumineuse (max 10MB)');
+        setIsCompressing(false);
+        return;
+      }
+
+      // Convert to Blob (guess MIME type from extension)
+      const extension = (filePath as string).split('.').pop()?.toLowerCase();
+      const mimeType = extension === 'png' ? 'image/png' :
+                       extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' :
+                       extension === 'gif' ? 'image/gif' :
+                       extension === 'webp' ? 'image/webp' :
+                       extension === 'heic' ? 'image/heic' :
+                       'image/jpeg';
+
+      const originalBlob = new Blob([fileData], { type: mimeType });
+
+      if (!isImageFile(originalBlob)) {
+        alert('Veuillez sélectionner un fichier image valide');
+        setIsCompressing(false);
+        return;
+      }
+
+      console.log(`Original file size: ${formatFileSize(originalBlob.size)}`);
+
+      // Compress image
+      const { compressedFile, originalSize, compressedSize } = await compressImage(originalBlob);
+
+      // Warn if still large after compression
+      if (compressedSize > 2 * 1024 * 1024) {
+        console.warn(`Image still large after compression: ${formatFileSize(compressedSize)}`);
+      }
+
+      console.log(`Compressed: ${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)}`);
+
+      // Convert to Data URL for preview
+      const dataUrl = await blobToDataUrl(compressedFile);
+
+      setPendingImage(dataUrl);
+      setPendingImageBlob(compressedFile);
+      setIsCompressing(false);
+    } catch (error) {
+      console.error('File selection error:', error);
+      alert(`Erreur: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+      setIsCompressing(false);
+    }
+  };
+
   const handleChangeServer = async () => {
     await logout();
     await resetConfig();
@@ -182,6 +333,33 @@ function App() {
 
   return (
     <main className="chat-container">
+      {isCompressing && (
+        <div className="loading-overlay">
+          <div className="loading-spinner" />
+          <p>Compression de l'image...</p>
+        </div>
+      )}
+
+      {/* App Tabs Navigation */}
+      <div className="app-tabs">
+        <button
+          className={`app-tab ${activeTab === 'chat' ? 'active' : ''}`}
+          onClick={() => setActiveTab('chat')}
+        >
+          <MessageCircle size={18} />
+          <span>Chat</span>
+        </button>
+        <button
+          className={`app-tab ${activeTab === 'notes' ? 'active' : ''}`}
+          onClick={() => setActiveTab('notes')}
+        >
+          <StickyNote size={18} />
+          <span>Notes</span>
+        </button>
+      </div>
+
+      {/* Chat Tab Content */}
+      {activeTab === 'chat' && (
       <div className="chat-layout">
         <RoomList
           rooms={rooms}
@@ -241,21 +419,75 @@ function App() {
             currentRoom={currentRoom}
             messages={messages}
             onSendMessage={(text, image, audio) => {
-              sendMessage(text, image, audio);
+              sendMessage(text, image, audio, pendingImageBlob);
             }}
             onDeleteMessage={deleteMessage}
+            onReactMessage={reactToMessage}
+            currentUserId={user?.id}
             inputMessage={inputMessage}
             setInputMessage={setInputMessage}
             pendingImage={pendingImage}
-            cancelPendingImage={() => setPendingImage(null)}
+            cancelPendingImage={() => {
+              setPendingImage(null);
+              setPendingImageBlob(null);
+            }}
             isRecording={isRecording}
             recordingDuration={recordingDuration}
             startRecording={startRecording}
             stopRecording={stopRecording}
             cancelRecording={cancelRecording}
+            onSelectImageFile={handleSelectImageFile}
           />
         </div>
       </div>
+      )}
+
+      {/* Notes Tab Content */}
+      {activeTab === 'notes' && (
+        <div className="notes-tab-content">
+          {notesView === 'list' && (
+            <NotesList
+              notes={notes}
+              labels={labels}
+              selectedLabelId={selectedLabelId}
+              isLoading={isLoadingNotes}
+              error={notesError}
+              onSelectNote={handleSelectNote}
+              onCreateNote={handleCreateNote}
+              onTogglePin={togglePin}
+              onDeleteNote={deleteNote}
+              onToggleChecklistItem={toggleChecklistItem}
+              onFilterByLabel={filterByLabel}
+              onRefresh={loadNotes}
+              onManageLabels={() => setNotesView('labels')}
+            />
+          )}
+          {notesView === 'editor' && (
+            <NoteEditor
+              note={selectedNote}
+              labels={labels}
+              isCreating={!selectedNote}
+              initialType={creatingNoteType}
+              onSave={handleSaveNote}
+              onDelete={handleDeleteNoteFromEditor}
+              onClose={handleCloseNoteEditor}
+              onToggleChecklistItem={toggleChecklistItem}
+              onAddChecklistItem={addChecklistItem}
+              onUpdateChecklistItemText={updateChecklistItemText}
+              onDeleteChecklistItem={deleteChecklistItem}
+            />
+          )}
+          {notesView === 'labels' && (
+            <LabelManager
+              labels={labels}
+              onCreateLabel={createLabel}
+              onUpdateLabel={updateLabel}
+              onDeleteLabel={deleteLabel}
+              onClose={() => setNotesView('list')}
+            />
+          )}
+        </div>
+      )}
 
       {callState === 'incoming' && (
         <IncomingCallModal

@@ -13,6 +13,9 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017/organizer
       - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
+    volumes:
+      - uploads_data:/app/public/uploads
+      - apk_data:/app/public/apk
     depends_on:
       - mongodb
     networks:
@@ -33,3 +36,5 @@ networks:
 
 volumes:
   mongodb_data:
+  uploads_data:
+  apk_data:

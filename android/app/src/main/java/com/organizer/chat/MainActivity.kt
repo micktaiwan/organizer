@@ -16,24 +16,36 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.organizer.chat.data.model.AppUpdateInfo
+import com.organizer.chat.data.model.DownloadStatus
 import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.MessageRepository
+import com.organizer.chat.data.repository.NoteRepository
 import com.organizer.chat.data.repository.RoomRepository
 import com.organizer.chat.data.repository.UpdateRepository
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.ui.components.UpdateProgressDialog
 import com.organizer.chat.ui.navigation.NavGraph
 import com.organizer.chat.ui.navigation.Routes
-import com.organizer.chat.ui.components.UpdateDialog
 import com.organizer.chat.ui.theme.OrganizerChatTheme
+import com.organizer.chat.util.AppPreferences
 import com.organizer.chat.util.UpdateManager
+import com.organizer.chat.worker.LocationUpdateWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -45,8 +57,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var authRepository: AuthRepository
     private lateinit var roomRepository: RoomRepository
     private lateinit var messageRepository: MessageRepository
+    private lateinit var noteRepository: NoteRepository
     private lateinit var updateRepository: UpdateRepository
     private lateinit var updateManager: UpdateManager
+    private lateinit var appPreferences: AppPreferences
 
     // Use mutableStateOf so Compose recomposes when service binds
     private var chatServiceState = mutableStateOf<ChatService?>(null)
@@ -57,8 +71,8 @@ class MainActivity : ComponentActivity() {
     private var pendingRoomName = mutableStateOf<String?>(null)
     private var navControllerRef: NavHostController? = null
 
-    // Update state
-    private var pendingUpdateInfo = mutableStateOf<AppUpdateInfo?>(null)
+    // Store update info to show in dialog
+    private var updateInfo = mutableStateOf<AppUpdateInfo?>(null)
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -93,15 +107,17 @@ class MainActivity : ComponentActivity() {
         authRepository = AuthRepository(tokenManager)
         roomRepository = RoomRepository()
         messageRepository = MessageRepository()
+        noteRepository = NoteRepository()
         updateRepository = UpdateRepository(applicationContext)
         updateManager = UpdateManager(applicationContext)
+        appPreferences = AppPreferences(applicationContext)
 
         // Request notification permission on Android 13+
         requestNotificationPermission()
 
         // Determine start destination
         val isLoggedIn = runBlocking { authRepository.isLoggedIn() }
-        val startDestination = if (isLoggedIn) Routes.ROOMS else Routes.LOGIN
+        val startDestination = if (isLoggedIn) Routes.HOME else Routes.LOGIN
 
         // Check if launched from notification with roomId
         handleNotificationIntent(intent)
@@ -110,6 +126,9 @@ class MainActivity : ComponentActivity() {
         if (isLoggedIn) {
             startChatService()
             checkForUpdateOnLaunch()
+
+            // Check for pending download (interrupted download recovery)
+            updateManager.checkPendingDownload()
         }
 
         setContent {
@@ -119,6 +138,10 @@ class MainActivity : ComponentActivity() {
                 val chatService by chatServiceState
                 val pendingRoom by pendingRoomId
                 val pendingName by pendingRoomName
+                val currentUpdateInfo by updateInfo
+
+                // Observer for download state (auto-update progress)
+                val downloadState by updateManager.downloadState.collectAsState()
 
                 // Store reference for onNewIntent
                 LaunchedEffect(navController) {
@@ -146,6 +169,36 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Show update dialog based on download state
+                when (val status = downloadState.status) {
+                    is DownloadStatus.Idle -> {
+                        // No download in progress - show update available dialog if needed
+                        currentUpdateInfo?.let { info ->
+                            UpdateAvailableDialog(
+                                updateInfo = info,
+                                appPreferences = appPreferences,
+                                onDownload = {
+                                    updateManager.downloadAndInstall(info)
+                                    updateInfo.value = null
+                                },
+                                onDismiss = {
+                                    updateInfo.value = null
+                                }
+                            )
+                        }
+                    }
+                    else -> {
+                        // Download in progress/verifying/ready/error - show progress dialog
+                        UpdateProgressDialog(
+                            state = downloadState,
+                            onCancel = updateManager::cancelDownload,
+                            onRetry = updateManager::retryDownload,
+                            onInstall = updateManager::installApk,
+                            onDismiss = { /* Keep dialog visible */ }
+                        )
+                    }
+                }
+
                 NavGraph(
                     navController = navController,
                     startDestination = startDestination,
@@ -154,59 +207,18 @@ class MainActivity : ComponentActivity() {
                     authRepository = authRepository,
                     roomRepository = roomRepository,
                     messageRepository = messageRepository,
+                    noteRepository = noteRepository,
+                    appPreferences = appPreferences,
                     onLoginSuccess = {
                         startChatService()
                         checkForUpdateOnLaunch()
+                        updateManager.checkPendingDownload()
                     },
                     onLogout = {
                         stopChatService()
                     }
                 )
-
-                // Update dialog
-                val updateInfo by pendingUpdateInfo
-                updateInfo?.let { info ->
-                    var downloadState by remember { mutableStateOf<UpdateManager.DownloadState>(UpdateManager.DownloadState.Idle) }
-                    var downloadedFile by remember { mutableStateOf<File?>(null) }
-
-                    UpdateDialog(
-                        updateInfo = info,
-                        downloadState = downloadState,
-                        onDownload = {
-                            lifecycleScope.launch {
-                                updateManager.downloadApk(info).collect { state ->
-                                    downloadState = state
-                                    if (state is UpdateManager.DownloadState.Completed) {
-                                        downloadedFile = state.file
-                                    }
-                                }
-                            }
-                        },
-                        onInstall = {
-                            downloadedFile?.let { file ->
-                                updateManager.installApk(file)
-                            }
-                        },
-                        onDismiss = {
-                            pendingUpdateInfo.value = null
-                        }
-                    )
-                }
             }
-        }
-    }
-
-    private fun checkForUpdateOnLaunch() {
-        lifecycleScope.launch {
-            delay(2000) // Wait 2 seconds after app launch
-            updateRepository.checkForUpdate().fold(
-                onSuccess = { result ->
-                    if (result.updateAvailable && result.updateInfo != null) {
-                        pendingUpdateInfo.value = result.updateInfo
-                    }
-                },
-                onFailure = { /* Silent fail on launch */ }
-            )
         }
     }
 
@@ -266,6 +278,18 @@ class MainActivity : ComponentActivity() {
             }
             bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
         }
+
+        // Start location update worker if permission granted
+        if (hasLocationPermission()) {
+            LocationUpdateWorker.schedule(this)
+        }
+    }
+
+    private fun hasLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun stopChatService() {
@@ -275,6 +299,9 @@ class MainActivity : ComponentActivity() {
         }
         chatServiceState.value = null
         stopService(Intent(this, ChatService::class.java))
+
+        // Cancel location update worker
+        LocationUpdateWorker.cancel(this)
     }
 
     override fun onResume() {
@@ -296,4 +323,73 @@ class MainActivity : ComponentActivity() {
         }
         // Note: Service continues running in background
     }
+
+    private fun checkForUpdateOnLaunch() {
+        lifecycleScope.launch {
+            delay(2000) // Wait 2 seconds after app launch
+            updateRepository.checkForUpdate().fold(
+                onSuccess = { result ->
+                    if (result.updateAvailable && result.updateInfo != null) {
+                        Log.d(TAG, "Update available: ${result.updateInfo.version}")
+                        // Show update dialog with release notes
+                        updateInfo.value = result.updateInfo
+                    }
+                },
+                onFailure = { e ->
+                    Log.e(TAG, "Failed to check for updates: ${e.message}")
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun UpdateAvailableDialog(
+    updateInfo: AppUpdateInfo,
+    appPreferences: AppPreferences,
+    onDownload: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+
+    // Save release notes when dialog is shown
+    LaunchedEffect(updateInfo) {
+        appPreferences.saveReleaseNotes(updateInfo.version, updateInfo.releaseNotes)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Mise à jour disponible")
+        },
+        text = {
+            Column {
+                Text(
+                    text = "Version ${updateInfo.version}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = updateInfo.releaseNotes,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Taille: ${updateInfo.fileSize / (1024 * 1024)} MB",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDownload) {
+                Text("Télécharger")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Plus tard")
+            }
+        }
+    )
 }

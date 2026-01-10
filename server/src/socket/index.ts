@@ -1,7 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { User, Room } from '../models/index.js';
+import { User, Room, Message } from '../models/index.js';
 import { JwtPayload } from '../middleware/auth.js';
 
 interface AuthenticatedSocket extends Socket {
@@ -110,12 +110,33 @@ export function setupSocket(httpServer: HttpServer): Server {
     });
 
     // MODIFIED: Notification de nouveau message (broadcast à la room)
-    socket.on('message:notify', (data: { roomId: string; messageId: string }) => {
-      socket.to(`room:${data.roomId}`).emit('message:new', {
-        from: userId,
-        roomId: data.roomId,
-        messageId: data.messageId,
-      });
+    socket.on('message:notify', async (data: { roomId: string; messageId: string }) => {
+      try {
+        // Fetch message to include content in notification
+        const message = await Message.findById(data.messageId).populate('senderId', 'username displayName');
+
+        if (!message) {
+          console.error(`Message ${data.messageId} not found for notification`);
+          return;
+        }
+
+        // Fetch room name
+        const room = await Room.findById(data.roomId);
+        const sender = message.senderId as any;
+
+        socket.to(`room:${data.roomId}`).emit('message:new', {
+          from: userId,
+          fromName: sender?.displayName || sender?.username || 'Utilisateur',
+          roomName: room?.name || 'Chat',
+          roomId: data.roomId,
+          messageId: data.messageId,
+          content: message.content || '',
+          audioUrl: message.type === 'audio' ? message.content : null,
+          imageUrl: message.type === 'image' ? message.content : null,
+        });
+      } catch (error) {
+        console.error('Error notifying message:', error);
+      }
     });
 
     // MODIFIED: Notification de message lu (broadcast à la room)
@@ -133,6 +154,17 @@ export function setupSocket(httpServer: HttpServer): Server {
         from: userId,
         roomId: data.roomId,
         messageId: data.messageId,
+      });
+    });
+
+    // Notification de reaction sur message (broadcast à la room)
+    socket.on('message:react', (data: { roomId: string; messageId: string; emoji: string; action: string }) => {
+      socket.to(`room:${data.roomId}`).emit('message:reacted', {
+        from: userId,
+        roomId: data.roomId,
+        messageId: data.messageId,
+        emoji: data.emoji,
+        action: data.action,
       });
     });
 
@@ -212,6 +244,38 @@ export function setupSocket(httpServer: HttpServer): Server {
     });
 
     // ===== End Signaling Events =====
+
+    // ===== Notes Events =====
+
+    // Subscribe to notes updates
+    socket.on('note:subscribe', () => {
+      socket.join('notes');
+      console.log(`User ${socket.username} subscribed to notes`);
+    });
+
+    // Unsubscribe from notes updates
+    socket.on('note:unsubscribe', () => {
+      socket.leave('notes');
+      console.log(`User ${socket.username} unsubscribed from notes`);
+    });
+
+    // ===== End Notes Events =====
+
+    // ===== Location Events =====
+
+    // Subscribe to location updates
+    socket.on('location:subscribe', () => {
+      socket.join('locations');
+      console.log(`User ${socket.username} subscribed to locations`);
+    });
+
+    // Unsubscribe from location updates
+    socket.on('location:unsubscribe', () => {
+      socket.leave('locations');
+      console.log(`User ${socket.username} unsubscribed from locations`);
+    });
+
+    // ===== End Location Events =====
 
     // Déconnexion
     socket.on('disconnect', async () => {

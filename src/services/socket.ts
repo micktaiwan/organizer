@@ -21,6 +21,8 @@ class SocketService {
 
     this.socket.on('connect', () => {
       console.log('Socket connected');
+      // Emit internal reconnect event so listeners can re-subscribe
+      this.emit('internal:connected');
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -43,6 +45,7 @@ class SocketService {
       'message:new',
       'message:read',
       'message:deleted',
+      'message:reacted',
       // WebRTC signaling events
       'webrtc:offer',
       'webrtc:answer',
@@ -54,6 +57,13 @@ class SocketService {
       'call:reject',
       'call:end',
       'call:toggle-camera',
+      // Notes events
+      'note:created',
+      'note:updated',
+      'note:deleted',
+      'label:created',
+      'label:updated',
+      'label:deleted',
     ];
 
     events.forEach((event) => {
@@ -108,12 +118,25 @@ class SocketService {
     this.socket?.emit('message:delete', { roomId, messageId });
   }
 
+  notifyReaction(roomId: string, messageId: string, emoji: string, action: string) {
+    this.socket?.emit('message:react', { roomId, messageId, emoji, action });
+  }
+
   joinRoom(roomId: string) {
     this.socket?.emit('room:join', { roomId });
   }
 
   leaveRoom(roomId: string) {
     this.socket?.emit('room:leave', { roomId });
+  }
+
+  // Notes subscription
+  subscribeToNotes() {
+    this.socket?.emit('note:subscribe');
+  }
+
+  unsubscribeFromNotes() {
+    this.socket?.emit('note:unsubscribe');
   }
 
   // WebRTC Signaling

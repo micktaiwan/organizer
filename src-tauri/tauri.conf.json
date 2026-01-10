@@ -14,11 +14,37 @@
       {
         "title": "Organizer",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "devtools": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "default",
+          "windows": ["main"],
+          "permissions": [
+            "dialog:allow-open",
+            "dialog:allow-message",
+            "fs:allow-read-file",
+            "fs:default",
+            "store:allow-load",
+            "store:allow-set",
+            "store:allow-get",
+            "store:allow-delete",
+            "store:default",
+            "core:webview:allow-internal-toggle-devtools",
+            "core:webview:default",
+            "core:window:allow-set-title",
+            "core:window:default",
+            "notification:allow-is-permission-granted",
+            "notification:allow-request-permission",
+            "notification:allow-show",
+            "notification:default"
+          ]
+        }
+      ]
     }
   },
   "bundle": {

@@ -2,6 +2,8 @@ package com.organizer.chat.data.api
 
 import com.organizer.chat.data.model.*
 import com.organizer.chat.data.model.AppUpdateInfo
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.http.*
 
 interface ApiService {
@@ -37,8 +39,21 @@ interface ApiService {
     @POST("messages")
     suspend fun sendMessage(@Body request: SendMessageRequest): MessageResponse
 
+    @Multipart
+    @POST("upload/image")
+    suspend fun uploadImageMessage(
+        @Part image: MultipartBody.Part,
+        @Part("roomId") roomId: RequestBody
+    ): MessageResponse
+
     @PATCH("messages/{messageId}/read")
     suspend fun markAsRead(@Path("messageId") messageId: String): MessageResponse
+
+    @POST("messages/{messageId}/react")
+    suspend fun reactToMessage(
+        @Path("messageId") messageId: String,
+        @Body request: ReactRequest
+    ): ReactResponse
 
     // Users
     @GET("users/search")
@@ -50,6 +65,88 @@ interface ApiService {
     // App Updates
     @GET("apk/latest")
     suspend fun getLatestApkVersion(): AppUpdateInfo
+
+    // Notes
+    @GET("notes")
+    suspend fun getNotes(
+        @Query("labelId") labelId: String? = null,
+        @Query("archived") archived: Boolean = false
+    ): NotesResponse
+
+    @GET("notes/{noteId}")
+    suspend fun getNote(@Path("noteId") noteId: String): NoteResponse
+
+    @POST("notes")
+    suspend fun createNote(@Body request: CreateNoteRequest): NoteResponse
+
+    @PUT("notes/{noteId}")
+    suspend fun updateNote(
+        @Path("noteId") noteId: String,
+        @Body request: UpdateNoteRequest
+    ): NoteResponse
+
+    @PATCH("notes/{noteId}")
+    suspend fun patchNote(
+        @Path("noteId") noteId: String,
+        @Body request: UpdateNoteRequest
+    ): NoteResponse
+
+    @DELETE("notes/{noteId}")
+    suspend fun deleteNote(@Path("noteId") noteId: String): SuccessResponse
+
+    @POST("notes/reorder")
+    suspend fun reorderNote(@Body request: ReorderNoteRequest): SuccessResponse
+
+    @POST("notes/{noteId}/items")
+    suspend fun addChecklistItem(
+        @Path("noteId") noteId: String,
+        @Body request: AddChecklistItemRequest
+    ): NoteResponse
+
+    @PATCH("notes/{noteId}/items/{itemId}")
+    suspend fun patchChecklistItem(
+        @Path("noteId") noteId: String,
+        @Path("itemId") itemId: String,
+        @Body request: PatchChecklistItemRequest
+    ): NoteResponse
+
+    @DELETE("notes/{noteId}/items/{itemId}")
+    suspend fun deleteChecklistItem(
+        @Path("noteId") noteId: String,
+        @Path("itemId") itemId: String
+    ): NoteResponse
+
+    @POST("notes/{noteId}/items/reorder")
+    suspend fun reorderChecklistItems(
+        @Path("noteId") noteId: String,
+        @Body request: ReorderItemsRequest
+    ): NoteResponse
+
+    // Labels
+    @GET("labels")
+    suspend fun getLabels(): LabelsResponse
+
+    @GET("labels/{labelId}")
+    suspend fun getLabel(@Path("labelId") labelId: String): LabelResponse
+
+    @POST("labels")
+    suspend fun createLabel(@Body request: CreateLabelRequest): LabelResponse
+
+    @PUT("labels/{labelId}")
+    suspend fun updateLabel(
+        @Path("labelId") labelId: String,
+        @Body request: UpdateLabelRequest
+    ): LabelResponse
+
+    @DELETE("labels/{labelId}")
+    suspend fun deleteLabel(@Path("labelId") labelId: String): SuccessResponse
+
+    // Location
+    @PUT("users/location")
+    suspend fun updateLocation(@Body request: UpdateLocationRequest): LocationUpdateResponse
+
+    @GET("users/locations")
+    suspend fun getUsersWithLocations(): UsersWithLocationResponse
 }
 
 data class UsersSearchResponse(

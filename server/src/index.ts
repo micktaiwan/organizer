@@ -2,9 +2,12 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
+import path from 'path';
+import fs from 'fs';
 import { connectDB } from './config/db.js';
 import { setupSocket } from './socket/index.js';
-import { authRoutes, usersRoutes, contactsRoutes, messagesRoutes, roomsRoutes, adminRoutes, apkRoutes } from './routes/index.js';
+import { authRoutes, usersRoutes, contactsRoutes, messagesRoutes, roomsRoutes, adminRoutes, apkRoutes, notesRoutes, labelsRoutes } from './routes/index.js';
+import uploadRoutes from './routes/upload.js';
 import { Room, User } from './models/index.js';
 
 const app = express();
@@ -17,6 +20,13 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads'), {
+  maxAge: '7d',
+  etag: true,
+  lastModified: true
+}));
+
 // Routes
 app.use('/auth', authRoutes);
 app.use('/users', usersRoutes);
@@ -25,6 +35,9 @@ app.use('/messages', messagesRoutes);
 app.use('/rooms', roomsRoutes);
 app.use('/admin', adminRoutes);
 app.use('/apk', apkRoutes);
+app.use('/upload', uploadRoutes);
+app.use('/notes', notesRoutes);
+app.use('/labels', labelsRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -43,7 +56,8 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 // Setup Socket.io
-setupSocket(httpServer);
+const io = setupSocket(httpServer);
+app.set('io', io);
 
 // Start server
 const PORT = process.env.PORT || 3001;
@@ -98,8 +112,17 @@ async function ensureLobby() {
   }
 }
 
+function ensureUploadDirectories() {
+  const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'images');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+    console.log('✓ Created uploads directory');
+  }
+}
+
 async function start() {
   try {
+    ensureUploadDirectories();
     await connectDB();
     await ensureLobby();
 

@@ -1,3 +1,13 @@
+export type ReactionEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '😡' | '✅' | '⚠️' | '🙏' | '🎉' | '👋' | '😘';
+
+export const ALLOWED_EMOJIS: ReactionEmoji[] = ['👍', '❤️', '😂', '😮', '😢', '😡', '✅', '⚠️', '🙏', '🎉', '👋', '😘'];
+
+export interface Reaction {
+  userId: string;
+  emoji: ReactionEmoji;
+  createdAt: Date;
+}
+
 export interface Message {
   id: string;
   serverMessageId?: string; // MongoDB _id for server-synced messages
@@ -10,6 +20,7 @@ export interface Message {
   timestamp: Date;
   status?: "sending" | "sent" | "delivered" | "read" | "failed";
   readBy?: string[]; // Array of user IDs who read the message
+  reactions?: Reaction[]; // Array of reactions on the message
   isSystemMessage?: boolean;
   systemMessageType?: "missed-call" | "rejected-call" | "ended-call";
 }
@@ -53,4 +64,41 @@ export interface UserStatusInfo {
   status: UserStatus;
   statusMessage: string | null;
   isMuted: boolean;
+}
+
+// Notes types
+export interface ChecklistItem {
+  _id: string;
+  text: string;
+  checked: boolean;
+  order: number;
+}
+
+export interface Label {
+  _id: string;
+  name: string;
+  color: string;
+}
+
+export interface NoteUser {
+  _id: string;
+  username: string;
+  displayName?: string;
+}
+
+export interface Note {
+  _id: string;
+  type: 'note' | 'checklist';
+  title: string;
+  content: string;
+  items: ChecklistItem[];
+  color: string;
+  labels: Label[];
+  assignedTo: NoteUser | null;
+  createdBy: NoteUser;
+  order: number;
+  isPinned: boolean;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

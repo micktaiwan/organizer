@@ -2,6 +2,15 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export type MessageType = 'text' | 'image' | 'audio' | 'system';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
+export type ReactionEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '😡' | '✅' | '⚠️' | '🙏' | '🎉' | '👋' | '😘';
+
+export const ALLOWED_EMOJIS: ReactionEmoji[] = ['👍', '❤️', '😂', '😮', '😢', '😡', '✅', '⚠️', '🙏', '🎉', '👋', '😘'];
+
+export interface IReaction {
+  userId: Types.ObjectId;
+  emoji: ReactionEmoji;
+  createdAt: Date;
+}
 
 export interface IMessage extends Document {
   roomId: Types.ObjectId;
@@ -10,6 +19,7 @@ export interface IMessage extends Document {
   content: string;
   status: MessageStatus;
   readBy: Types.ObjectId[];
+  reactions: IReaction[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,6 +54,22 @@ const MessageSchema = new Schema<IMessage>(
     readBy: [{
       type: Schema.Types.ObjectId,
       ref: 'User',
+    }],
+    reactions: [{
+      userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+      },
+      emoji: {
+        type: String,
+        required: true,
+        enum: ALLOWED_EMOJIS,
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now,
+      },
     }],
   },
   {

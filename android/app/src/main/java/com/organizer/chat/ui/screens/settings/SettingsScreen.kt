@@ -8,16 +8,14 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.organizer.chat.data.model.DownloadStatus
 import com.organizer.chat.data.model.UpdateCheckResult
 import com.organizer.chat.data.repository.UpdateRepository
-import com.organizer.chat.ui.components.UpdateDialog
 import com.organizer.chat.util.UpdateManager
 import kotlinx.coroutines.launch
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,11 +29,11 @@ fun SettingsScreen(
     val updateRepository = remember { UpdateRepository(context) }
     val updateManager = remember { UpdateManager(context) }
 
+    // Observer for download state
+    val downloadState by updateManager.downloadState.collectAsState()
+
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
-    var showUpdateDialog by remember { mutableStateOf(false) }
-    var downloadState by remember { mutableStateOf<UpdateManager.DownloadState>(UpdateManager.DownloadState.Idle) }
-    var downloadedFile by remember { mutableStateOf<File?>(null) }
 
     val currentVersion = remember { updateRepository.getCurrentVersionName() }
 
@@ -45,8 +43,9 @@ fun SettingsScreen(
             updateRepository.checkForUpdate().fold(
                 onSuccess = { result ->
                     updateResult = result
-                    if (result.updateAvailable) {
-                        showUpdateDialog = true
+                    // If update available and user explicitly checked, start download immediately
+                    if (result.updateAvailable && result.updateInfo != null) {
+                        updateManager.downloadAndInstall(result.updateInfo)
                     }
                 },
                 onFailure = { /* Handle error silently */ }
@@ -68,7 +67,8 @@ fun SettingsScreen(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
                     navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                ),
+                windowInsets = WindowInsets.statusBars
             )
         }
     ) { paddingValues ->
@@ -89,36 +89,107 @@ fun SettingsScreen(
             ListItem(
                 headlineContent = { Text("Verifier les mises a jour") },
                 supportingContent = {
-                    when {
-                        isCheckingUpdate -> Text("Verification...")
-                        updateResult?.updateAvailable == true ->
-                            Text("Version ${updateResult?.updateInfo?.version} disponible")
-                        updateResult?.updateAvailable == false ->
-                            Text("Vous avez la derniere version")
-                        else -> Text("Appuyez pour verifier")
+                    when (val status = downloadState.status) {
+                        is DownloadStatus.Downloading -> {
+                            Text("Telechargement en cours: ${status.progress}%")
+                        }
+                        is DownloadStatus.Verifying -> {
+                            Text("Verification du fichier...")
+                        }
+                        is DownloadStatus.ReadyToInstall -> {
+                            Text("Mise a jour prete a installer")
+                        }
+                        is DownloadStatus.Error -> {
+                            Text(
+                                text = status.error.userMessage,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        is DownloadStatus.Idle -> {
+                            when {
+                                isCheckingUpdate -> Text("Verification...")
+                                updateResult?.updateAvailable == false ->
+                                    Text("Vous avez la derniere version")
+                                else -> Text("Appuyez pour verifier")
+                            }
+                        }
                     }
                 },
                 leadingContent = {
                     Icon(Icons.Default.SystemUpdate, contentDescription = null)
                 },
                 trailingContent = {
-                    if (isCheckingUpdate) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else if (updateResult?.updateAvailable == true) {
-                        Badge { Text("1") }
+                    when (val status = downloadState.status) {
+                        is DownloadStatus.Downloading,
+                        is DownloadStatus.Verifying -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                        else -> {
+                            if (isCheckingUpdate) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                        }
                     }
                 },
-                modifier = Modifier.clickable(enabled = !isCheckingUpdate) {
-                    if (updateResult?.updateAvailable == true) {
-                        showUpdateDialog = true
-                    } else {
-                        checkForUpdate()
-                    }
+                modifier = Modifier.clickable(
+                    enabled = !isCheckingUpdate && downloadState.status is DownloadStatus.Idle
+                ) {
+                    checkForUpdate()
                 }
             )
+
+            // Cancel button when download in progress
+            when (val status = downloadState.status) {
+                is DownloadStatus.Downloading,
+                is DownloadStatus.Verifying -> {
+                    ListItem(
+                        headlineContent = { Text("Annuler le telechargement") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Default.Cancel,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        modifier = Modifier.clickable { updateManager.cancelDownload() }
+                    )
+                }
+                is DownloadStatus.Error -> {
+                    // Retry button if error is retryable
+                    if (status.error.canRetry) {
+                        ListItem(
+                            headlineContent = { Text("Reessayer le telechargement") },
+                            leadingContent = {
+                                Icon(Icons.Default.Refresh, contentDescription = null)
+                            },
+                            modifier = Modifier.clickable { updateManager.retryDownload() }
+                        )
+                    }
+                }
+                is DownloadStatus.ReadyToInstall -> {
+                    // Install button when ready
+                    ListItem(
+                        headlineContent = { Text("Installer maintenant") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Default.Download,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            updateManager.installApk(status.file)
+                        }
+                    )
+                }
+                else -> {}
+            }
 
             HorizontalDivider()
 
@@ -137,31 +208,4 @@ fun SettingsScreen(
         }
     }
 
-    // Update dialog
-    if (showUpdateDialog && updateResult?.updateInfo != null) {
-        UpdateDialog(
-            updateInfo = updateResult!!.updateInfo!!,
-            downloadState = downloadState,
-            onDownload = {
-                scope.launch {
-                    updateManager.downloadApk(updateResult!!.updateInfo!!)
-                        .collect { state ->
-                            downloadState = state
-                            if (state is UpdateManager.DownloadState.Completed) {
-                                downloadedFile = state.file
-                            }
-                        }
-                }
-            },
-            onInstall = {
-                downloadedFile?.let { file ->
-                    updateManager.installApk(file)
-                }
-            },
-            onDismiss = {
-                showUpdateDialog = false
-                downloadState = UpdateManager.DownloadState.Idle
-            }
-        )
-    }
 }

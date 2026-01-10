@@ -5,3 +5,5 @@ export { default as messagesRoutes } from './messages.js';
 export { default as roomsRoutes } from './rooms.js';
 export { default as adminRoutes } from './admin.js';
 export { default as apkRoutes } from './apk.js';
+export { default as notesRoutes } from './notes.js';
+export { default as labelsRoutes } from './labels.js';

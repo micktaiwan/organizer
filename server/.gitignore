@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Build output
+dist/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Uploaded files
+public/uploads/images/
+
+# Credentials
+.credentials
+
+# MacOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

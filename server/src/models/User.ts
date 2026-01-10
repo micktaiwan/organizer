@@ -1,5 +1,14 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IUserLocation {
+  lat: number;
+  lng: number;
+  street: string | null;
+  city: string | null;
+  country: string | null;
+  updatedAt: Date;
+}
+
 export interface IUser extends Document {
   username: string;
   displayName: string;
@@ -12,6 +21,7 @@ export interface IUser extends Document {
   statusMessage: string | null;
   isMuted: boolean;
   lastSeen: Date;
+  location?: IUserLocation | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,6 +83,17 @@ const UserSchema = new Schema<IUser>(
     lastSeen: {
       type: Date,
       default: Date.now,
+    },
+    location: {
+      type: {
+        lat: { type: Number, required: true },
+        lng: { type: Number, required: true },
+        street: { type: String, default: null },
+        city: { type: String, default: null },
+        country: { type: String, default: null },
+        updatedAt: { type: Date, default: Date.now },
+      },
+      default: null,
     },
   },
   {
