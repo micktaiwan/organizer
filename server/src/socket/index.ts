@@ -44,11 +44,15 @@ export function setupSocket(httpServer: HttpServer): Server {
     const userId = socket.userId!;
     console.log(`User connected: ${socket.username} (${userId})`);
 
-    // Mettre à jour le statut online
-    await User.findByIdAndUpdate(userId, {
-      isOnline: true,
-      lastSeen: new Date(),
-    });
+    // Mettre à jour le statut online et récupérer le user avec ses infos de statut
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        isOnline: true,
+        lastSeen: new Date(),
+      },
+      { new: true }
+    );
 
     // Rejoindre une room personnelle pour WebRTC signaling direct
     socket.join(`user:${userId}`);
@@ -60,12 +64,20 @@ export function setupSocket(httpServer: HttpServer): Server {
       console.log(`User ${socket.username} joined room: ${room.name}`);
     }
 
+    // Préparer les données de statut
+    const userStatusData = {
+      userId,
+      status: user?.status,
+      statusMessage: user?.statusMessage,
+      isMuted: user?.isMuted,
+    };
+
     // Notifier les autres utilisateurs du statut online
-    socket.broadcast.emit('user:online', { userId });
+    socket.broadcast.emit('user:online', userStatusData);
 
     // Notifier les rooms que l'utilisateur est online
     userRooms.forEach(room => {
-      socket.to(`room:${room._id}`).emit('user:online', { userId, roomId: room._id });
+      socket.to(`room:${room._id}`).emit('user:online', { ...userStatusData, roomId: room._id });
     });
 
     // NEW: Rejoindre une room
@@ -112,6 +124,15 @@ export function setupSocket(httpServer: HttpServer): Server {
         from: userId,
         roomId: data.roomId,
         messageIds: data.messageIds,
+      });
+    });
+
+    // Notification de suppression de message (broadcast à la room)
+    socket.on('message:delete', (data: { roomId: string; messageId: string }) => {
+      socket.to(`room:${data.roomId}`).emit('message:deleted', {
+        from: userId,
+        roomId: data.roomId,
+        messageId: data.messageId,
       });
     });
 
