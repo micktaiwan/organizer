@@ -23,9 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.organizer.chat.ui.theme.AccentBlue
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.organizer.chat.data.model.AppUpdateInfo
@@ -382,12 +384,18 @@ private fun UpdateAvailableDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDownload) {
+            TextButton(
+                onClick = onDownload,
+                colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+            ) {
                 Text("Télécharger")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+            ) {
                 Text("Plus tard")
             }
         }
