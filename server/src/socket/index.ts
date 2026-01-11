@@ -102,6 +102,27 @@ export function setupSocket(httpServer: HttpServer): Server {
       socket.to(`room:${room._id}`).emit('user:online', { ...userStatusData, roomId: room._id });
     });
 
+    // Envoyer les statuts de tous les utilisateurs dans les mêmes rooms au client qui se connecte
+    const memberUserIds = userRooms.flatMap(r => r.members.map(m => m.userId));
+    const uniqueUserIds = [...new Set(memberUserIds.map(id => id.toString()))];
+
+    const usersInSameRooms = await User.find({
+      _id: { $in: uniqueUserIds }
+    }).select('_id username displayName status statusMessage statusExpiresAt isMuted isOnline');
+
+    socket.emit('users:init', {
+      users: usersInSameRooms.map(u => ({
+        id: u._id,
+        username: u.username,
+        displayName: u.displayName,
+        status: u.status,
+        statusMessage: u.statusMessage,
+        statusExpiresAt: u.statusExpiresAt,
+        isMuted: u.isMuted,
+        isOnline: u.isOnline,
+      }))
+    });
+
     // NEW: Rejoindre une room
     socket.on('room:join', async (data: { roomId: string }) => {
       socket.join(`room:${data.roomId}`);

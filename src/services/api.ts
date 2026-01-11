@@ -22,6 +22,10 @@ interface User {
   isAdmin?: boolean;
   lastSeen?: string;
   peerId?: string | null;
+  status?: 'available' | 'busy' | 'away' | 'dnd';
+  statusMessage?: string | null;
+  statusExpiresAt?: string | null;
+  isMuted?: boolean;
 }
 
 interface AdminStats {
@@ -132,6 +136,7 @@ interface Message {
   senderId: string | User;
   type: 'text' | 'image' | 'audio' | 'system';
   content: string;
+  caption?: string;
   status: 'sent' | 'delivered' | 'read';
   readBy: string[];
   reactions?: Reaction[];

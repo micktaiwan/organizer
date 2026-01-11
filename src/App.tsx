@@ -61,10 +61,19 @@ function App() {
 
   const username = user?.displayName || "";
 
-  // User status
-  const [userStatus, setUserStatus] = useState<UserStatus>('available');
-  const [userStatusMessage, setUserStatusMessage] = useState<string | null>(null);
-  const [userIsMuted, setUserIsMuted] = useState(false);
+  // User status - initialize from user data
+  const [userStatus, setUserStatus] = useState<UserStatus>(user?.status || 'available');
+  const [userStatusMessage, setUserStatusMessage] = useState<string | null>(user?.statusMessage || null);
+  const [userIsMuted, setUserIsMuted] = useState(user?.isMuted || false);
+
+  // Sync status when user data changes (e.g., on login)
+  useEffect(() => {
+    if (user) {
+      setUserStatus(user.status || 'available');
+      setUserStatusMessage(user.statusMessage || null);
+      setUserIsMuted(user.isMuted || false);
+    }
+  }, [user]);
 
   const handleStatusChange = (status: UserStatus, statusMessage: string | null, isMuted: boolean) => {
     setUserStatus(status);
