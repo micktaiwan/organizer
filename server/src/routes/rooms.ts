@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { Room, User } from '../models/index.js';
+import { Types } from 'mongoose';
+import { Room, User, Message } from '../models/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -31,7 +32,39 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
       .populate('members.userId', 'username displayName isOnline')
       .sort({ lastMessageAt: -1, updatedAt: -1 });
 
-    res.json({ rooms });
+    // Calculate unread counts for rooms where user is a member
+    const memberRoomIds = rooms
+      .filter(room => room.members.some(m => m.userId._id?.toString() === req.userId))
+      .map(room => room._id);
+
+    const unreadCounts = await Message.aggregate([
+      {
+        $match: {
+          roomId: { $in: memberRoomIds },
+          senderId: { $ne: new Types.ObjectId(req.userId) },
+          readBy: { $ne: new Types.ObjectId(req.userId) },
+        },
+      },
+      {
+        $group: {
+          _id: '$roomId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Create a map for quick lookup
+    const unreadMap = new Map(
+      unreadCounts.map(item => [item._id.toString(), item.count])
+    );
+
+    // Add unreadCount to each room
+    const roomsWithUnread = rooms.map(room => ({
+      ...room.toObject(),
+      unreadCount: unreadMap.get(room._id.toString()) || 0,
+    }));
+
+    res.json({ rooms: roomsWithUnread });
   } catch (error) {
     console.error('Get rooms error:', error);
     res.status(500).json({ error: 'Erreur lors de la récupération des salons' });
@@ -341,6 +374,55 @@ router.get('/:roomId/messages', async (req: AuthRequest, res: Response): Promise
     res.json({ messages: messages.reverse() });
   } catch (error) {
     console.error('Get room messages error:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /rooms/:roomId/read - Mark all messages in room as read
+router.post('/:roomId/read', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const room = await Room.findById(req.params.roomId);
+
+    if (!room) {
+      res.status(404).json({ error: 'Salon non trouvé' });
+      return;
+    }
+
+    // Check if user is a member
+    const memberIndex = room.members.findIndex(m => m.userId.toString() === req.userId);
+    if (memberIndex === -1) {
+      res.status(403).json({ error: 'Vous n\'êtes pas membre de ce salon' });
+      return;
+    }
+
+    // Update lastReadAt for this member
+    room.members[memberIndex].lastReadAt = new Date();
+    await room.save();
+
+    // Mark all unread messages as read for this user
+    await Message.updateMany(
+      {
+        roomId: req.params.roomId,
+        senderId: { $ne: new Types.ObjectId(req.userId) },
+        readBy: { $ne: new Types.ObjectId(req.userId) },
+      },
+      {
+        $addToSet: { readBy: new Types.ObjectId(req.userId) },
+      }
+    );
+
+    // Emit socket event to update unread count
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${req.userId}`).emit('unread:updated', {
+        roomId: req.params.roomId,
+        unreadCount: 0,
+      });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Mark room as read error:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });

@@ -83,6 +83,10 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _roomDeleted = MutableSharedFlow<RoomDeletedEvent>(replay = 0, extraBufferCapacity = 10)
     val roomDeleted: SharedFlow<RoomDeletedEvent> = _roomDeleted.asSharedFlow()
 
+    // Unread count events
+    private val _unreadUpdated = MutableSharedFlow<UnreadUpdatedEvent>(replay = 1, extraBufferCapacity = 10)
+    val unreadUpdated: SharedFlow<UnreadUpdatedEvent> = _unreadUpdated.asSharedFlow()
+
     fun connect(versionName: String? = null, versionCode: Int? = null) {
         val token = tokenManager.getTokenSync()
         if (token == null) {
@@ -431,6 +435,21 @@ class SocketManager(private val tokenManager: TokenManager) {
                     Log.e(TAG, "Error parsing room:deleted", e)
                 }
             }
+
+            // Unread count update
+            on("unread:updated") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = UnreadUpdatedEvent(
+                        roomId = data.getString("roomId"),
+                        unreadCount = data.getInt("unreadCount")
+                    )
+                    Log.d(TAG, "Unread updated: room=${event.roomId}, count=${event.unreadCount}")
+                    _unreadUpdated.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing unread:updated", e)
+                }
+            }
         }
     }
 
@@ -611,4 +630,10 @@ data class RoomUpdatedEvent(
 data class RoomDeletedEvent(
     val roomId: String,
     val roomName: String
+)
+
+// Unread count events
+data class UnreadUpdatedEvent(
+    val roomId: String,
+    val unreadCount: Int
 )

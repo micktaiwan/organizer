@@ -9,6 +9,7 @@ data class Message(
     val senderId: MessageSender,
     val type: String = "text",  // "text", "image", "audio", "system"
     val content: String,
+    val caption: String? = null,  // Optional caption for image messages
     val status: String = "sent",  // "sent", "delivered", "read"
     val readBy: List<String> = emptyList(),
     val reactions: List<Reaction> = emptyList(),

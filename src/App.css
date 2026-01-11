@@ -567,6 +567,17 @@ button.copied {
   margin-top: 0.5rem;
 }
 
+/* Image with caption */
+.image-with-caption {
+  display: flex;
+  flex-direction: column;
+}
+
+.image-caption {
+  margin-top: 0.5rem;
+  color: inherit;
+}
+
 /* Fullscreen image overlay */
 .image-fullscreen-overlay {
   position: fixed;

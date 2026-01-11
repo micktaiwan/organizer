@@ -11,7 +11,8 @@ data class Room(
     val isLobby: Boolean = false,
     val createdAt: String? = null,
     val updatedAt: String? = null,
-    val lastMessageAt: String? = null
+    val lastMessageAt: String? = null,
+    val unreadCount: Int = 0
 )
 
 data class RoomMember(

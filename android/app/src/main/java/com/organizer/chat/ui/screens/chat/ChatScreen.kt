@@ -22,8 +22,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
+import android.net.Uri
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import com.organizer.chat.ui.theme.CharcoalLight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +43,7 @@ import androidx.core.content.ContextCompat
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import com.organizer.chat.data.repository.MessageRepository
+import com.organizer.chat.data.repository.RoomRepository
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.components.MessageBubble
@@ -51,13 +57,14 @@ fun ChatScreen(
     roomId: String,
     roomName: String,
     messageRepository: MessageRepository,
+    roomRepository: RoomRepository,
     chatService: ChatService?,
     tokenManager: TokenManager,
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
     val viewModel = remember(roomId, chatService, context) {
-        ChatViewModel(roomId, messageRepository, chatService, tokenManager, context)
+        ChatViewModel(roomId, messageRepository, roomRepository, chatService, tokenManager, context)
     }
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
@@ -205,7 +212,10 @@ fun ChatScreen(
                             galleryPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
                         }
                     }
-                }
+                },
+                selectedImageUri = uiState.selectedImageUri,
+                isCompressingImage = uiState.isCompressingImage,
+                onClearImage = viewModel::clearSelectedImage
             )
         }
     ) { paddingValues ->
@@ -311,7 +321,10 @@ private fun ChatInputBar(
     onRequestCameraPermission: () -> Unit,
     onRequestGalleryPermission: () -> Unit,
     onCameraClick: () -> Unit,
-    onGalleryClick: () -> Unit
+    onGalleryClick: () -> Unit,
+    selectedImageUri: Uri?,
+    isCompressingImage: Boolean,
+    onClearImage: () -> Unit
 ) {
     val currentOnStartRecording by rememberUpdatedState(onStartRecording)
     val currentOnStopRecording by rememberUpdatedState(onStopRecording)
@@ -323,149 +336,208 @@ private fun ChatInputBar(
         label = "micColor"
     )
 
+    // Can send if has text OR has image selected
+    val canSend = (value.isNotBlank() || selectedImageUri != null) && !isSending && !isRecording
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding(),
         shadowElevation = 8.dp
     ) {
-        // Always same layout structure to keep pointerInput alive
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Camera button
-            if (!isRecording) {
-                IconButton(
-                    onClick = onCameraClick,
-                    enabled = !isSending
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CameraAlt,
-                        contentDescription = "Camera",
-                        tint = if (!isSending) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // Gallery button
-            if (!isRecording) {
-                IconButton(
-                    onClick = onGalleryClick,
-                    enabled = !isSending
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = "Gallery",
-                        tint = if (!isSending) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            if (isRecording) {
-                // Recording info instead of text field
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Enregistrement...",
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(
-                        text = formatDuration(recordingDuration),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            } else {
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(24.dp)),
-                    placeholder = { Text("Message...") },
-                    maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { onSend() }),
-                    enabled = !isSending,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        cursorColor = AccentBlue,
-                        focusedBorderColor = AccentBlue
-                    )
+        Column {
+            // Image preview (if selected)
+            if (selectedImageUri != null) {
+                ImagePreview(
+                    imageUri = selectedImageUri,
+                    isCompressing = isCompressingImage,
+                    onRemove = onClearImage
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Mic button - ALWAYS present, same pointerInput
-            Box(
+            // Input row
+            Row(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(micColor.copy(alpha = 0.2f))
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            awaitFirstDown()
-
-                            if (!currentHasPermission) {
-                                waitForUpOrCancellation()
-                                onRequestAudioPermission()
-                                return@awaitEachGesture
-                            }
-
-                            if (currentIsSending) {
-                                return@awaitEachGesture
-                            }
-
-                            // Start recording on press
-                            currentOnStartRecording()
-
-                            // Wait for release
-                            waitForUpOrCancellation()
-
-                            // Stop and send on release
-                            currentOnStopRecording()
-                        }
-                    },
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Mic,
-                    contentDescription = if (isRecording) "Relacher pour envoyer" else "Maintenir pour enregistrer",
-                    tint = micColor
-                )
-            }
+                // Camera button
+                if (!isRecording) {
+                    IconButton(
+                        onClick = onCameraClick,
+                        enabled = !isSending
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Camera",
+                            tint = if (!isSending) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
-            Spacer(modifier = Modifier.width(4.dp))
+                // Gallery button
+                if (!isRecording) {
+                    IconButton(
+                        onClick = onGalleryClick,
+                        enabled = !isSending
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Image,
+                            contentDescription = "Gallery",
+                            tint = if (!isSending) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
-            // Send button
-            IconButton(
-                onClick = onSend,
-                enabled = value.isNotBlank() && !isSending && !isRecording
-            ) {
-                if (isSending) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
+                if (isRecording) {
+                    // Recording info instead of text field
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Enregistrement...",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = formatDuration(recordingDuration),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 } else {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Envoyer",
-                        tint = if (value.isNotBlank() && !isRecording) {
-                            AccentBlue
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(24.dp)),
+                        placeholder = { Text(if (selectedImageUri != null) "Ajouter une legende..." else "Message...") },
+                        maxLines = 4,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
+                        enabled = !isSending,
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            cursorColor = AccentBlue,
+                            focusedBorderColor = AccentBlue
+                        )
                     )
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Mic button - ALWAYS present, same pointerInput
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(micColor.copy(alpha = 0.2f))
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                awaitFirstDown()
+
+                                if (!currentHasPermission) {
+                                    waitForUpOrCancellation()
+                                    onRequestAudioPermission()
+                                    return@awaitEachGesture
+                                }
+
+                                if (currentIsSending) {
+                                    return@awaitEachGesture
+                                }
+
+                                // Start recording on press
+                                currentOnStartRecording()
+
+                                // Wait for release
+                                waitForUpOrCancellation()
+
+                                // Stop and send on release
+                                currentOnStopRecording()
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Mic,
+                        contentDescription = if (isRecording) "Relacher pour envoyer" else "Maintenir pour enregistrer",
+                        tint = micColor
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Send button
+                IconButton(
+                    onClick = onSend,
+                    enabled = canSend
+                ) {
+                    if (isSending) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Envoyer",
+                            tint = if (canSend) {
+                                AccentBlue
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun ImagePreview(
+    imageUri: Uri,
+    isCompressing: Boolean,
+    onRemove: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(CharcoalLight)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = imageUri,
+            contentDescription = "Image selectionnee",
+            modifier = Modifier
+                .size(60.dp)
+                .clip(RoundedCornerShape(8.dp)),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        if (isCompressing) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Compression...",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        IconButton(onClick = onRemove) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Supprimer l'image",
+                tint = Color.White
+            )
         }
     }
 }

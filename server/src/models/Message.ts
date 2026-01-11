@@ -17,6 +17,7 @@ export interface IMessage extends Document {
   senderId: Types.ObjectId;
   type: MessageType;
   content: string;
+  caption?: string;
   status: MessageStatus;
   readBy: Types.ObjectId[];
   reactions: IReaction[];
@@ -45,6 +46,10 @@ const MessageSchema = new Schema<IMessage>(
     content: {
       type: String,
       required: true,
+    },
+    caption: {
+      type: String,
+      required: false,
     },
     status: {
       type: String,

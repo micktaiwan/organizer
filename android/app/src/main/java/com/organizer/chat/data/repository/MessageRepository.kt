@@ -52,13 +52,14 @@ class MessageRepository {
         }
     }
 
-    suspend fun uploadAndSendImage(roomId: String, imageFile: File): Result<Message> {
+    suspend fun uploadAndSendImage(roomId: String, imageFile: File, caption: String? = null): Result<Message> {
         return try {
             val requestBody = imageFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
             val imagePart = MultipartBody.Part.createFormData("image", imageFile.name, requestBody)
             val roomIdPart = roomId.toRequestBody("text/plain".toMediaTypeOrNull())
+            val captionPart = caption?.toRequestBody("text/plain".toMediaTypeOrNull())
 
-            val response = api.uploadImageMessage(imagePart, roomIdPart)
+            val response = api.uploadImageMessage(imagePart, roomIdPart, captionPart)
             Result.success(response.message)
         } catch (e: Exception) {
             Result.failure(e)
