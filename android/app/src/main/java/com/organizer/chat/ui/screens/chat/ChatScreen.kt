@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -173,8 +175,7 @@ fun ChatScreen(
         },
         bottomBar = {
             ChatInputBar(
-                value = uiState.messageInput,
-                onValueChange = viewModel::updateMessageInput,
+                textFieldState = viewModel.textFieldState,
                 onSend = viewModel::sendMessage,
                 isSending = uiState.isSending || uiState.isUploadingImage,
                 isRecording = uiState.isRecording,
@@ -293,7 +294,10 @@ fun ChatScreen(
                                 message = message,
                                 isMyMessage = viewModel.isMyMessage(message),
                                 currentUserId = uiState.currentUserId,
-                                onReact = { emoji -> viewModel.reactToMessage(message.id, emoji) }
+                                onReact = { emoji -> viewModel.reactToMessage(message.id, emoji) },
+                                onDelete = if (viewModel.isMyMessage(message)) {
+                                    { viewModel.deleteMessage(message.id) }
+                                } else null
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                         }
@@ -306,8 +310,7 @@ fun ChatScreen(
 
 @Composable
 private fun ChatInputBar(
-    value: String,
-    onValueChange: (String) -> Unit,
+    textFieldState: TextFieldState,
     onSend: () -> Unit,
     isSending: Boolean,
     isRecording: Boolean,
@@ -337,7 +340,7 @@ private fun ChatInputBar(
     )
 
     // Can send if has text OR has image selected
-    val canSend = (value.isNotBlank() || selectedImageUri != null) && !isSending && !isRecording
+    val canSend = (textFieldState.text.isNotBlank() || selectedImageUri != null) && !isSending && !isRecording
 
     Surface(
         modifier = Modifier
@@ -409,8 +412,8 @@ private fun ChatInputBar(
                     }
                 } else {
                     OutlinedTextField(
-                        value = value,
-                        onValueChange = onValueChange,
+                        value = textFieldState.text.toString(),
+                        onValueChange = { textFieldState.setTextAndPlaceCursorAtEnd(it) },
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(24.dp)),
@@ -418,7 +421,6 @@ private fun ChatInputBar(
                         maxLines = 4,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
-                        enabled = !isSending,
                         shape = RoundedCornerShape(24.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             cursorColor = AccentBlue,

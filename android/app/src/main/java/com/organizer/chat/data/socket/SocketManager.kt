@@ -499,6 +499,13 @@ class SocketManager(private val tokenManager: TokenManager) {
         })
     }
 
+    fun notifyMessageDelete(roomId: String, messageId: String) {
+        socket?.emit("message:delete", JSONObject().apply {
+            put("roomId", roomId)
+            put("messageId", messageId)
+        })
+    }
+
     fun subscribeToNotes() {
         socket?.emit("note:subscribe")
         Log.d(TAG, "Subscribed to notes")

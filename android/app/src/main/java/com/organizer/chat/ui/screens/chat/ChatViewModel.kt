@@ -3,6 +3,8 @@ package com.organizer.chat.ui.screens.chat
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.organizer.chat.data.model.Message
@@ -17,9 +19,11 @@ import com.organizer.chat.util.TokenManager
 import com.organizer.chat.util.VoiceRecorder
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
@@ -30,7 +34,6 @@ data class ChatUiState(
     val isSending: Boolean = false,
     val errorMessage: String? = null,
     val currentUserId: String? = null,
-    val messageInput: String = "",
     val typingUsers: Set<String> = emptySet(),
     val isRecording: Boolean = false,
     val recordingDuration: Int = 0,
@@ -59,6 +62,9 @@ class ChatViewModel(
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    // TextFieldState for synchronous text updates (prevents keyboard from closing)
+    val textFieldState = TextFieldState()
+
     private val voiceRecorder = VoiceRecorder(context)
     private val imageCompressor = ImageCompressor(context)
     private var recordingTimerJob: Job? = null
@@ -69,8 +75,40 @@ class ChatViewModel(
         loadCurrentUser()
         loadMessages()
         observeServiceMessages()
+        observeTypingState()
         joinRoom()
         markRoomAsRead()
+    }
+
+    private fun observeTypingState() {
+        viewModelScope.launch {
+            snapshotFlow { textFieldState.text.isNotEmpty() }
+                .distinctUntilChanged()
+                .collect { isTyping ->
+                    chatService?.socketManager?.let { socketManager ->
+                        if (isTyping) {
+                            socketManager.notifyTypingStart(roomId)
+                        } else {
+                            socketManager.notifyTypingStop(roomId)
+                        }
+                    }
+                }
+        }
+    }
+
+    /**
+     * Adds a message to the list only if it doesn't already exist (avoids race condition with socket).
+     * Returns true if the message was added, false if it already existed.
+     */
+    private fun addMessageIfNotExists(message: Message): Boolean {
+        val alreadyExists = _uiState.value.messages.any { it.id == message.id }
+        if (!alreadyExists) {
+            _uiState.value = _uiState.value.copy(
+                messages = _uiState.value.messages + message,
+                shouldScrollToBottom = true
+            )
+        }
+        return !alreadyExists
     }
 
     private fun joinRoom() {
@@ -164,39 +202,32 @@ class ChatViewModel(
                 service.messages.collect { event ->
                     Log.d(TAG, "Received message event: roomId=${event.roomId}, current=$roomId")
                     if (event.roomId == roomId) {
-                        // Check if this message already exists (e.g., we sent it ourselves)
-                        val messageExists = _uiState.value.messages.any { it.id == event.messageId }
-                        if (!messageExists) {
-                            // Use type from event, fallback to detection from URLs
-                            val messageType = event.type.ifEmpty {
-                                when {
-                                    !event.audioUrl.isNullOrEmpty() -> "audio"
-                                    !event.imageUrl.isNullOrEmpty() -> "image"
-                                    else -> "text"
-                                }
+                        // Use type from event, fallback to detection from URLs
+                        val messageType = event.type.ifEmpty {
+                            when {
+                                !event.audioUrl.isNullOrEmpty() -> "audio"
+                                !event.imageUrl.isNullOrEmpty() -> "image"
+                                else -> "text"
                             }
+                        }
 
-                            // Construct the message from the event
-                            val newMessage = Message(
-                                id = event.messageId,
-                                roomId = event.roomId,
-                                senderId = MessageSender(
-                                    id = event.from,
-                                    username = event.fromName,
-                                    displayName = event.fromName
-                                ),
-                                type = messageType,
-                                content = event.content,
-                                status = "sent",
-                                readBy = emptyList(),
-                                reactions = emptyList(),
-                                createdAt = Instant.now().toString()
-                            )
+                        val newMessage = Message(
+                            id = event.messageId,
+                            roomId = event.roomId,
+                            senderId = MessageSender(
+                                id = event.from,
+                                username = event.fromName,
+                                displayName = event.fromName
+                            ),
+                            type = messageType,
+                            content = event.content,
+                            status = "sent",
+                            readBy = emptyList(),
+                            reactions = emptyList(),
+                            createdAt = Instant.now().toString()
+                        )
 
-                            _uiState.value = _uiState.value.copy(
-                                messages = _uiState.value.messages + newMessage,
-                                shouldScrollToBottom = true
-                            )
+                        if (addMessageIfNotExists(newMessage)) {
                             Log.d(TAG, "Added new message from socket: ${event.messageId}")
                         }
                     }
@@ -264,27 +295,14 @@ class ChatViewModel(
         }
     }
 
-    fun updateMessageInput(text: String) {
-        val wasEmpty = _uiState.value.messageInput.isEmpty()
-        val isEmpty = text.isEmpty()
-
-        _uiState.value = _uiState.value.copy(messageInput = text)
-
-        chatService?.socketManager?.let { socketManager ->
-            if (wasEmpty && !isEmpty) {
-                socketManager.notifyTypingStart(roomId)
-            } else if (!wasEmpty && isEmpty) {
-                socketManager.notifyTypingStop(roomId)
-            }
-        }
-    }
 
     fun sendMessage() {
-        val content = _uiState.value.messageInput.trim()
+        val content = textFieldState.text.toString().trim()
         val imageUri = _uiState.value.selectedImageUri
 
         // If image is selected, send image with optional caption
         if (imageUri != null) {
+            textFieldState.clearText()
             sendImageWithCaption(imageUri, content)
             return
         }
@@ -292,8 +310,11 @@ class ChatViewModel(
         // Otherwise, send text-only message
         if (content.isEmpty()) return
 
+        // Clear text immediately - TextFieldState handles this synchronously
+        textFieldState.clearText()
+
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSending = true, messageInput = "")
+            _uiState.value = _uiState.value.copy(isSending = true)
             chatService?.socketManager?.notifyTypingStop(roomId)
 
             val result = messageRepository.sendMessage(roomId, content)
@@ -301,11 +322,8 @@ class ChatViewModel(
             result.fold(
                 onSuccess = { message ->
                     Log.d(TAG, "Message sent successfully: ${message.id}")
-                    _uiState.value = _uiState.value.copy(
-                        messages = _uiState.value.messages + message,
-                        isSending = false,
-                        shouldScrollToBottom = true
-                    )
+                    addMessageIfNotExists(message)
+                    _uiState.value = _uiState.value.copy(isSending = false)
                     chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                 },
                 onFailure = { error ->
@@ -347,6 +365,30 @@ class ChatViewModel(
                     Log.e(TAG, "Failed to react to message: ${error.message}")
                     _uiState.value = _uiState.value.copy(
                         errorMessage = error.message ?: "Erreur lors de la reaction"
+                    )
+                }
+            )
+        }
+    }
+
+    fun deleteMessage(messageId: String) {
+        viewModelScope.launch {
+            val result = messageRepository.deleteMessage(messageId)
+
+            result.fold(
+                onSuccess = {
+                    Log.d(TAG, "Message deleted: $messageId")
+                    // Remove from local state
+                    _uiState.value = _uiState.value.copy(
+                        messages = _uiState.value.messages.filter { it.id != messageId }
+                    )
+                    // Notify other users via socket
+                    chatService?.socketManager?.notifyMessageDelete(roomId, messageId)
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Failed to delete message: ${error.message}")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = error.message ?: "Erreur lors de la suppression"
                     )
                 }
             )
@@ -409,11 +451,8 @@ class ChatViewModel(
             result.fold(
                 onSuccess = { message ->
                     Log.d(TAG, "Audio message sent successfully: ${message.id}")
-                    _uiState.value = _uiState.value.copy(
-                        messages = _uiState.value.messages + message,
-                        isSending = false,
-                        shouldScrollToBottom = true
-                    )
+                    addMessageIfNotExists(message)
+                    _uiState.value = _uiState.value.copy(isSending = false)
                     chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                 },
                 onFailure = { error ->
@@ -447,8 +486,7 @@ class ChatViewModel(
         compressingJob = viewModelScope.launch {
             try {
                 _uiState.value = _uiState.value.copy(
-                    isCompressingImage = true,
-                    messageInput = ""  // Clear input immediately
+                    isCompressingImage = true
                 )
                 chatService?.socketManager?.notifyTypingStop(roomId)
                 Log.d(TAG, "Compressing image...")
@@ -483,11 +521,8 @@ class ChatViewModel(
                 result.fold(
                     onSuccess = { message ->
                         Log.d(TAG, "Image uploaded successfully: ${message.id}")
-                        _uiState.value = _uiState.value.copy(
-                            messages = _uiState.value.messages + message,
-                            isUploadingImage = false,
-                            shouldScrollToBottom = true
-                        )
+                        addMessageIfNotExists(message)
+                        _uiState.value = _uiState.value.copy(isUploadingImage = false)
                         chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                         clearSelectedImage()
                     },
