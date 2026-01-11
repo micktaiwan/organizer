@@ -17,6 +17,9 @@ import com.organizer.chat.MainActivity
 import com.organizer.chat.OrganizerApp
 import com.organizer.chat.R
 import com.organizer.chat.data.socket.NewMessageEvent
+import com.organizer.chat.data.socket.RoomCreatedEvent
+import com.organizer.chat.data.socket.RoomDeletedEvent
+import com.organizer.chat.data.socket.RoomUpdatedEvent
 import com.organizer.chat.data.socket.SocketManager
 import com.organizer.chat.util.TokenManager
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +58,16 @@ class ChatService : Service() {
     // Relay messages from socket to UI
     private val _messages = MutableSharedFlow<NewMessageEvent>(replay = 1, extraBufferCapacity = 50)
     val messages: SharedFlow<NewMessageEvent> = _messages.asSharedFlow()
+
+    // Room events (delegate to socketManager)
+    val roomCreated: SharedFlow<RoomCreatedEvent>
+        get() = socketManager.roomCreated
+
+    val roomUpdated: SharedFlow<RoomUpdatedEvent>
+        get() = socketManager.roomUpdated
+
+    val roomDeleted: SharedFlow<RoomDeletedEvent>
+        get() = socketManager.roomDeleted
 
     // Track current room for notification filtering
     private var currentRoomId: String? = null

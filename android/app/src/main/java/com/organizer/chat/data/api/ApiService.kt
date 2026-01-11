@@ -36,6 +36,12 @@ interface ApiService {
     @POST("rooms/{roomId}/join")
     suspend fun joinRoom(@Path("roomId") roomId: String): RoomResponse
 
+    @POST("rooms/{roomId}/leave")
+    suspend fun leaveRoom(@Path("roomId") roomId: String): SuccessResponse
+
+    @POST("rooms")
+    suspend fun createRoom(@Body request: CreateRoomRequest): RoomResponse
+
     // Messages
     @POST("messages")
     suspend fun sendMessage(@Body request: SendMessageRequest): MessageResponse

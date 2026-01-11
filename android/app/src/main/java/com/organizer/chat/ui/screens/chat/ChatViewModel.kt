@@ -6,7 +6,10 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.organizer.chat.data.model.Message
+import com.organizer.chat.data.model.MessageSender
+import com.organizer.chat.data.model.Reaction
 import com.organizer.chat.data.repository.MessageRepository
+import java.time.Instant
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.util.ImageCompressor
 import com.organizer.chat.util.TokenManager
@@ -32,7 +35,10 @@ data class ChatUiState(
     val recordingDuration: Int = 0,
     val selectedImageUri: Uri? = null,
     val isCompressingImage: Boolean = false,
-    val isUploadingImage: Boolean = false
+    val isUploadingImage: Boolean = false,
+    val hasMoreMessages: Boolean = true,
+    val isLoadingMore: Boolean = false,
+    val shouldScrollToBottom: Boolean = true
 )
 
 class ChatViewModel(
@@ -45,6 +51,7 @@ class ChatViewModel(
 
     companion object {
         private const val TAG = "ChatViewModel"
+        private const val MESSAGE_PAGE_SIZE = 20
     }
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -78,14 +85,16 @@ class ChatViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
 
-            val result = messageRepository.getMessages(roomId)
+            val result = messageRepository.getMessages(roomId, limit = MESSAGE_PAGE_SIZE)
 
             result.fold(
                 onSuccess = { messages ->
                     Log.d(TAG, "Loaded ${messages.size} messages for room $roomId")
                     _uiState.value = _uiState.value.copy(
                         messages = messages,
-                        isLoading = false
+                        isLoading = false,
+                        hasMoreMessages = messages.size == MESSAGE_PAGE_SIZE,
+                        shouldScrollToBottom = true
                     )
                 },
                 onFailure = { error ->
@@ -99,13 +108,79 @@ class ChatViewModel(
         }
     }
 
+    fun loadMoreMessages() {
+        val oldestMessage = _uiState.value.messages.firstOrNull() ?: return
+        if (_uiState.value.isLoadingMore || !_uiState.value.hasMoreMessages) return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingMore = true)
+
+            val result = messageRepository.getMessages(
+                roomId,
+                limit = MESSAGE_PAGE_SIZE,
+                before = oldestMessage.createdAt
+            )
+
+            result.fold(
+                onSuccess = { olderMessages ->
+                    Log.d(TAG, "Loaded ${olderMessages.size} older messages for room $roomId")
+                    _uiState.value = _uiState.value.copy(
+                        messages = olderMessages + _uiState.value.messages,
+                        isLoadingMore = false,
+                        hasMoreMessages = olderMessages.size == MESSAGE_PAGE_SIZE,
+                        shouldScrollToBottom = false
+                    )
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Failed to load more messages: ${error.message}")
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingMore = false,
+                        errorMessage = error.message ?: "Erreur lors du chargement"
+                    )
+                }
+            )
+        }
+    }
+
     private fun observeServiceMessages() {
         chatService?.let { service ->
             viewModelScope.launch {
                 service.messages.collect { event ->
                     Log.d(TAG, "Received message event: roomId=${event.roomId}, current=$roomId")
                     if (event.roomId == roomId) {
-                        loadMessages()
+                        // Check if this message already exists (e.g., we sent it ourselves)
+                        val messageExists = _uiState.value.messages.any { it.id == event.messageId }
+                        if (!messageExists) {
+                            // Determine message type
+                            val messageType = when {
+                                !event.audioUrl.isNullOrEmpty() -> "audio"
+                                !event.imageUrl.isNullOrEmpty() -> "image"
+                                else -> "text"
+                            }
+
+                            // Construct the message from the event
+                            val newMessage = Message(
+                                id = event.messageId,
+                                roomId = event.roomId,
+                                senderId = MessageSender(
+                                    id = event.from,
+                                    username = event.fromName,
+                                    displayName = event.fromName
+                                ),
+                                type = messageType,
+                                content = event.content,
+                                status = "sent",
+                                readBy = emptyList(),
+                                reactions = emptyList(),
+                                createdAt = Instant.now().toString()
+                            )
+
+                            _uiState.value = _uiState.value.copy(
+                                messages = _uiState.value.messages + newMessage,
+                                shouldScrollToBottom = true
+                            )
+                            Log.d(TAG, "Added new message from socket: ${event.messageId}")
+                        }
                     }
                 }
             }
@@ -144,9 +219,27 @@ class ChatViewModel(
             viewModelScope.launch {
                 service.socketManager.messageReacted.collect { event ->
                     if (event.roomId == roomId) {
-                        Log.d(TAG, "Message reacted in current room: ${event.messageId} with ${event.emoji}")
-                        // Reload messages to get updated reactions
-                        loadMessages()
+                        Log.d(TAG, "Message reacted in current room: ${event.messageId} with ${event.emoji} (${event.action})")
+                        // Update the message locally instead of reloading all messages
+                        val updatedMessages = _uiState.value.messages.map { msg ->
+                            if (msg.id == event.messageId) {
+                                val updatedReactions = if (event.action == "added") {
+                                    // Add reaction if not already present from this user
+                                    if (msg.reactions.none { it.userId == event.from && it.emoji == event.emoji }) {
+                                        msg.reactions + Reaction(
+                                            userId = event.from,
+                                            emoji = event.emoji,
+                                            createdAt = Instant.now().toString()
+                                        )
+                                    } else msg.reactions
+                                } else {
+                                    // Remove reaction
+                                    msg.reactions.filter { !(it.userId == event.from && it.emoji == event.emoji) }
+                                }
+                                msg.copy(reactions = updatedReactions)
+                            } else msg
+                        }
+                        _uiState.value = _uiState.value.copy(messages = updatedMessages)
                     }
                 }
             }
@@ -183,7 +276,8 @@ class ChatViewModel(
                     Log.d(TAG, "Message sent successfully: ${message.id}")
                     _uiState.value = _uiState.value.copy(
                         messages = _uiState.value.messages + message,
-                        isSending = false
+                        isSending = false,
+                        shouldScrollToBottom = true
                     )
                     chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                 },
@@ -290,7 +384,8 @@ class ChatViewModel(
                     Log.d(TAG, "Audio message sent successfully: ${message.id}")
                     _uiState.value = _uiState.value.copy(
                         messages = _uiState.value.messages + message,
-                        isSending = false
+                        isSending = false,
+                        shouldScrollToBottom = true
                     )
                     chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                 },
@@ -355,7 +450,8 @@ class ChatViewModel(
                         Log.d(TAG, "Image uploaded successfully: ${message.id}")
                         _uiState.value = _uiState.value.copy(
                             messages = _uiState.value.messages + message,
-                            isUploadingImage = false
+                            isUploadingImage = false,
+                            shouldScrollToBottom = true
                         )
                         chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                         clearSelectedImage()

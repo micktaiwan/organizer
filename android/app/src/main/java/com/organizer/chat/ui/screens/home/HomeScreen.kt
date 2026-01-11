@@ -102,6 +102,7 @@ fun HomeScreen(
                         tokenManager = tokenManager,
                         authRepository = authRepository,
                         appPreferences = appPreferences,
+                        chatService = chatService,
                         onRoomClick = onRoomClick,
                         onSettingsClick = onSettingsClick,
                         onLogout = onLogout

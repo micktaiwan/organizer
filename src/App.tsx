@@ -24,6 +24,7 @@ import { ServerConfigScreen } from "./components/ServerConfig/ServerConfigScreen
 import { RoomList } from "./components/Chat/RoomList";
 import { RoomMessaging } from "./components/Chat/RoomMessaging";
 import { RoomMembers } from "./components/Chat/RoomMembers";
+import { CreateRoomModal } from "./components/Chat/CreateRoomModal";
 import { CallOverlay } from "./components/Call/CallOverlay";
 import { IncomingCallModal } from "./components/Call/IncomingCallModal";
 // import { ContactModal } from "./components/Contact/ContactModal";
@@ -44,6 +45,9 @@ function App() {
   // TODO: Implement contact management in room context
   // const [showContactsModal, setShowContactsModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [createRoomError, setCreateRoomError] = useState<string | null>(null);
   // TODO: Implement contact editing in room context
   // const [editingContact, setEditingContact] = useState<Contact | null>(null);
   // const [newContactInitialName, setNewContactInitialName] = useState("");
@@ -69,6 +73,19 @@ function App() {
     setUserIsMuted(isMuted);
   };
 
+  const handleCreateRoom = async (name: string) => {
+    setIsCreatingRoom(true);
+    setCreateRoomError(null);
+    try {
+      await createRoom(name);
+      setShowCreateRoomModal(false);
+    } catch (error) {
+      setCreateRoomError(error instanceof Error ? error.message : 'Erreur lors de la creation');
+    } finally {
+      setIsCreatingRoom(false);
+    }
+  };
+
   // Room and messaging
   const {
     rooms,
@@ -81,6 +98,9 @@ function App() {
     deleteMessage,
     reactToMessage,
     selectRoom,
+    createRoom,
+    deleteRoom,
+    leaveRoom,
   } = useRooms({ userId: user?.id, username });
 
   const addCallSystemMessage = (type: "missed-call" | "rejected-call" | "ended-call") => {
@@ -364,7 +384,11 @@ function App() {
         <RoomList
           rooms={rooms}
           currentRoomId={currentRoomId}
+          currentUserId={user?.id}
           onSelectRoom={selectRoom}
+          onCreateRoom={() => setShowCreateRoomModal(true)}
+          onDeleteRoom={deleteRoom}
+          onLeaveRoom={leaveRoom}
           isLoading={isLoadingRooms}
         />
 
@@ -528,6 +552,18 @@ function App() {
 
       {showAdminPanel && (
         <AdminPanel onClose={() => setShowAdminPanel(false)} />
+      )}
+
+      {showCreateRoomModal && (
+        <CreateRoomModal
+          isLoading={isCreatingRoom}
+          error={createRoomError}
+          onSubmit={handleCreateRoom}
+          onCancel={() => {
+            setShowCreateRoomModal(false);
+            setCreateRoomError(null);
+          }}
+        />
       )}
     </main>
   );

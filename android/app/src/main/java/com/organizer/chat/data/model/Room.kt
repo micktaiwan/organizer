@@ -34,3 +34,8 @@ data class RoomsResponse(
 data class RoomResponse(
     val room: Room
 )
+
+data class CreateRoomRequest(
+    val name: String,
+    val type: String = "public"
+)
