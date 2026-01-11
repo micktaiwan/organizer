@@ -166,6 +166,7 @@ data class UsersSearchResponse(
 data class UpdateStatusRequest(
     val status: String? = null,
     val statusMessage: String? = null,
+    val expiresAt: String? = null,
     val isMuted: Boolean? = null
 )
 
@@ -177,5 +178,6 @@ data class StatusUpdateResponse(
 data class StatusUser(
     val status: String,
     val statusMessage: String?,
+    val statusExpiresAt: String?,
     val isMuted: Boolean
 )

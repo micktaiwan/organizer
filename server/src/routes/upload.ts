@@ -170,7 +170,7 @@ router.post('/image', upload.single('image'), async (req: AuthRequest, res: Resp
     });
 
     // Populate sender info
-    await message.populate('senderId', 'username displayName isOnline');
+    await message.populate('senderId', 'username displayName isOnline status statusMessage');
 
     // Return message (format expected by client)
     res.status(201).json({

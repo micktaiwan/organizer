@@ -151,11 +151,13 @@ class ChatViewModel(
                         // Check if this message already exists (e.g., we sent it ourselves)
                         val messageExists = _uiState.value.messages.any { it.id == event.messageId }
                         if (!messageExists) {
-                            // Determine message type
-                            val messageType = when {
-                                !event.audioUrl.isNullOrEmpty() -> "audio"
-                                !event.imageUrl.isNullOrEmpty() -> "image"
-                                else -> "text"
+                            // Use type from event, fallback to detection from URLs
+                            val messageType = event.type.ifEmpty {
+                                when {
+                                    !event.audioUrl.isNullOrEmpty() -> "audio"
+                                    !event.imageUrl.isNullOrEmpty() -> "image"
+                                    else -> "text"
+                                }
                             }
 
                             // Construct the message from the event

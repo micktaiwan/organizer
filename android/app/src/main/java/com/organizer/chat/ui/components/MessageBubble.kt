@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
@@ -57,6 +58,7 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.ui.text.style.TextAlign
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.CharcoalLight
+import com.organizer.chat.ui.screens.location.getStatusColor
 
 // Fixed colors for message bubbles (readable on both light/dark backgrounds)
 private val MessageTextColor = androidx.compose.ui.graphics.Color(0xFF1A1A1A)
@@ -74,7 +76,13 @@ fun MessageBubble(
 ) {
     // System messages get special rendering
     if (message.type == "system") {
-        SystemMessageContent(message.content, message.createdAt)
+        SystemMessageContent(
+            content = message.content,
+            createdAt = message.createdAt,
+            reactions = message.reactions,
+            currentUserId = currentUserId,
+            onReact = onReact
+        )
         return
     }
 
@@ -94,14 +102,40 @@ fun MessageBubble(
             .padding(horizontal = 8.dp, vertical = 2.dp),
         horizontalAlignment = if (isMyMessage) Alignment.End else Alignment.Start
     ) {
-        // Show sender name for received messages
-        if (!isMyMessage) {
+        // Show sender name with status indicator for all messages
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(
+                start = if (isMyMessage) 0.dp else 8.dp,
+                end = if (isMyMessage) 8.dp else 0.dp,
+                bottom = 2.dp
+            )
+        ) {
+            // Status indicator dot
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(
+                        color = getStatusColor(message.senderId.status),
+                        shape = CircleShape
+                    )
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            // Sender name
             Text(
                 text = message.senderId.displayName,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)
+                color = AccentBlue
             )
+            // Status message if present
+            message.senderId.statusMessage?.let { statusMsg ->
+                Text(
+                    text = " · $statusMsg",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    maxLines = 1
+                )
+            }
         }
 
         Surface(
@@ -222,7 +256,15 @@ private fun TextMessageContent(content: String) {
 }
 
 @Composable
-private fun SystemMessageContent(content: String, createdAt: String) {
+private fun SystemMessageContent(
+    content: String,
+    createdAt: String,
+    reactions: List<Reaction> = emptyList(),
+    currentUserId: String? = null,
+    onReact: ((String) -> Unit)? = null
+) {
+    var showReactionPicker by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -238,24 +280,34 @@ private fun SystemMessageContent(content: String, createdAt: String) {
                 modifier = Modifier.padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Campaign,
-                        contentDescription = null,
-                        tint = AccentBlue,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = content,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.9f),
-                        textAlign = TextAlign.Center
+                // Header with icon
+                Icon(
+                    imageVector = Icons.Default.Campaign,
+                    contentDescription = null,
+                    tint = AccentBlue,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                // Content aligned left
+                Text(
+                    text = content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.9f),
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Reactions
+                if (reactions.isNotEmpty() || onReact != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ReactionBar(
+                        reactions = reactions,
+                        currentUserId = currentUserId,
+                        onReact = { emoji -> onReact?.invoke(emoji) },
+                        onShowPicker = { showReactionPicker = true }
                     )
                 }
+
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = formatTime(createdAt),
@@ -264,6 +316,17 @@ private fun SystemMessageContent(content: String, createdAt: String) {
                 )
             }
         }
+    }
+
+    // Reaction picker dialog
+    if (showReactionPicker) {
+        ReactionPickerDialog(
+            onReact = { emoji ->
+                onReact?.invoke(emoji)
+                showReactionPicker = false
+            },
+            onDismiss = { showReactionPicker = false }
+        )
     }
 }
 

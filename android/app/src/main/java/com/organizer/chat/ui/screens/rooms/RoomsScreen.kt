@@ -69,14 +69,10 @@ fun RoomsContent(
     val viewModel = remember { RoomsViewModel(roomRepository, tokenManager, authRepository) }
     val uiState by viewModel.uiState.collectAsState()
 
-    // Track last message timestamps for sorting (persists across recompositions)
-    var lastMessageAt by remember { mutableStateOf(RoomsViewModel.lastMessageTimestamps.toMap()) }
-
-    // Observe new messages to update lastMessageAt
+    // Observe new messages to refresh room list (for updated sorting)
     LaunchedEffect(chatService) {
-        chatService?.messages?.collect { event ->
-            RoomsViewModel.lastMessageTimestamps[event.roomId] = System.currentTimeMillis()
-            lastMessageAt = RoomsViewModel.lastMessageTimestamps.toMap()
+        chatService?.messages?.collect { _ ->
+            viewModel.loadRooms()
         }
     }
 
@@ -104,19 +100,8 @@ fun RoomsContent(
         }
     }
 
-    // Sort rooms by lastMessageAt (most recent first), then by updatedAt from server
-    val sortedRooms = remember(uiState.rooms, lastMessageAt) {
-        uiState.rooms.sortedByDescending { room ->
-            lastMessageAt[room.id] ?: room.updatedAt?.let {
-                try {
-                    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
-                        .parse(it.substringBefore("."))?.time
-                } catch (e: Exception) {
-                    null
-                }
-            } ?: 0L
-        }
-    }
+    // Rooms are already sorted by lastMessageAt from the server
+    val sortedRooms = uiState.rooms
 
     // Handle navigation after room creation
     LaunchedEffect(uiState.createdRoom) {

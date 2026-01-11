@@ -78,13 +78,52 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
 
     return (
       <div className="system-message">
-        <span className={`system-message-icon ${msg.systemMessageType || 'announcement'}`}>
-          {msg.systemMessageType === "missed-call" && <PhoneOff size={16} />}
-          {msg.systemMessageType === "rejected-call" && <PhoneOff size={16} />}
-          {msg.systemMessageType === "ended-call" && <Phone size={16} />}
-          {!isCallMessage && <Megaphone size={16} />}
-        </span>
-        <span className="system-message-text">{msg.text || msg.content}</span>
+        <div className="system-message-header">
+          <span className={`system-message-icon ${msg.systemMessageType || 'announcement'}`}>
+            {msg.systemMessageType === "missed-call" && <PhoneOff size={16} />}
+            {msg.systemMessageType === "rejected-call" && <PhoneOff size={16} />}
+            {msg.systemMessageType === "ended-call" && <Phone size={16} />}
+            {!isCallMessage && <Megaphone size={16} />}
+          </span>
+          {isCallMessage && <span className="system-message-text">{msg.text || msg.content}</span>}
+        </div>
+        {!isCallMessage && <span className="system-message-text">{msg.text || msg.content}</span>}
+        {/* Reactions on system messages */}
+        {msg.serverMessageId && (
+          <div className="reaction-bar system-message-reactions">
+            {aggregatedReactions.map((r) => (
+              <button
+                key={r.emoji}
+                className={`reaction-chip ${r.userIds.includes(currentUserId || '') ? 'active' : ''}`}
+                onClick={() => handleReact(r.emoji)}
+              >
+                {r.emoji} {r.count}
+              </button>
+            ))}
+            <div className="reaction-add-container">
+              <button
+                className="reaction-add"
+                onClick={() => setShowReactionPicker(!showReactionPicker)}
+                title="Ajouter une réaction"
+              >
+                <SmilePlus size={14} />
+              </button>
+              {showReactionPicker && (
+                <div className="reaction-picker">
+                  {ALLOWED_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      className="reaction-picker-emoji"
+                      onClick={() => handleReact(emoji)}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <span className="system-message-time">
           {formatMessageTimestamp(msg.timestamp)}
         </span>

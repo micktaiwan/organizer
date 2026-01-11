@@ -233,3 +233,22 @@ export APK_ADMIN_TOKEN=$(./get-token.sh username password)
     -H "Content-Type: application/json" \
     -d '{"username": "xxx", "password": "xxx"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])"
   ```
+
+### Send Announcement to Lobby
+
+Use the dedicated script that handles JSON encoding properly (avoids escaping issues with curl):
+
+```bash
+cd server
+./send-announcement.sh "🚀 Nouvelle version X.Y.Z disponible !
+
+• Feature 1
+• Feature 2
+
+Mettez à jour depuis les Paramètres."
+```
+
+**Important**:
+- Requires `server/.credentials` file with `ADMIN_USERNAME` and `ADMIN_PASSWORD`
+- The script uses Python's `urllib` for proper JSON encoding (no shell escaping issues)
+- System messages appear with a megaphone icon in the chat

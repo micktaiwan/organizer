@@ -14,6 +14,7 @@ export interface IRoom extends Document {
   members: IRoomMember[];
   createdBy: Types.ObjectId;
   isLobby: boolean;
+  lastMessageAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -57,6 +58,10 @@ const RoomSchema = new Schema<IRoom>(
       type: Boolean,
       default: false,
     },
+    lastMessageAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -66,6 +71,7 @@ const RoomSchema = new Schema<IRoom>(
 RoomSchema.index({ type: 1, isLobby: 1 });
 RoomSchema.index({ 'members.userId': 1 });
 RoomSchema.index({ createdBy: 1 });
+RoomSchema.index({ lastMessageAt: -1 });
 
 RoomSchema.index({ isLobby: 1 }, { unique: true, partialFilterExpression: { isLobby: true } });
 

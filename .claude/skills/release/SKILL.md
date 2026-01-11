@@ -11,6 +11,28 @@ This skill handles the complete release process for the Organizer app.
 
 **Important**: This analyzes UNCOMMITTED changes (staged + unstaged), not commits since a tag. The user's workflow is to make changes, then run /release to analyze, commit, and publish.
 
+## Optional Arguments
+
+The user can pass arguments after `/release` to customize the release:
+
+```
+/release <comments or instructions>
+```
+
+### Supported customizations
+
+| Example | Effect |
+|---------|--------|
+| `/release bump to 1.3.0` | Use version 1.3.0 instead of auto-incrementing patch |
+| `/release minor bump` | Increment minor version (1.2.1 → 1.3.0) |
+| `/release major bump` | Increment major version (1.2.1 → 2.0.0) |
+| `/release grosse release avec plein de features` | Use this context to enrich release notes |
+
+When arguments are provided:
+- **Version override**: If a specific version is mentioned (e.g., "1.3.0", "bump to 2.0"), use that version instead of auto-increment
+- **Context**: Use any descriptive text to better understand and describe the changes in release notes
+- **Bump type**: "minor" or "major" keywords trigger appropriate version increment
+
 ## Instructions
 
 ### Step 1: Analyze Uncommitted Changes
@@ -24,12 +46,12 @@ If there are no uncommitted changes, inform the user and stop.
 
 ### Step 2: Generate Release Notes
 
-Based on your analysis of the actual code changes (not just file names), write concise release notes in French that describe:
-- New features added
+Based on your analysis of the actual code changes (not just file names), write release notes in French that describe:
+- New features added (user-visible functionality)
 - Bugs fixed
-- Improvements made
+- Improvements made (UX improvements, performance, etc.)
 
-Keep it short (2-3 bullet points max). Be specific about what changed.
+Be specific about what changed. Include all significant changes - the announcement message will use the same content as the release notes.
 
 ### Step 3: Show Summary and Get Confirmation
 
@@ -75,31 +97,14 @@ cd server && ./upload-apk.sh ../android/app/build/outputs/apk/debug/app-debug.ap
 
 ### Step 8: Send Announcement to Lobby
 
-1. Get auth credentials from `server/.credentials` (source it)
-2. Login to get JWT token
-3. Get Lobby room ID
-4. Send system message with announcement
+Use the dedicated script that handles JSON encoding properly:
 
 ```bash
-# Source credentials
-source server/.credentials
+cd server && ./send-announcement.sh "🚀 Nouvelle version <version> disponible !
 
-# Get token
-TOKEN=$(curl -s -X POST "http://51.210.150.25:3001/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"username\": \"$ADMIN_USERNAME\", \"password\": \"$ADMIN_PASSWORD\"}" | \
-    python3 -c "import sys,json; print(json.load(sys.stdin).get('token', ''))")
+<same content as release notes>
 
-# Get Lobby ID
-LOBBY_ID=$(curl -s -X GET "http://51.210.150.25:3001/rooms" \
-    -H "Authorization: Bearer $TOKEN" | \
-    python3 -c "import sys,json; rooms=json.load(sys.stdin); print(next((r['_id'] for r in rooms if r.get('isLobby')), ''))")
-
-# Send message
-curl -s -X POST "http://51.210.150.25:3001/messages" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{\"roomId\": \"$LOBBY_ID\", \"type\": \"system\", \"content\": \"<announcement>\"}"
+Mettez à jour depuis les Paramètres."
 ```
 
 Ask user if they want to send the announcement before sending.

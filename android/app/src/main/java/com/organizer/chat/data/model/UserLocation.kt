@@ -11,13 +11,23 @@ data class UserLocation(
     val updatedAt: String?
 )
 
+data class AppVersion(
+    val versionName: String,
+    val versionCode: Int,
+    val updatedAt: String?
+)
+
 data class UserWithLocation(
     @SerializedName("_id")
     val id: String,
     val username: String,
     val displayName: String,
     val isOnline: Boolean,
-    val location: UserLocation?
+    val location: UserLocation?,
+    val appVersion: AppVersion?,
+    val status: String = "available",
+    val statusMessage: String? = null,
+    val statusExpiresAt: String? = null
 )
 
 // API Responses
@@ -30,7 +40,7 @@ data class LocationUpdateResponse(
     val location: UserLocation?
 )
 
-// API Request
+// API Requests
 data class UpdateLocationRequest(
     val lat: Double,
     val lng: Double,
@@ -38,3 +48,4 @@ data class UpdateLocationRequest(
     val city: String?,
     val country: String?
 )
+

@@ -24,7 +24,7 @@ import com.organizer.chat.util.TokenManager
 enum class HomeTab {
     CONVERSATIONS,
     NOTES,
-    LOCATION
+    USERS
 }
 
 @Composable
@@ -77,15 +77,15 @@ fun HomeScreen(
                     label = { Text("Notes") }
                 )
                 NavigationBarItem(
-                    selected = selectedTab == HomeTab.LOCATION,
-                    onClick = { selectedTabIndex = HomeTab.LOCATION.ordinal },
+                    selected = selectedTab == HomeTab.USERS,
+                    onClick = { selectedTabIndex = HomeTab.USERS.ordinal },
                     icon = {
                         Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = "Localisations"
+                            imageVector = Icons.Default.People,
+                            contentDescription = "Users"
                         )
                     },
-                    label = { Text("Positions") }
+                    label = { Text("Users") }
                 )
             }
         }
@@ -117,7 +117,7 @@ fun HomeScreen(
                         onSettingsClick = onSettingsClick
                     )
                 }
-                HomeTab.LOCATION -> {
+                HomeTab.USERS -> {
                     LocationScreen(
                         chatService = chatService,
                         viewModel = locationViewModel

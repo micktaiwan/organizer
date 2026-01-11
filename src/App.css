@@ -865,11 +865,21 @@ button.copied {
 /* System messages (call indicators) */
 .system-message {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
   margin: 0.5rem auto;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  max-width: 80%;
+}
+
+.system-message-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .system-message-icon {
@@ -894,7 +904,7 @@ button.copied {
   color: #999;
   font-style: italic;
   white-space: pre-line;
-  text-align: center;
+  text-align: left;
 }
 
 .system-message-time {
