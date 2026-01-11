@@ -23,6 +23,7 @@ import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.RoomRepository
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.components.CreateRoomDialog
+import com.organizer.chat.ui.theme.CharcoalLight
 import com.organizer.chat.ui.theme.OnlineGreen
 import com.organizer.chat.util.AppPreferences
 import com.organizer.chat.util.TokenManager
@@ -267,16 +268,46 @@ fun RoomsContent(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center
                                 )
-                                Text(
-                                    text = buildString {
-                                        append("v$versionName")
-                                        if (!currentVersionDate.isNullOrEmpty()) append(" ($currentVersionDate)")
-                                        if (!currentVersionNotes.isNullOrEmpty()) append("\n$currentVersionNotes")
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    textAlign = TextAlign.Center
-                                )
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    shape = MaterialTheme.shapes.medium,
+                                    color = CharcoalLight
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "Version actuelle",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "v$versionName",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (!currentVersionDate.isNullOrEmpty()) {
+                                            Text(
+                                                text = currentVersionDate,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (!currentVersionNotes.isNullOrEmpty()) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = currentVersionNotes,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
+                                }
 
                                 // Version history section
                                 if (versionHistory.isNotEmpty()) {

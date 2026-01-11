@@ -8,6 +8,8 @@ import android.util.Base64
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
@@ -25,8 +27,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
@@ -48,6 +53,10 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.ui.text.style.TextAlign
+import com.organizer.chat.ui.theme.AccentBlue
+import com.organizer.chat.ui.theme.CharcoalLight
 
 // Fixed colors for message bubbles (readable on both light/dark backgrounds)
 private val MessageTextColor = androidx.compose.ui.graphics.Color(0xFF1A1A1A)
@@ -63,6 +72,12 @@ fun MessageBubble(
     currentUserId: String? = null,
     onReact: ((String) -> Unit)? = null
 ) {
+    // System messages get special rendering
+    if (message.type == "system") {
+        SystemMessageContent(message.content, message.createdAt)
+        return
+    }
+
     var showReactionPicker by remember { mutableStateOf(false) }
 
     val bubbleShape = if (isMyMessage) {
@@ -207,6 +222,52 @@ private fun TextMessageContent(content: String) {
 }
 
 @Composable
+private fun SystemMessageContent(content: String, createdAt: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp, horizontal = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = CharcoalLight,
+            shadowElevation = 1.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Campaign,
+                        contentDescription = null,
+                        tint = AccentBlue,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.9f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = formatTime(createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.5f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun AudioMessageContent(base64Content: String, messageId: String) {
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
@@ -341,6 +402,9 @@ private fun FullscreenImageDialog(
     imageUrl: String,
     onDismiss: () -> Unit
 ) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -352,8 +416,49 @@ private fun FullscreenImageDialog(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
-                .clickable { onDismiss() }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onDoubleTap = {
+                            // Double tap to reset zoom or zoom in
+                            if (scale > 1f) {
+                                scale = 1f
+                                offset = Offset.Zero
+                            } else {
+                                scale = 2.5f
+                            }
+                        },
+                        onTap = {
+                            // Single tap to close only if not zoomed
+                            if (scale <= 1f) {
+                                onDismiss()
+                            }
+                        }
+                    )
+                }
         ) {
+            val imageModifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, 5f)
+                        if (scale > 1f) {
+                            val maxOffset = (scale - 1f) * size.width / 2
+                            offset = Offset(
+                                x = (offset.x + pan.x).coerceIn(-maxOffset, maxOffset),
+                                y = (offset.y + pan.y).coerceIn(-maxOffset, maxOffset)
+                            )
+                        } else {
+                            offset = Offset.Zero
+                        }
+                    }
+                }
+                .graphicsLayer(
+                    scaleX = scale,
+                    scaleY = scale,
+                    translationX = offset.x,
+                    translationY = offset.y
+                )
+
             if (imageUrl.startsWith("data:")) {
                 // Base64 data URL
                 val base64Data = imageUrl.substringAfter(",")
@@ -369,7 +474,7 @@ private fun FullscreenImageDialog(
                         Image(
                             bitmap = bitmap.asImageBitmap(),
                             contentDescription = "Image fullscreen",
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = imageModifier,
                             contentScale = ContentScale.Fit
                         )
                     }
@@ -379,7 +484,7 @@ private fun FullscreenImageDialog(
                 AsyncImage(
                     model = imageUrl,
                     contentDescription = "Image fullscreen",
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = imageModifier,
                     contentScale = ContentScale.Fit
                 )
             }

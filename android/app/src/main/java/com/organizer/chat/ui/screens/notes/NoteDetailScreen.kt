@@ -32,6 +32,11 @@ import com.organizer.chat.service.ChatService
 import com.organizer.chat.util.TokenManager
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
+import com.organizer.chat.ui.theme.AccentBlue
 
 // Note colors palette (dark theme - 6 colors)
 val noteColors = listOf(
@@ -77,6 +82,8 @@ fun NoteDetailScreen(
     var showTypeSelector by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    var showCopySuccess by remember { mutableStateOf(false) }
 
     // Show error in snackbar
     LaunchedEffect(errorMessage) {
@@ -86,6 +93,17 @@ fun NoteDetailScreen(
                 duration = SnackbarDuration.Long
             )
             errorMessage = null
+        }
+    }
+
+    // Show copy success message
+    LaunchedEffect(showCopySuccess) {
+        if (showCopySuccess) {
+            snackbarHostState.showSnackbar(
+                message = "Note copiee",
+                duration = SnackbarDuration.Short
+            )
+            showCopySuccess = false
         }
     }
 
@@ -197,6 +215,30 @@ fun NoteDetailScreen(
         return title.isNotBlank() || content.isNotBlank() || checklistItems.any { it.text.isNotBlank() }
     }
 
+    // Format note content for clipboard
+    fun formatNoteForCopy(): String {
+        return when (noteType) {
+            "note" -> content
+            "checklist" -> checklistItems
+                .filter { !it.checked }
+                .map { it.text }
+                .filter { it.isNotBlank() }
+                .joinToString("\n")
+            else -> ""
+        }
+    }
+
+    // Copy note to clipboard
+    fun copyNoteToClipboard() {
+        val textToCopy = formatNoteForCopy()
+        if (textToCopy.isNotBlank()) {
+            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("Note", textToCopy)
+            clipboardManager.setPrimaryClip(clip)
+            showCopySuccess = true
+        }
+    }
+
     // Save function (returns true if save was successful or not needed)
     suspend fun saveNoteAsync(): Boolean {
         // Don't save empty notes
@@ -303,6 +345,16 @@ fun NoteDetailScreen(
                     }
                 },
                 actions = {
+                    // Copy button
+                    IconButton(
+                        onClick = { copyNoteToClipboard() },
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = AccentBlue
+                        )
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Copier")
+                    }
+
                     // Color picker button
                     IconButton(onClick = { showColorPicker = true }) {
                         Icon(Icons.Default.Palette, contentDescription = "Couleur")

@@ -25,6 +25,7 @@ dist-ssr
 
 # Server scripts with potential secrets usage
 server/get-token.sh
+release.sh
 
 # APK files
 server/public/apk/*.apk
