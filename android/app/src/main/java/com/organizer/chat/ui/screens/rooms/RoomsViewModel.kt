@@ -31,11 +31,6 @@ class RoomsViewModel(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    companion object {
-        // Persist lastMessageAt timestamps across ViewModel recreations
-        val lastMessageTimestamps = mutableMapOf<String, Long>()
-    }
-
     private val _uiState = MutableStateFlow(RoomsUiState())
     val uiState: StateFlow<RoomsUiState> = _uiState.asStateFlow()
 

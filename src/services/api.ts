@@ -153,6 +153,7 @@ interface Room {
   isLobby: boolean;
   createdAt: string;
   updatedAt: string;
+  lastMessageAt?: string;
 }
 
 class ApiService {

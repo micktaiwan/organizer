@@ -29,6 +29,9 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _userOnline = MutableSharedFlow<UserStatusEvent>(replay = 1, extraBufferCapacity = 5)
     val userOnline: SharedFlow<UserStatusEvent> = _userOnline.asSharedFlow()
 
+    private val _userStatusChanged = MutableSharedFlow<UserStatusEvent>(replay = 1, extraBufferCapacity = 5)
+    val userStatusChanged: SharedFlow<UserStatusEvent> = _userStatusChanged.asSharedFlow()
+
     private val _userOffline = MutableSharedFlow<UserOfflineEvent>()
     val userOffline: SharedFlow<UserOfflineEvent> = _userOffline.asSharedFlow()
 
@@ -80,7 +83,7 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _roomDeleted = MutableSharedFlow<RoomDeletedEvent>(replay = 0, extraBufferCapacity = 10)
     val roomDeleted: SharedFlow<RoomDeletedEvent> = _roomDeleted.asSharedFlow()
 
-    fun connect() {
+    fun connect(versionName: String? = null, versionCode: Int? = null) {
         val token = tokenManager.getTokenSync()
         if (token == null) {
             Log.e(TAG, "Cannot connect: no token available")
@@ -88,8 +91,17 @@ class SocketManager(private val tokenManager: TokenManager) {
         }
 
         try {
+            val authMap = mutableMapOf("token" to token)
+
+            // Ajouter la version de l'app si fournie
+            if (versionName != null && versionCode != null) {
+                authMap["appVersionName"] = versionName
+                authMap["appVersionCode"] = versionCode.toString()
+                Log.d(TAG, "Connecting with app version: $versionName ($versionCode)")
+            }
+
             val options = IO.Options().apply {
-                auth = mapOf("token" to token)
+                auth = authMap
                 reconnection = true
                 reconnectionAttempts = 5
                 reconnectionDelay = 1000
@@ -134,6 +146,7 @@ class SocketManager(private val tokenManager: TokenManager) {
                         roomId = data.getString("roomId"),
                         messageId = data.getString("messageId"),
                         content = data.optString("content", ""),
+                        type = data.optString("type", "text"),
                         audioUrl = if (data.isNull("audioUrl")) null else data.optString("audioUrl"),
                         imageUrl = if (data.isNull("imageUrl")) null else data.optString("imageUrl")
                     )
@@ -149,12 +162,30 @@ class SocketManager(private val tokenManager: TokenManager) {
                     val event = UserStatusEvent(
                         userId = data.getString("userId"),
                         status = data.optString("status", "available"),
-                        statusMessage = data.optString("statusMessage", null),
+                        statusMessage = if (data.isNull("statusMessage")) null else data.optString("statusMessage"),
+                        statusExpiresAt = if (data.isNull("statusExpiresAt")) null else data.optString("statusExpiresAt"),
                         isMuted = data.optBoolean("isMuted", false)
                     )
                     _userOnline.tryEmit(event)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error parsing user:online", e)
+                }
+            }
+
+            on("user:status-changed") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = UserStatusEvent(
+                        userId = data.getString("userId"),
+                        status = data.optString("status", "available"),
+                        statusMessage = if (data.isNull("statusMessage")) null else data.optString("statusMessage"),
+                        statusExpiresAt = if (data.isNull("statusExpiresAt")) null else data.optString("statusExpiresAt"),
+                        isMuted = data.optBoolean("isMuted", false)
+                    )
+                    Log.d(TAG, "User status changed: ${event.userId} -> ${event.status} (${event.statusMessage})")
+                    _userStatusChanged.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing user:status-changed", e)
                 }
             }
 
@@ -486,6 +517,7 @@ data class NewMessageEvent(
     val roomId: String,
     val messageId: String,
     val content: String = "",
+    val type: String = "text",
     val audioUrl: String? = null,
     val imageUrl: String? = null
 )
@@ -494,6 +526,7 @@ data class UserStatusEvent(
     val userId: String,
     val status: String,
     val statusMessage: String?,
+    val statusExpiresAt: String?,
     val isMuted: Boolean
 )
 

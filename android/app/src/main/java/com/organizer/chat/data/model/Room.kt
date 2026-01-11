@@ -10,7 +10,8 @@ data class Room(
     val members: List<RoomMember> = emptyList(),
     val isLobby: Boolean = false,
     val createdAt: String? = null,
-    val updatedAt: String? = null
+    val updatedAt: String? = null,
+    val lastMessageAt: String? = null
 )
 
 data class RoomMember(

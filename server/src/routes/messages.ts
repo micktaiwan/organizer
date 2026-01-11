@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { Message, Room, ALLOWED_EMOJIS } from '../models/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { emitNewMessage } from '../utils/socketEmit.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -63,7 +64,21 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
     });
 
     await message.save();
-    await message.populate('senderId', 'username displayName');
+    await message.populate('senderId', 'username displayName status statusMessage');
+
+    // Update room's lastMessageAt for sorting
+    await Room.findByIdAndUpdate(data.roomId, { lastMessageAt: new Date() });
+
+    // Emit socket event so connected clients receive the message
+    const io = req.app.get('io');
+    if (io) {
+      await emitNewMessage({
+        io,
+        roomId: data.roomId,
+        userId: req.userId!,
+        message: message as any,
+      });
+    }
 
     res.status(201).json({ message });
   } catch (error) {
@@ -149,7 +164,7 @@ router.post('/:id/react', async (req: AuthRequest, res: Response): Promise<void>
     }
 
     await message.save();
-    await message.populate('senderId', 'username displayName');
+    await message.populate('senderId', 'username displayName status statusMessage');
     await message.populate('reactions.userId', 'username displayName');
 
     res.json({

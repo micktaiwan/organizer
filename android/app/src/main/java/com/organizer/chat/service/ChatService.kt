@@ -86,8 +86,32 @@ class ChatService : Service() {
 
         // Only connect if user is logged in
         if (tokenManager.getTokenSync() != null) {
-            socketManager.connect()
+            socketManager.connect(getVersionName(), getVersionCode())
             observeSocketMessages()
+        }
+    }
+
+    private fun getVersionCode(): Int {
+        return try {
+            val packageInfo = packageManager.getPackageInfo(packageName, 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode.toInt()
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting version code", e)
+            0
+        }
+    }
+
+    private fun getVersionName(): String {
+        return try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "unknown"
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting version name", e)
+            "unknown"
         }
     }
 
@@ -210,7 +234,7 @@ class ChatService : Service() {
     fun reconnectIfNeeded() {
         if (!socketManager.isConnected() && tokenManager.getTokenSync() != null) {
             Log.d(TAG, "Reconnecting socket...")
-            socketManager.connect()
+            socketManager.connect(getVersionName(), getVersionCode())
         }
     }
 

@@ -9,6 +9,12 @@ export interface IUserLocation {
   updatedAt: Date;
 }
 
+export interface IAppVersion {
+  versionName: string;
+  versionCode: number;
+  updatedAt: Date;
+}
+
 export interface IUser extends Document {
   username: string;
   displayName: string;
@@ -19,9 +25,11 @@ export interface IUser extends Document {
   isAdmin: boolean;
   status: 'available' | 'busy' | 'away' | 'dnd';
   statusMessage: string | null;
+  statusExpiresAt: Date | null;
   isMuted: boolean;
   lastSeen: Date;
   location?: IUserLocation | null;
+  appVersion?: IAppVersion | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -76,6 +84,10 @@ const UserSchema = new Schema<IUser>(
       default: null,
       maxlength: 100,
     },
+    statusExpiresAt: {
+      type: Date,
+      default: null,
+    },
     isMuted: {
       type: Boolean,
       default: false,
@@ -91,6 +103,14 @@ const UserSchema = new Schema<IUser>(
         street: { type: String, default: null },
         city: { type: String, default: null },
         country: { type: String, default: null },
+        updatedAt: { type: Date, default: Date.now },
+      },
+      default: null,
+    },
+    appVersion: {
+      type: {
+        versionName: { type: String, required: true },
+        versionCode: { type: Number, required: true },
         updatedAt: { type: Date, default: Date.now },
       },
       default: null,

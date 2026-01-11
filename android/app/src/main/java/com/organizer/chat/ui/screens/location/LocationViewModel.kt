@@ -4,9 +4,12 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.organizer.chat.data.api.ApiClient
+import com.organizer.chat.data.api.UpdateStatusRequest
 import com.organizer.chat.data.model.UserWithLocation
 import com.organizer.chat.data.repository.LocationRepository
 import com.organizer.chat.data.socket.SocketManager
+import com.organizer.chat.util.TokenManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +20,11 @@ data class LocationUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val isRefreshing: Boolean = false,
-    val isUpdatingMyLocation: Boolean = false
+    val isUpdatingMyLocation: Boolean = false,
+    val myStatus: String = "available",
+    val myStatusMessage: String? = null,
+    val myStatusExpiresAt: String? = null,
+    val isUpdatingStatus: Boolean = false
 )
 
 class LocationViewModel(
@@ -26,6 +33,8 @@ class LocationViewModel(
 ) : ViewModel() {
 
     private val locationRepository = LocationRepository(context)
+    private val tokenManager = TokenManager(context)
+    private val currentUserId: String? = tokenManager.getUserIdSync()
 
     private val _uiState = MutableStateFlow(LocationUiState())
     val uiState: StateFlow<LocationUiState> = _uiState.asStateFlow()
@@ -38,6 +47,7 @@ class LocationViewModel(
 
     private fun observeSocketEvents() {
         socketManager?.let { manager ->
+            // Observe location updates
             viewModelScope.launch {
                 manager.userLocationUpdated.collect { event ->
                     // Update the specific user in the list or reload all
@@ -64,6 +74,24 @@ class LocationViewModel(
                     }
                 }
             }
+
+            // Observe status changes
+            viewModelScope.launch {
+                manager.userStatusChanged.collect { event ->
+                    Log.d("LocationViewModel", "Status changed for ${event.userId}: ${event.status} - ${event.statusMessage}")
+                    val currentUsers = _uiState.value.users.toMutableList()
+                    val existingIndex = currentUsers.indexOfFirst { it.id == event.userId }
+
+                    if (existingIndex >= 0) {
+                        currentUsers[existingIndex] = currentUsers[existingIndex].copy(
+                            status = event.status,
+                            statusMessage = event.statusMessage,
+                            statusExpiresAt = event.statusExpiresAt
+                        )
+                        _uiState.value = _uiState.value.copy(users = currentUsers)
+                    }
+                }
+            }
         }
     }
 
@@ -77,9 +105,16 @@ class LocationViewModel(
             val result = locationRepository.getUsersWithLocations()
             result.fold(
                 onSuccess = { users ->
+                    // Find current user's status
+                    val currentUser = currentUserId?.let { id ->
+                        users.find { it.id == id }
+                    }
                     _uiState.value = _uiState.value.copy(
                         users = users,
-                        isLoading = false
+                        isLoading = false,
+                        myStatus = currentUser?.status ?: _uiState.value.myStatus,
+                        myStatusMessage = currentUser?.statusMessage ?: _uiState.value.myStatusMessage,
+                        myStatusExpiresAt = currentUser?.statusExpiresAt ?: _uiState.value.myStatusExpiresAt
                     )
                 },
                 onFailure = { error ->
@@ -163,6 +198,50 @@ class LocationViewModel(
                 _uiState.value = _uiState.value.copy(isUpdatingMyLocation = false)
             }
         }
+    }
+
+    /**
+     * Met à jour le statut de l'utilisateur courant
+     */
+    fun updateStatus(status: String, message: String?, expiresAt: String?) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isUpdatingStatus = true)
+
+            try {
+                val response = ApiClient.getService().updateStatus(
+                    UpdateStatusRequest(
+                        status = status,
+                        statusMessage = message,
+                        expiresAt = expiresAt
+                    )
+                )
+
+                if (response.success) {
+                    val user = response.user
+                    _uiState.value = _uiState.value.copy(
+                        myStatus = user?.status ?: status,
+                        myStatusMessage = user?.statusMessage ?: message,
+                        isUpdatingStatus = false
+                    )
+                    Log.d("LocationViewModel", "Status updated: $status - $message")
+                    // Reload to see our own status update
+                    loadLocations()
+                } else {
+                    Log.e("LocationViewModel", "Failed to update status")
+                    _uiState.value = _uiState.value.copy(isUpdatingStatus = false)
+                }
+            } catch (e: Exception) {
+                Log.e("LocationViewModel", "Error updating status", e)
+                _uiState.value = _uiState.value.copy(isUpdatingStatus = false)
+            }
+        }
+    }
+
+    /**
+     * Efface le statut de l'utilisateur (reset to available, no message)
+     */
+    fun clearStatus() {
+        updateStatus("available", null, null)
     }
 
     override fun onCleared() {

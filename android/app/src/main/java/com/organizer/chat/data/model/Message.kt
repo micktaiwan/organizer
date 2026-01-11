@@ -26,7 +26,9 @@ data class MessageSender(
     @SerializedName("_id", alternate = ["id"])
     val id: String,
     val username: String,
-    val displayName: String
+    val displayName: String,
+    val status: String = "available",
+    val statusMessage: String? = null
 )
 
 data class MessagesResponse(

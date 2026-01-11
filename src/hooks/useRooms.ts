@@ -120,6 +120,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
             status: msg.status as 'sent' | 'delivered' | 'read',
             readBy: msg.readBy,
             reactions,
+            type: msg.type,
           };
         });
         setMessages(convertedMessages);
@@ -276,6 +277,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
           status: msg.status as 'sent' | 'delivered' | 'read',
           readBy: msg.readBy,
           reactions,
+          type: msg.type,
         };
       });
       setMessages(convertedMessages);

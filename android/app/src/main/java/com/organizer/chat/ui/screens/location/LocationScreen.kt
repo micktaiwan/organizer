@@ -5,9 +5,14 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,26 +21,36 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -47,16 +62,42 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.organizer.chat.data.model.UserWithLocation
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.worker.LocationUpdateWorker
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+
+// Status colors
+val StatusAvailable = Color(0xFF4CAF50)  // Green
+val StatusAway = Color(0xFFFFC107)       // Yellow
+val StatusBusy = Color(0xFFFF5722)       // Orange
+val StatusDnd = Color(0xFFF44336)        // Red
+
+fun getStatusColor(status: String): Color = when (status) {
+    "available" -> StatusAvailable
+    "away" -> StatusAway
+    "busy" -> StatusBusy
+    "dnd" -> StatusDnd
+    else -> StatusAvailable
+}
+
+fun getStatusLabel(status: String): String = when (status) {
+    "available" -> "Disponible"
+    "away" -> "Absent"
+    "busy" -> "Occupe"
+    "dnd" -> "Ne pas deranger"
+    else -> "Disponible"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +107,7 @@ fun LocationScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    var showStatusDialog by remember { mutableStateOf(false) }
 
     // Permission state
     var hasLocationPermission by remember {
@@ -105,10 +147,28 @@ fun LocationScreen(
         }
     }
 
+    // Status dialog
+    if (showStatusDialog) {
+        SetStatusDialog(
+            currentStatus = uiState.myStatus,
+            currentMessage = uiState.myStatusMessage,
+            currentExpiresAt = uiState.myStatusExpiresAt,
+            onDismiss = { showStatusDialog = false },
+            onSave = { status, message, expiresAt ->
+                viewModel.updateStatus(status, message, expiresAt)
+                showStatusDialog = false
+            },
+            onClear = {
+                viewModel.clearStatus()
+                showStatusDialog = false
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Localisations") },
+                title = { Text("Users") },
                 actions = {
                     IconButton(onClick = { viewModel.loadLocations() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Rafraichir")
@@ -120,6 +180,18 @@ fun LocationScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showStatusDialog = true },
+                containerColor = AccentBlue
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Definir mon statut",
+                    tint = Color.White
+                )
+            }
         }
     ) { paddingValues ->
         Box(
@@ -249,6 +321,12 @@ private fun EmptyContent(modifier: Modifier = Modifier) {
 
 @Composable
 fun UserLocationCard(user: UserWithLocation) {
+    val statusColor = getStatusColor(user.status)
+    val isExpired = user.statusExpiresAt?.let { isStatusExpired(it) } ?: false
+    val effectiveStatus = if (isExpired) "available" else user.status
+    val effectiveStatusMessage = if (isExpired) null else user.statusMessage
+    val effectiveStatusColor = getStatusColor(effectiveStatus)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -259,24 +337,76 @@ fun UserLocationCard(user: UserWithLocation) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
-            // Online indicator
-            Icon(
-                imageVector = if (user.isOnline) Icons.Default.Circle else Icons.Default.RadioButtonUnchecked,
-                contentDescription = if (user.isOnline) "En ligne" else "Hors ligne",
-                modifier = Modifier.size(12.dp),
-                tint = if (user.isOnline) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            // Status color indicator (dot)
+            Box(
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(effectiveStatusColor)
             )
 
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = user.displayName,
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = user.displayName,
+                        style = MaterialTheme.typography.titleMedium
+                    )
 
+                    // Online/Offline indicator
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (user.isOnline) "en ligne" else "hors ligne",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (user.isOnline) StatusAvailable else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+
+                    // Version badge
+                    user.appVersion?.let { version ->
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "v${version.versionName}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier
+                                .background(
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                // Status message
+                effectiveStatusMessage?.let { message ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    // Expiration time if applicable
+                    if (!isExpired) {
+                        user.statusExpiresAt?.let { expiresAt ->
+                            val timeLeft = formatTimeLeft(expiresAt)
+                            if (timeLeft != null) {
+                                Text(
+                                    text = "expire $timeLeft",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Location
                 user.location?.let { location ->
                     Spacer(modifier = Modifier.height(4.dp))
 
@@ -306,23 +436,47 @@ fun UserLocationCard(user: UserWithLocation) {
 
                     // Last update time
                     location.updatedAt?.let { timestamp ->
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = formatTimestamp(timestamp),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
-                } ?: run {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Position non disponible",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
                 }
             }
         }
+    }
+}
+
+private fun isStatusExpired(expiresAt: String): Boolean {
+    return try {
+        val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        parser.timeZone = TimeZone.getTimeZone("UTC")
+        val date = parser.parse(expiresAt) ?: return false
+        date.time <= System.currentTimeMillis()
+    } catch (e: Exception) {
+        false
+    }
+}
+
+private fun formatTimeLeft(expiresAt: String): String? {
+    return try {
+        val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        parser.timeZone = TimeZone.getTimeZone("UTC")
+        val date = parser.parse(expiresAt) ?: return null
+        val diff = date.time - System.currentTimeMillis()
+
+        if (diff <= 0) return null
+
+        when {
+            diff < 60_000 -> "dans < 1 min"
+            diff < 3600_000 -> "dans ${diff / 60_000} min"
+            diff < 86400_000 -> "dans ${diff / 3600_000}h"
+            else -> null
+        }
+    } catch (e: Exception) {
+        null
     }
 }
 
@@ -344,4 +498,203 @@ private fun formatTimestamp(isoTimestamp: String): String {
     } catch (e: Exception) {
         isoTimestamp
     }
+}
+
+// Status options
+private val statusOptions = listOf(
+    "available" to "Disponible",
+    "away" to "Absent",
+    "busy" to "Occupe",
+    "dnd" to "Ne pas deranger"
+)
+
+// Expiration options (in minutes, 0 = no expiration)
+private val expirationOptions = listOf(
+    0 to "Pas d'expiration",
+    30 to "30 min",
+    60 to "1h",
+    240 to "4h",
+    -1 to "Aujourd'hui"
+)
+
+// Calculate which expiration option to select based on expiration date
+private fun calculateExpirationOption(expiresAt: String?): Int {
+    if (expiresAt == null) return 0
+
+    try {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        sdf.timeZone = TimeZone.getTimeZone("UTC")
+        val expirationDate = sdf.parse(expiresAt) ?: return 0
+
+        val now = Date()
+        if (expirationDate.before(now)) return 0 // Already expired
+
+        val remainingMinutes = ((expirationDate.time - now.time) / 60000).toInt()
+
+        // Find the closest option
+        return when {
+            remainingMinutes <= 0 -> 0
+            remainingMinutes <= 45 -> 30      // ~30 min
+            remainingMinutes <= 120 -> 60     // ~1h
+            remainingMinutes <= 360 -> 240    // ~4h
+            else -> -1                         // Aujourd'hui or longer
+        }
+    } catch (e: Exception) {
+        return 0
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SetStatusDialog(
+    currentStatus: String,
+    currentMessage: String?,
+    currentExpiresAt: String?,
+    onDismiss: () -> Unit,
+    onSave: (status: String, message: String?, expiresAt: String?) -> Unit,
+    onClear: () -> Unit
+) {
+    val initialExpiration = remember(currentExpiresAt) { calculateExpirationOption(currentExpiresAt) }
+    var selectedStatus by remember(currentStatus) { mutableStateOf(currentStatus) }
+    var statusMessage by remember(currentMessage) { mutableStateOf(currentMessage ?: "") }
+    var selectedExpiration by remember(currentExpiresAt) { mutableStateOf(initialExpiration) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Definir mon statut") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Status selection
+                Text(
+                    text = "Disponibilite",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    statusOptions.forEach { (status, label) ->
+                        FilterChip(
+                            selected = selectedStatus == status,
+                            onClick = { selectedStatus = status },
+                            label = { Text(label) },
+                            leadingIcon = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(getStatusColor(status))
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = AccentBlue.copy(alpha = 0.2f),
+                                selectedLabelColor = AccentBlue
+                            )
+                        )
+                    }
+                }
+
+                // Message input
+                Text(
+                    text = "Message (optionnel)",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                OutlinedTextField(
+                    value = statusMessage,
+                    onValueChange = { if (it.length <= 100) statusMessage = it },
+                    placeholder = { Text("Que fais-tu ?") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        cursorColor = AccentBlue,
+                        focusedBorderColor = AccentBlue,
+                        unfocusedBorderColor = AccentBlue.copy(alpha = 0.5f)
+                    )
+                )
+                Text(
+                    text = "${statusMessage.length}/100",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.End)
+                )
+
+                // Expiration selection
+                Text(
+                    text = "Expiration",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    expirationOptions.forEach { (minutes, label) ->
+                        FilterChip(
+                            selected = selectedExpiration == minutes,
+                            onClick = { selectedExpiration = minutes },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = AccentBlue.copy(alpha = 0.2f),
+                                selectedLabelColor = AccentBlue
+                            )
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val expiresAt = calculateExpiresAt(selectedExpiration)
+                    onSave(
+                        selectedStatus,
+                        statusMessage.ifBlank { null },
+                        expiresAt
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+            ) {
+                Text("Enregistrer")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(
+                    onClick = onClear,
+                    colors = ButtonDefaults.textButtonColors(contentColor = StatusDnd)
+                ) {
+                    Text("Clear")
+                }
+                TextButton(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+                ) {
+                    Text("Annuler")
+                }
+            }
+        }
+    )
+}
+
+private fun calculateExpiresAt(minutes: Int): String? {
+    if (minutes == 0) return null // No expiration
+
+    val calendar = Calendar.getInstance()
+
+    if (minutes == -1) {
+        // "Aujourd'hui" = end of day (23:59:59)
+        calendar.set(Calendar.HOUR_OF_DAY, 23)
+        calendar.set(Calendar.MINUTE, 59)
+        calendar.set(Calendar.SECOND, 59)
+    } else {
+        calendar.add(Calendar.MINUTE, minutes)
+    }
+
+    val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+    formatter.timeZone = TimeZone.getTimeZone("UTC")
+    return formatter.format(calendar.time)
 }

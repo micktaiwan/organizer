@@ -29,7 +29,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     })
       .populate('createdBy', 'username displayName')
       .populate('members.userId', 'username displayName isOnline')
-      .sort({ updatedAt: -1 });
+      .sort({ lastMessageAt: -1, updatedAt: -1 });
 
     res.json({ rooms });
   } catch (error) {
@@ -336,7 +336,7 @@ router.get('/:roomId/messages', async (req: AuthRequest, res: Response): Promise
     const messages = await Message.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate('senderId', 'username displayName');
+      .populate('senderId', 'username displayName status statusMessage');
 
     res.json({ messages: messages.reverse() });
   } catch (error) {

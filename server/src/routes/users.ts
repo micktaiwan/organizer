@@ -38,15 +38,30 @@ router.get('/search', async (req: AuthRequest, res: Response): Promise<void> => 
   }
 });
 
-// GET /users/locations - Récupérer tous les utilisateurs avec leur position
+// GET /users/locations - Récupérer tous les utilisateurs avec leur position et statut
 // IMPORTANT: Cette route doit être AVANT /users/:id sinon "locations" sera interprété comme un id
 router.get('/locations', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const users = await User.find({ 'location.lat': { $exists: true } })
-      .select('username displayName isOnline location')
+      .select('username displayName isOnline location appVersion status statusMessage statusExpiresAt')
       .sort({ 'location.updatedAt': -1 });
 
-    res.json({ users });
+    const now = new Date();
+    const usersWithCheckedStatus = users.map((user) => {
+      const userObj = user.toObject();
+      // Vérifier si le statut a expiré
+      if (userObj.statusExpiresAt && new Date(userObj.statusExpiresAt) <= now) {
+        return {
+          ...userObj,
+          status: 'available',
+          statusMessage: null,
+          statusExpiresAt: null,
+        };
+      }
+      return userObj;
+    });
+
+    res.json({ users: usersWithCheckedStatus });
   } catch (error) {
     console.error('Get locations error:', error);
     res.status(500).json({ error: 'Erreur lors de la récupération des positions' });
@@ -75,19 +90,42 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
 // PUT /users/status - Mettre à jour son statut
 router.put('/status', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { status, statusMessage, isMuted } = req.body;
+    const { status, statusMessage, isMuted, expiresAt } = req.body;
 
-    // Validation
+    // Validation du statut
     const validStatuses = ['available', 'busy', 'away', 'dnd'];
     if (status && !validStatuses.includes(status)) {
       res.status(400).json({ error: 'Statut invalide' });
       return;
     }
 
+    // Validation de l'expiration
+    let statusExpiresAt: Date | null = null;
+    if (expiresAt !== undefined && expiresAt !== null) {
+      const expirationDate = new Date(expiresAt);
+      if (isNaN(expirationDate.getTime())) {
+        res.status(400).json({ error: 'Date d\'expiration invalide' });
+        return;
+      }
+      if (expirationDate <= new Date()) {
+        res.status(400).json({ error: 'La date d\'expiration doit être dans le futur' });
+        return;
+      }
+      statusExpiresAt = expirationDate;
+    }
+
     const updates: Record<string, unknown> = {};
-    if (status !== undefined) updates.status = status;
+    if (status !== undefined) {
+      updates.status = status;
+      // When setting to "available", clear message and expiration
+      if (status === 'available') {
+        updates.statusMessage = statusMessage ?? null;
+        updates.statusExpiresAt = statusExpiresAt ?? null;
+      }
+    }
     if (statusMessage !== undefined) updates.statusMessage = statusMessage;
     if (isMuted !== undefined) updates.isMuted = isMuted;
+    if (expiresAt !== undefined) updates.statusExpiresAt = statusExpiresAt;
 
     const user = await User.findByIdAndUpdate(req.userId, updates, {
       new: true,
@@ -106,11 +144,20 @@ router.put('/status', async (req: AuthRequest, res: Response): Promise<void> => 
         userId: req.userId,
         status: user.status,
         statusMessage: user.statusMessage,
+        statusExpiresAt: user.statusExpiresAt,
         isMuted: user.isMuted,
       });
     }
 
-    res.json({ success: true, user: { status: user.status, statusMessage: user.statusMessage, isMuted: user.isMuted } });
+    res.json({
+      success: true,
+      user: {
+        status: user.status,
+        statusMessage: user.statusMessage,
+        statusExpiresAt: user.statusExpiresAt,
+        isMuted: user.isMuted,
+      },
+    });
   } catch (error) {
     console.error('Update status error:', error);
     res.status(500).json({ error: 'Erreur lors de la mise à jour du statut' });

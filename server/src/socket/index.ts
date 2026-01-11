@@ -3,10 +3,13 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { User, Room, Message } from '../models/index.js';
 import { JwtPayload } from '../middleware/auth.js';
+import { emitNewMessage } from '../utils/socketEmit.js';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
   username?: string;
+  appVersionName?: string;
+  appVersionCode?: string;
 }
 
 export function setupSocket(httpServer: HttpServer): Server {
@@ -34,6 +37,11 @@ export function setupSocket(httpServer: HttpServer): Server {
       const decoded = jwt.verify(token, secret) as JwtPayload;
       socket.userId = decoded.userId;
       socket.username = decoded.username;
+
+      // Extraire la version de l'app (optionnel, envoyé par Android)
+      socket.appVersionName = socket.handshake.auth.appVersionName;
+      socket.appVersionCode = socket.handshake.auth.appVersionCode;
+
       next();
     } catch (error) {
       next(new Error('Token invalide'));
@@ -44,13 +52,26 @@ export function setupSocket(httpServer: HttpServer): Server {
     const userId = socket.userId!;
     console.log(`User connected: ${socket.username} (${userId})`);
 
+    // Préparer les données de mise à jour
+    const updateData: Record<string, unknown> = {
+      isOnline: true,
+      lastSeen: new Date(),
+    };
+
+    // Ajouter la version de l'app si fournie (Android)
+    if (socket.appVersionName && socket.appVersionCode) {
+      updateData.appVersion = {
+        versionName: socket.appVersionName,
+        versionCode: parseInt(socket.appVersionCode, 10),
+        updatedAt: new Date(),
+      };
+      console.log(`User ${socket.username} app version: ${socket.appVersionName} (${socket.appVersionCode})`);
+    }
+
     // Mettre à jour le statut online et récupérer le user avec ses infos de statut
     const user = await User.findByIdAndUpdate(
       userId,
-      {
-        isOnline: true,
-        lastSeen: new Date(),
-      },
+      updateData,
       { new: true }
     );
 
@@ -69,6 +90,7 @@ export function setupSocket(httpServer: HttpServer): Server {
       userId,
       status: user?.status,
       statusMessage: user?.statusMessage,
+      statusExpiresAt: user?.statusExpiresAt,
       isMuted: user?.isMuted,
     };
 
@@ -113,26 +135,19 @@ export function setupSocket(httpServer: HttpServer): Server {
     socket.on('message:notify', async (data: { roomId: string; messageId: string }) => {
       try {
         // Fetch message to include content in notification
-        const message = await Message.findById(data.messageId).populate('senderId', 'username displayName');
+        const message = await Message.findById(data.messageId).populate('senderId', 'username displayName status statusMessage');
 
         if (!message) {
           console.error(`Message ${data.messageId} not found for notification`);
           return;
         }
 
-        // Fetch room name
-        const room = await Room.findById(data.roomId);
-        const sender = message.senderId as any;
-
-        socket.to(`room:${data.roomId}`).emit('message:new', {
-          from: userId,
-          fromName: sender?.displayName || sender?.username || 'Utilisateur',
-          roomName: room?.name || 'Chat',
+        await emitNewMessage({
+          io,
+          socket,
           roomId: data.roomId,
-          messageId: data.messageId,
-          content: message.content || '',
-          audioUrl: message.type === 'audio' ? message.content : null,
-          imageUrl: message.type === 'image' ? message.content : null,
+          userId,
+          message: message as any,
         });
       } catch (error) {
         console.error('Error notifying message:', error);
