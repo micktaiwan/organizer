@@ -13,10 +13,14 @@ export interface Message {
   serverMessageId?: string; // MongoDB _id for server-synced messages
   text?: string;
   content?: string; // Alternative content field from server
-  type?: "text" | "image" | "audio" | "system"; // Message type from server
+  type?: "text" | "image" | "audio" | "system" | "file"; // Message type from server
   image?: string; // base64 data URL
-  caption?: string; // Optional caption for image messages
+  caption?: string; // Optional caption for image/file messages
   audio?: string; // base64 audio data URL for voice messages
+  fileUrl?: string; // URL for file messages
+  fileName?: string; // Original filename for file messages
+  fileSize?: number; // File size in bytes
+  mimeType?: string; // MIME type for file messages
   sender: "me" | "them";
   senderName?: string; // For multi-user rooms
   senderId?: string; // For identifying sender in rooms

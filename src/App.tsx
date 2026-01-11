@@ -39,6 +39,7 @@ function App() {
   const [inputMessage, setInputMessage] = useState("");
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [pendingImageBlob, setPendingImageBlob] = useState<Blob | null>(null);
+  const [pendingFile, setPendingFile] = useState<{ file: File; name: string; size: number } | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
 
   // Modals state
@@ -116,6 +117,7 @@ function App() {
     messages,
     setMessages,
     sendMessage,
+    sendFile,
     deleteMessage,
     reactToMessage,
     selectRoom,
@@ -347,6 +349,72 @@ function App() {
     }
   };
 
+  // File picker handler (non-image files)
+  const handleSelectFile = async () => {
+    try {
+      const filePath = await open({
+        multiple: false,
+        directory: false,
+        filters: [
+          {
+            name: 'All Files',
+            extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'zip', 'rar', '7z', 'mp4', 'mov', 'mp3', 'wav']
+          }
+        ]
+      });
+
+      if (!filePath) return; // User cancelled
+
+      console.log('Selected file:', filePath);
+
+      // Read file as Uint8Array
+      const fileData = await readFile(filePath as string);
+
+      // Validate file size (25MB max)
+      if (fileData.byteLength > 25 * 1024 * 1024) {
+        alert('Le fichier est trop volumineux (max 25MB)');
+        return;
+      }
+
+      // Extract filename from path
+      const fileName = (filePath as string).split('/').pop() || (filePath as string).split('\\').pop() || 'file';
+
+      // Guess MIME type from extension
+      const extension = fileName.split('.').pop()?.toLowerCase() || '';
+      const mimeTypes: Record<string, string> = {
+        'pdf': 'application/pdf',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls': 'application/vnd.ms-excel',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'ppt': 'application/vnd.ms-powerpoint',
+        'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'txt': 'text/plain',
+        'zip': 'application/zip',
+        'rar': 'application/x-rar-compressed',
+        '7z': 'application/x-7z-compressed',
+        'mp4': 'video/mp4',
+        'mov': 'video/quicktime',
+        'mp3': 'audio/mpeg',
+        'wav': 'audio/wav',
+      };
+      const mimeType = mimeTypes[extension] || 'application/octet-stream';
+
+      // Create File object
+      const file = new File([fileData], fileName, { type: mimeType });
+
+      setPendingFile({
+        file,
+        name: fileName,
+        size: fileData.byteLength,
+      });
+
+    } catch (error) {
+      console.error('File selection error:', error);
+      alert(`Erreur: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
+    }
+  };
+
   const handleChangeServer = async () => {
     await logout();
     await resetConfig();
@@ -439,6 +507,7 @@ function App() {
             onSendMessage={(text, image, audio) => {
               sendMessage(text, image, audio, pendingImageBlob);
             }}
+            onSendFile={sendFile}
             onDeleteMessage={deleteMessage}
             onReactMessage={reactToMessage}
             currentUserId={user?.id}
@@ -449,12 +518,15 @@ function App() {
               setPendingImage(null);
               setPendingImageBlob(null);
             }}
+            pendingFile={pendingFile}
+            setPendingFile={setPendingFile}
             isRecording={isRecording}
             recordingDuration={recordingDuration}
             startRecording={startRecording}
             stopRecording={stopRecording}
             cancelRecording={cancelRecording}
             onSelectImageFile={handleSelectImageFile}
+            onSelectFile={handleSelectFile}
           />
         </div>
       </div>

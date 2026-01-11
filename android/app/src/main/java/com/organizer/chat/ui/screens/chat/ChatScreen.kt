@@ -23,9 +23,11 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
 import android.net.Uri
 import coil.compose.AsyncImage
@@ -49,6 +51,8 @@ import com.organizer.chat.data.repository.RoomRepository
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.components.MessageBubble
+import com.organizer.chat.util.DocumentInfo
+import com.organizer.chat.util.DocumentPicker
 import com.organizer.chat.util.TokenManager
 import com.organizer.chat.util.rememberImagePickerLaunchers
 import kotlinx.coroutines.launch
@@ -116,6 +120,16 @@ fun ChatScreen(
         onImageSelected = { uri -> viewModel.selectImage(uri) }
     )
 
+    // Document picker launcher
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            val docInfo = DocumentPicker.getDocumentInfo(context, it)
+            viewModel.selectFile(docInfo)
+        }
+    }
+
     // Notify service that we're in this room
     DisposableEffect(roomId, roomName, chatService) {
         chatService?.setCurrentRoom(roomId, roomName)
@@ -177,7 +191,7 @@ fun ChatScreen(
             ChatInputBar(
                 textFieldState = viewModel.textFieldState,
                 onSend = viewModel::sendMessage,
-                isSending = uiState.isSending || uiState.isUploadingImage,
+                isSending = uiState.isSending || uiState.isUploadingImage || uiState.isUploadingFile,
                 isRecording = uiState.isRecording,
                 recordingDuration = uiState.recordingDuration,
                 hasAudioPermission = hasAudioPermission,
@@ -214,9 +228,13 @@ fun ChatScreen(
                         }
                     }
                 },
+                onFileClick = { documentPickerLauncher.launch(arrayOf("*/*")) },
                 selectedImageUri = uiState.selectedImageUri,
                 isCompressingImage = uiState.isCompressingImage,
-                onClearImage = viewModel::clearSelectedImage
+                onClearImage = viewModel::clearSelectedImage,
+                selectedFileInfo = uiState.selectedFileInfo,
+                isUploadingFile = uiState.isUploadingFile,
+                onClearFile = viewModel::clearSelectedFile
             )
         }
     ) { paddingValues ->
@@ -325,9 +343,13 @@ private fun ChatInputBar(
     onRequestGalleryPermission: () -> Unit,
     onCameraClick: () -> Unit,
     onGalleryClick: () -> Unit,
+    onFileClick: () -> Unit,
     selectedImageUri: Uri?,
     isCompressingImage: Boolean,
-    onClearImage: () -> Unit
+    onClearImage: () -> Unit,
+    selectedFileInfo: DocumentInfo?,
+    isUploadingFile: Boolean,
+    onClearFile: () -> Unit
 ) {
     val currentOnStartRecording by rememberUpdatedState(onStartRecording)
     val currentOnStopRecording by rememberUpdatedState(onStopRecording)
@@ -339,8 +361,8 @@ private fun ChatInputBar(
         label = "micColor"
     )
 
-    // Can send if has text OR has image selected
-    val canSend = (textFieldState.text.isNotBlank() || selectedImageUri != null) && !isSending && !isRecording
+    // Can send if has text OR has image selected OR has file selected
+    val canSend = (textFieldState.text.isNotBlank() || selectedImageUri != null || selectedFileInfo != null) && !isSending && !isRecording
 
     Surface(
         modifier = Modifier
@@ -355,6 +377,15 @@ private fun ChatInputBar(
                     imageUri = selectedImageUri,
                     isCompressing = isCompressingImage,
                     onRemove = onClearImage
+                )
+            }
+
+            // File preview (if selected)
+            if (selectedFileInfo != null) {
+                FilePreview(
+                    fileInfo = selectedFileInfo,
+                    isUploading = isUploadingFile,
+                    onRemove = onClearFile
                 )
             }
 
@@ -393,6 +424,20 @@ private fun ChatInputBar(
                     }
                 }
 
+                // File attachment button
+                if (!isRecording) {
+                    IconButton(
+                        onClick = onFileClick,
+                        enabled = !isSending && selectedFileInfo == null
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = "Attach file",
+                            tint = if (!isSending && selectedFileInfo == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 if (isRecording) {
                     // Recording info instead of text field
                     Row(
@@ -417,7 +462,7 @@ private fun ChatInputBar(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(24.dp)),
-                        placeholder = { Text(if (selectedImageUri != null) "Ajouter une legende..." else "Message...") },
+                        placeholder = { Text(if (selectedImageUri != null || selectedFileInfo != null) "Ajouter une legende..." else "Message...") },
                         maxLines = 4,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
@@ -540,6 +585,56 @@ private fun ImagePreview(
                 contentDescription = "Supprimer l'image",
                 tint = Color.White
             )
+        }
+    }
+}
+
+@Composable
+private fun FilePreview(
+    fileInfo: DocumentInfo,
+    isUploading: Boolean,
+    onRemove: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(CharcoalLight)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.InsertDriveFile,
+            contentDescription = null,
+            modifier = Modifier.size(40.dp),
+            tint = AccentBlue
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = fileInfo.fileName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White,
+                maxLines = 1
+            )
+            Text(
+                text = DocumentPicker.formatFileSize(fileInfo.fileSize),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+        }
+        if (isUploading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp
+            )
+        } else {
+            IconButton(onClick = onRemove) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Supprimer le fichier",
+                    tint = Color.White
+                )
+            }
         }
     }
 }

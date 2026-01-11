@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
-export type MessageType = 'text' | 'image' | 'audio' | 'system';
+export type MessageType = 'text' | 'image' | 'audio' | 'system' | 'file';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
 export type ReactionEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '😡' | '✅' | '⚠️' | '🙏' | '🎉' | '👋' | '😘';
 
@@ -18,6 +18,9 @@ export interface IMessage extends Document {
   type: MessageType;
   content: string;
   caption?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
   status: MessageStatus;
   readBy: Types.ObjectId[];
   reactions: IReaction[];
@@ -40,7 +43,7 @@ const MessageSchema = new Schema<IMessage>(
     },
     type: {
       type: String,
-      enum: ['text', 'image', 'audio', 'system'],
+      enum: ['text', 'image', 'audio', 'system', 'file'],
       default: 'text',
     },
     content: {
@@ -48,6 +51,18 @@ const MessageSchema = new Schema<IMessage>(
       required: true,
     },
     caption: {
+      type: String,
+      required: false,
+    },
+    fileName: {
+      type: String,
+      required: false,
+    },
+    fileSize: {
+      type: Number,
+      required: false,
+    },
+    mimeType: {
       type: String,
       required: false,
     },

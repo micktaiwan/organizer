@@ -7,9 +7,12 @@ data class Message(
     val id: String,
     val roomId: String,
     val senderId: MessageSender,
-    val type: String = "text",  // "text", "image", "audio", "system"
+    val type: String = "text",  // "text", "image", "audio", "system", "file"
     val content: String,
-    val caption: String? = null,  // Optional caption for image messages
+    val caption: String? = null,  // Optional caption for image/file messages
+    val fileName: String? = null,  // Original filename for file messages
+    val fileSize: Long? = null,  // File size in bytes
+    val mimeType: String? = null,  // MIME type (application/pdf, etc.)
     val status: String = "sent",  // "sent", "delivered", "read"
     val readBy: List<String> = emptyList(),
     val reactions: List<Reaction> = emptyList(),

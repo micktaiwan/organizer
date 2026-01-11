@@ -91,11 +91,20 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
           let text: string | undefined;
           let image: string | undefined;
           let audio: string | undefined;
+          let fileUrl: string | undefined;
+          let fileName: string | undefined;
+          let fileSize: number | undefined;
+          let mimeType: string | undefined;
 
           if (msg.type === 'image') {
             image = msg.content;
           } else if (msg.type === 'audio') {
             audio = msg.content;
+          } else if (msg.type === 'file') {
+            fileUrl = msg.content;
+            fileName = msg.fileName;
+            fileSize = msg.fileSize;
+            mimeType = msg.mimeType;
           } else {
             text = msg.content;
           }
@@ -114,6 +123,10 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
             image,
             caption: msg.caption,
             audio,
+            fileUrl,
+            fileName,
+            fileSize,
+            mimeType,
             sender: isSender ? 'me' : 'them',
             senderName,
             senderId: actualSenderId,
@@ -251,11 +264,20 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
         let text: string | undefined;
         let image: string | undefined;
         let audio: string | undefined;
+        let fileUrl: string | undefined;
+        let fileName: string | undefined;
+        let fileSize: number | undefined;
+        let mimeType: string | undefined;
 
         if (msg.type === 'image') {
           image = msg.content;
         } else if (msg.type === 'audio') {
           audio = msg.content;
+        } else if (msg.type === 'file') {
+          fileUrl = msg.content;
+          fileName = msg.fileName;
+          fileSize = msg.fileSize;
+          mimeType = msg.mimeType;
         } else {
           text = msg.content;
         }
@@ -274,6 +296,10 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
           image,
           caption: msg.caption,
           audio,
+          fileUrl,
+          fileName,
+          fileSize,
+          mimeType,
           sender: isSender ? 'me' : 'them',
           senderName,
           senderId: actualSenderId,
@@ -333,6 +359,52 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       socketService.notifyMessage(currentRoomId, response.message._id);
     } catch (error) {
       console.error('Failed to send message:', error);
+      setMessages(prev => prev.map(m =>
+        m.id === messageId ? { ...m, status: 'failed' } : m
+      ));
+    }
+  }, [currentRoomId, username]);
+
+  // Send file to current room
+  const sendFile = useCallback(async (file: File, caption?: string) => {
+    if (!currentRoomId) return;
+
+    const messageId = crypto.randomUUID();
+
+    // Add optimistic message
+    const optimisticMessage: Message = {
+      id: messageId,
+      type: 'file',
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+      caption,
+      sender: 'me',
+      senderName: username,
+      timestamp: new Date(),
+      status: 'sending',
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+
+    try {
+      const response = await api.uploadFile(currentRoomId, file, caption);
+
+      // Update message with server response
+      setMessages(prev => prev.map(m =>
+        m.id === messageId
+          ? {
+              ...m,
+              serverMessageId: response.message._id,
+              fileUrl: response.message.content,
+              status: 'sent',
+            }
+          : m
+      ));
+
+      // Notify room of new message
+      socketService.notifyMessage(currentRoomId, response.message._id);
+    } catch (error) {
+      console.error('Failed to send file:', error);
       setMessages(prev => prev.map(m =>
         m.id === messageId ? { ...m, status: 'failed' } : m
       ));
@@ -481,6 +553,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     messages,
     setMessages,
     sendMessage,
+    sendFile,
     markAsRead,
     deleteMessage,
     reactToMessage,

@@ -66,6 +66,20 @@ class MessageRepository {
         }
     }
 
+    suspend fun uploadAndSendFile(roomId: String, file: File, mimeType: String, caption: String? = null): Result<Message> {
+        return try {
+            val requestBody = file.asRequestBody(mimeType.toMediaTypeOrNull())
+            val filePart = MultipartBody.Part.createFormData("file", file.name, requestBody)
+            val roomIdPart = roomId.toRequestBody("text/plain".toMediaTypeOrNull())
+            val captionPart = caption?.toRequestBody("text/plain".toMediaTypeOrNull())
+
+            val response = api.uploadFileMessage(filePart, roomIdPart, captionPart)
+            Result.success(response.message)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteMessage(messageId: String): Result<Boolean> {
         return try {
             api.deleteMessage(messageId)
