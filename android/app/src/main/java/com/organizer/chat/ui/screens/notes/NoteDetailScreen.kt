@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -39,6 +40,8 @@ import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.OnlineGreen
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 // Note colors palette (dark theme - 6 colors)
 val noteColors = listOf(
@@ -443,7 +446,21 @@ fun NoteDetailScreen(
                 CircularProgressIndicator()
             }
         } else {
+            val lazyListState = rememberLazyListState()
+            val reorderableLazyListState = rememberReorderableLazyListState(lazyListState) { from, to ->
+                // Adjust indices to account for title item at index 0
+                val fromIndex = from.index - 1
+                val toIndex = to.index - 1
+                if (fromIndex >= 0 && toIndex >= 0 && fromIndex < checklistItems.size && toIndex < checklistItems.size) {
+                    checklistItems = checklistItems.toMutableList().apply {
+                        add(toIndex, removeAt(fromIndex))
+                    }
+                    pendingVersion++
+                }
+            }
+
             LazyColumn(
+                state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
@@ -515,41 +532,45 @@ fun NoteDetailScreen(
                     }
                     "checklist" -> {
                         itemsIndexed(checklistItems, key = { index, item -> item.id.ifEmpty { "new_$index" } }) { index, item ->
-                            ChecklistItemEditor(
-                                item = item,
-                                onTextChange = { newText ->
-                                    checklistItems = checklistItems.toMutableList().apply {
-                                        this[index] = item.copy(text = newText)
-                                    }
-                                    pendingVersion++
-                                },
-                                onCheckedChange = { checked ->
-                                    checklistItems = checklistItems.toMutableList().apply {
-                                        this[index] = item.copy(checked = checked)
-                                    }
-                                    pendingVersion++
-                                },
-                                onDelete = {
-                                    checklistItems = checklistItems.toMutableList().apply {
-                                        removeAt(index)
-                                    }
-                                    pendingVersion++
-                                },
-                                onInsertAfter = { textAfter ->
-                                    checklistItems = checklistItems.toMutableList().apply {
-                                        add(index + 1, EditableChecklistItem(
-                                            id = "",
-                                            text = textAfter,
-                                            checked = false,
-                                            order = index + 1
-                                        ))
-                                    }
-                                    focusItemIndex = index + 1
-                                    pendingVersion++
-                                },
-                                shouldFocus = focusItemIndex == index,
-                                onFocused = { focusItemIndex = -1 }
-                            )
+                            ReorderableItem(reorderableLazyListState, key = item.id.ifEmpty { "new_$index" }) {
+                                ChecklistItemEditor(
+                                    item = item,
+                                    isDragging = it,
+                                    dragModifier = Modifier.draggableHandle(),
+                                    onTextChange = { newText ->
+                                        checklistItems = checklistItems.toMutableList().apply {
+                                            this[index] = item.copy(text = newText)
+                                        }
+                                        pendingVersion++
+                                    },
+                                    onCheckedChange = { checked ->
+                                        checklistItems = checklistItems.toMutableList().apply {
+                                            this[index] = item.copy(checked = checked)
+                                        }
+                                        pendingVersion++
+                                    },
+                                    onDelete = {
+                                        checklistItems = checklistItems.toMutableList().apply {
+                                            removeAt(index)
+                                        }
+                                        pendingVersion++
+                                    },
+                                    onInsertAfter = { textAfter ->
+                                        checklistItems = checklistItems.toMutableList().apply {
+                                            add(index + 1, EditableChecklistItem(
+                                                id = "",
+                                                text = textAfter,
+                                                checked = false,
+                                                order = index + 1
+                                            ))
+                                        }
+                                        focusItemIndex = index + 1
+                                        pendingVersion++
+                                    },
+                                    shouldFocus = focusItemIndex == index,
+                                    onFocused = { focusItemIndex = -1 }
+                                )
+                            }
                         }
 
                         // Add new item row
@@ -776,6 +797,8 @@ data class EditableChecklistItem(
 @Composable
 private fun ChecklistItemEditor(
     item: EditableChecklistItem,
+    isDragging: Boolean = false,
+    dragModifier: Modifier = Modifier,
     onTextChange: (String) -> Unit,
     onCheckedChange: (Boolean) -> Unit,
     onDelete: () -> Unit,
@@ -796,9 +819,23 @@ private fun ChecklistItemEditor(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 4.dp)
+            .background(
+                if (isDragging) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else Color.Transparent
+            ),
+        verticalAlignment = Alignment.Top // Align checkbox to top for multiline text
     ) {
+        // Drag handle
+        Icon(
+            imageVector = Icons.Default.DragHandle,
+            contentDescription = "Réordonner",
+            modifier = dragModifier
+                .size(24.dp)
+                .padding(top = 2.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(4.dp))
         Checkbox(
             checked = item.checked,
             onCheckedChange = onCheckedChange,

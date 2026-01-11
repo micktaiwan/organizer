@@ -13,8 +13,8 @@ android {
         applicationId = "com.organizer.chat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 21
-        versionName = "1.3.3"
+        versionCode = 22
+        versionName = "1.3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -86,6 +86,9 @@ dependencies {
     // Image loading
     implementation(libs.coil.compose)
     implementation(libs.androidx.exifinterface)
+
+    // Drag & drop reorderable lists
+    implementation(libs.reorderable)
 
     // Location
     implementation(libs.play.services.location)
