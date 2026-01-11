@@ -38,6 +38,7 @@ import androidx.core.content.ContextCompat
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import com.organizer.chat.data.repository.MessageRepository
+import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.components.MessageBubble
 import com.organizer.chat.util.TokenManager
@@ -359,7 +360,11 @@ private fun ChatInputBar(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { onSend() }),
                     enabled = !isSending,
-                    shape = RoundedCornerShape(24.dp)
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        cursorColor = AccentBlue,
+                        focusedBorderColor = AccentBlue
+                    )
                 )
             }
 
@@ -421,7 +426,7 @@ private fun ChatInputBar(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Envoyer",
                         tint = if (value.isNotBlank() && !isRecording) {
-                            MaterialTheme.colorScheme.primary
+                            AccentBlue
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         }

@@ -1,13 +1,16 @@
 package com.organizer.chat.ui.components
 
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
+import android.net.Uri
 import android.util.Base64
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
@@ -26,6 +29,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -135,12 +142,67 @@ fun MessageBubble(
     }
 }
 
+// URL regex pattern
+private val urlPattern = Regex(
+    """(https?://[^\s<>"{}|\\^`\[\]]+)""",
+    RegexOption.IGNORE_CASE
+)
+
+// Link color for URLs
+private val LinkColor = Color(0xFF1976D2)
+
 @Composable
 private fun TextMessageContent(content: String) {
-    Text(
-        text = content,
+    val context = LocalContext.current
+
+    val annotatedString = buildAnnotatedString {
+        var lastIndex = 0
+        val textStyle = SpanStyle(color = MessageTextColor)
+        val linkStyle = SpanStyle(
+            color = LinkColor,
+            textDecoration = TextDecoration.Underline
+        )
+
+        urlPattern.findAll(content).forEach { matchResult ->
+            val start = matchResult.range.first
+            val end = matchResult.range.last + 1
+
+            // Add text before the URL
+            if (start > lastIndex) {
+                withStyle(textStyle) {
+                    append(content.substring(lastIndex, start))
+                }
+            }
+
+            // Add the URL with annotation
+            val url = matchResult.value
+            pushStringAnnotation(tag = "URL", annotation = url)
+            withStyle(linkStyle) {
+                append(url)
+            }
+            pop()
+
+            lastIndex = end
+        }
+
+        // Add remaining text after last URL
+        if (lastIndex < content.length) {
+            withStyle(textStyle) {
+                append(content.substring(lastIndex))
+            }
+        }
+    }
+
+    ClickableText(
+        text = annotatedString,
         style = MaterialTheme.typography.bodyMedium,
-        color = MessageTextColor
+        onClick = { offset ->
+            annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                .firstOrNull()?.let { annotation ->
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(annotation.item))
+                    context.startActivity(intent)
+                }
+        }
     )
 }
 

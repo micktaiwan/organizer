@@ -2,6 +2,7 @@ package com.organizer.chat.data.api
 
 import com.organizer.chat.data.model.*
 import com.organizer.chat.data.model.AppUpdateInfo
+import com.organizer.chat.data.model.ApkVersionsResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.http.*
@@ -65,6 +66,9 @@ interface ApiService {
     // App Updates
     @GET("apk/latest")
     suspend fun getLatestApkVersion(): AppUpdateInfo
+
+    @GET("apk/versions")
+    suspend fun getApkVersions(@Query("limit") limit: Int? = null): ApkVersionsResponse
 
     // Notes
     @GET("notes")
