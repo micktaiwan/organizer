@@ -41,7 +41,8 @@
             "notification:allow-is-permission-granted",
             "notification:allow-request-permission",
             "notification:allow-show",
-            "notification:default"
+            "notification:default",
+            "clipboard-manager:allow-write-text"
           ]
         }
       ]

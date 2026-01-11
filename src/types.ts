@@ -12,6 +12,8 @@ export interface Message {
   id: string;
   serverMessageId?: string; // MongoDB _id for server-synced messages
   text?: string;
+  content?: string; // Alternative content field from server
+  type?: "text" | "image" | "audio" | "system"; // Message type from server
   image?: string; // base64 data URL
   audio?: string; // base64 audio data URL for voice messages
   sender: "me" | "them";

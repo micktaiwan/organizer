@@ -9,7 +9,9 @@ import {
   StickyNote,
   CheckSquare,
   Pin,
+  Copy,
 } from 'lucide-react';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { Note, Label, UpdateNoteRequest } from '../../services/api';
 import { LabelChip } from './LabelChip';
 
@@ -78,6 +80,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   const [localItemTexts, setLocalItemTexts] = useState<Record<string, string>>({});
   // Pending items for type conversion (note → checklist)
   const [pendingItems, setPendingItems] = useState<{ text: string; checked: boolean; order: number }[] | null>(null);
+  // Copy success feedback
+  const [showCopySuccess, setShowCopySuccess] = useState(false);
 
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -249,6 +253,42 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     }
   };
 
+  // Format note content for clipboard
+  const formatNoteForCopy = (): string => {
+    if (type === 'note') {
+      return content;
+    } else if (type === 'checklist') {
+      const items = pendingItems ?? note?.items ?? [];
+      return items
+        .filter(item => !item.checked)
+        .map(item => typeof item === 'object' && 'text' in item ? item.text : '')
+        .filter(text => text.trim() !== '')
+        .join('\n');
+    }
+    return '';
+  };
+
+  // Handle copy to clipboard
+  const handleCopyNote = async () => {
+    const textToCopy = formatNoteForCopy();
+    if (!textToCopy.trim()) return;
+
+    try {
+      await writeText(textToCopy);
+      setShowCopySuccess(true);
+      setTimeout(() => setShowCopySuccess(false), 2000);
+    } catch {
+      // Fallback to web clipboard API
+      try {
+        await navigator.clipboard.writeText(textToCopy);
+        setShowCopySuccess(true);
+        setTimeout(() => setShowCopySuccess(false), 2000);
+      } catch {
+        // Silent fail
+      }
+    }
+  };
+
   return (
     <div className="note-editor" style={{ backgroundColor: color }}>
       {/* Header */}
@@ -263,6 +303,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           >
             <Pin size={18} />
           </button>
+          <button
+            className="note-editor-copy-btn"
+            onClick={handleCopyNote}
+            title="Copier"
+          >
+            <Copy size={18} />
+          </button>
           {note && (
             <button
               className="note-editor-delete-btn"
@@ -273,6 +320,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           )}
         </div>
       </div>
+
+      {/* Copy success toast */}
+      {showCopySuccess && (
+        <div className="note-editor-copy-toast">
+          Copié !
+        </div>
+      )}
 
       {/* Title */}
       <input

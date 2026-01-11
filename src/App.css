@@ -885,10 +885,16 @@ button.copied {
   color: #999;
 }
 
+.system-message-icon.announcement {
+  color: #34c759;
+}
+
 .system-message-text {
   font-size: 0.85rem;
   color: #999;
   font-style: italic;
+  white-space: pre-line;
+  text-align: center;
 }
 
 .system-message-time {
@@ -3628,6 +3634,7 @@ button.copied {
   flex-direction: column;
   height: 100%;
   color: #f5f5f5;
+  position: relative;
 }
 
 .note-editor-header {
@@ -3687,6 +3694,44 @@ button.copied {
 
 .note-editor-delete-btn:hover {
   color: #ff3b30;
+}
+
+.note-editor-copy-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.note-editor-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-copy-toast {
+  position: absolute;
+  top: 60px;
+  right: 16px;
+  padding: 8px 16px;
+  background: #34c759;
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+  animation: fadeInOut 2s ease-in-out forwards;
+  z-index: 100;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(-10px); }
+  15% { opacity: 1; transform: translateY(0); }
+  85% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-10px); }
 }
 
 .note-editor-title {

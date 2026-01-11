@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Phone, PhoneOff, Trash2, X, SmilePlus } from "lucide-react";
+import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji } from "../../types";
 import { formatMessageTimestamp } from "../../utils/dateFormat";
@@ -72,15 +72,19 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
 
   const aggregatedReactions = aggregateReactions(msg.reactions);
 
-  if (msg.isSystemMessage) {
+  // System messages (calls or announcements)
+  if (msg.isSystemMessage || msg.type === 'system') {
+    const isCallMessage = msg.systemMessageType?.includes('call');
+
     return (
       <div className="system-message">
-        <span className={`system-message-icon ${msg.systemMessageType}`}>
+        <span className={`system-message-icon ${msg.systemMessageType || 'announcement'}`}>
           {msg.systemMessageType === "missed-call" && <PhoneOff size={16} />}
           {msg.systemMessageType === "rejected-call" && <PhoneOff size={16} />}
           {msg.systemMessageType === "ended-call" && <Phone size={16} />}
+          {!isCallMessage && <Megaphone size={16} />}
         </span>
-        <span className="system-message-text">{msg.text}</span>
+        <span className="system-message-text">{msg.text || msg.content}</span>
         <span className="system-message-time">
           {formatMessageTimestamp(msg.timestamp)}
         </span>
