@@ -14,6 +14,8 @@ import com.organizer.chat.data.repository.MessageRepository
 import com.organizer.chat.data.repository.RoomRepository
 import java.time.Instant
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.util.DocumentInfo
+import com.organizer.chat.util.DocumentPicker
 import com.organizer.chat.util.ImageCompressor
 import com.organizer.chat.util.TokenManager
 import com.organizer.chat.util.VoiceRecorder
@@ -40,6 +42,8 @@ data class ChatUiState(
     val selectedImageUri: Uri? = null,
     val isCompressingImage: Boolean = false,
     val isUploadingImage: Boolean = false,
+    val selectedFileInfo: DocumentInfo? = null,
+    val isUploadingFile: Boolean = false,
     val hasMoreMessages: Boolean = true,
     val isLoadingMore: Boolean = false,
     val shouldScrollToBottom: Boolean = true
@@ -51,7 +55,7 @@ class ChatViewModel(
     private val roomRepository: RoomRepository,
     private val chatService: ChatService?,
     private val tokenManager: TokenManager,
-    context: Context
+    private val context: Context
 ) : ViewModel() {
 
     companion object {
@@ -298,7 +302,15 @@ class ChatViewModel(
 
     fun sendMessage() {
         val content = textFieldState.text.toString().trim()
+        val fileInfo = _uiState.value.selectedFileInfo
         val imageUri = _uiState.value.selectedImageUri
+
+        // If file is selected, send file with optional caption
+        if (fileInfo != null) {
+            textFieldState.clearText()
+            sendFileWithCaption(fileInfo, content)
+            return
+        }
 
         // If image is selected, send image with optional caption
         if (imageUri != null) {
@@ -479,6 +491,78 @@ class ChatViewModel(
             isCompressingImage = false,
             isUploadingImage = false
         )
+    }
+
+    // File selection
+    fun selectFile(documentInfo: DocumentInfo) {
+        // Clear any selected image first
+        clearSelectedImage()
+        _uiState.value = _uiState.value.copy(selectedFileInfo = documentInfo)
+    }
+
+    fun clearSelectedFile() {
+        _uiState.value = _uiState.value.copy(
+            selectedFileInfo = null,
+            isUploadingFile = false
+        )
+    }
+
+    private fun sendFileWithCaption(documentInfo: DocumentInfo, caption: String) {
+        viewModelScope.launch {
+            try {
+                _uiState.value = _uiState.value.copy(isUploadingFile = true)
+                chatService?.socketManager?.notifyTypingStop(roomId)
+                Log.d(TAG, "Uploading file: ${documentInfo.fileName}")
+
+                // Copy to temp file
+                val tempFile = DocumentPicker.copyToTempFile(context, documentInfo)
+                if (tempFile == null) {
+                    Log.e(TAG, "Failed to copy file to temp")
+                    _uiState.value = _uiState.value.copy(
+                        isUploadingFile = false,
+                        errorMessage = "Erreur lors de la preparation du fichier"
+                    )
+                    clearSelectedFile()
+                    return@launch
+                }
+
+                // Upload file
+                val result = messageRepository.uploadAndSendFile(
+                    roomId,
+                    tempFile,
+                    documentInfo.mimeType,
+                    caption.ifEmpty { null }
+                )
+
+                // Cleanup temp file
+                tempFile.delete()
+
+                result.fold(
+                    onSuccess = { message ->
+                        Log.d(TAG, "File uploaded successfully: ${message.id}")
+                        addMessageIfNotExists(message)
+                        _uiState.value = _uiState.value.copy(isUploadingFile = false)
+                        chatService?.socketManager?.notifyNewMessage(roomId, message.id)
+                        clearSelectedFile()
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Failed to upload file: ${error.message}")
+                        _uiState.value = _uiState.value.copy(
+                            isUploadingFile = false,
+                            errorMessage = error.message ?: "Erreur lors de l'envoi"
+                        )
+                        clearSelectedFile()
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending file: ${e.message}")
+                _uiState.value = _uiState.value.copy(
+                    isUploadingFile = false,
+                    errorMessage = e.message ?: "Erreur"
+                )
+                clearSelectedFile()
+            }
+        }
     }
 
     private fun sendImageWithCaption(imageUri: Uri, caption: String) {

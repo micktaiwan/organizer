@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone } from "lucide-react";
+import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji } from "../../types";
 import { formatMessageTimestamp } from "../../utils/dateFormat";
@@ -37,12 +37,38 @@ interface MessageItemProps {
   currentUserId?: string;
 }
 
+// Helper to format file size
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Helper to download a file
+const downloadFile = async (url: string, filename: string) => {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error('Download failed:', error);
+  }
+};
+
 export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact, currentUserId }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFullscreenImage, setShowFullscreenImage] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  // Build full image URL (handle relative URLs from server)
+  // Build full URL (handle relative URLs from server)
   const getImageUrl = (imageUrl: string | undefined): string | undefined => {
     if (!imageUrl) return undefined;
     // If it's a data URL (base64), return as-is
@@ -68,6 +94,28 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
     if (!onReact || !msg.serverMessageId) return;
     onReact(msg.serverMessageId, emoji);
     setShowReactionPicker(false);
+  };
+
+  const handleDownloadImage = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!msg.image) return;
+    setIsDownloading(true);
+    const imageUrl = getImageUrl(msg.image);
+    if (imageUrl) {
+      const filename = `organizer_${Date.now()}.jpg`;
+      await downloadFile(imageUrl, filename);
+    }
+    setIsDownloading(false);
+  };
+
+  const handleDownloadFile = async () => {
+    if (!msg.fileUrl) return;
+    setIsDownloading(true);
+    const fileUrl = getImageUrl(msg.fileUrl);
+    if (fileUrl) {
+      await downloadFile(fileUrl, msg.fileName || 'file');
+    }
+    setIsDownloading(false);
   };
 
   const aggregatedReactions = aggregateReactions(msg.reactions);
@@ -164,6 +212,21 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
               <audio controls src={getImageUrl(msg.audio)} className="audio-player" />
             </div>
           )}
+          {msg.type === 'file' && msg.fileUrl && (
+            <div className="file-message" onClick={handleDownloadFile} style={{ cursor: 'pointer' }}>
+              <div className="file-icon">
+                <FileText size={24} />
+              </div>
+              <div className="file-info">
+                <span className="file-name">{msg.fileName || 'Fichier'}</span>
+                {msg.fileSize && <span className="file-size">{formatFileSize(msg.fileSize)}</span>}
+              </div>
+              <button className="file-download" disabled={isDownloading}>
+                {isDownloading ? '...' : <Download size={18} />}
+              </button>
+            </div>
+          )}
+          {msg.caption && msg.type === 'file' && <span className="file-caption">{msg.caption}</span>}
           {msg.text && <span>{msg.text}</span>}
         </div>
         <span className="timestamp">
@@ -231,6 +294,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
       )}
       {showFullscreenImage && msg.image && (
         <div className="image-fullscreen-overlay" onClick={() => setShowFullscreenImage(false)}>
+          <button className="image-fullscreen-download" onClick={handleDownloadImage} title="Telecharger">
+            {isDownloading ? '...' : <Download size={24} />}
+          </button>
           <button className="image-fullscreen-close" onClick={() => setShowFullscreenImage(false)}>
             <X size={24} />
           </button>

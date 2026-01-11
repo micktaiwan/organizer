@@ -232,3 +232,11 @@ private const val SERVER_URL = "http://51.210.150.25:3001"
 ```
 
 Pour le développement local, modifier cette valeur et s'assurer que `network_security_config.xml` autorise le trafic HTTP en clair.
+
+## Documentation
+
+Additional documentation is available in the `docs/` folder:
+
+| Document | Description |
+|----------|-------------|
+| [docs/long_press_debug.md](docs/long_press_debug.md) | Investigation of Compose gesture handling (tap + long press) |

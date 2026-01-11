@@ -113,10 +113,16 @@ async function ensureLobby() {
 }
 
 function ensureUploadDirectories() {
-  const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'images');
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-    console.log('✓ Created uploads directory');
+  const imageDir = path.join(process.cwd(), 'public', 'uploads', 'images');
+  const fileDir = path.join(process.cwd(), 'public', 'uploads', 'files');
+
+  if (!fs.existsSync(imageDir)) {
+    fs.mkdirSync(imageDir, { recursive: true });
+    console.log('✓ Created images upload directory');
+  }
+  if (!fs.existsSync(fileDir)) {
+    fs.mkdirSync(fileDir, { recursive: true });
+    console.log('✓ Created files upload directory');
   }
 }
 

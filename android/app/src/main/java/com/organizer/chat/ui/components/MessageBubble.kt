@@ -1,10 +1,20 @@
 package com.organizer.chat.ui.components
 
+import android.Manifest
+import android.app.DownloadManager
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.util.Base64
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -15,7 +25,6 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
@@ -60,6 +69,11 @@ import java.util.*
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material3.CircularProgressIndicator
+import com.organizer.chat.util.ImageDownloader
 import androidx.compose.ui.text.style.TextAlign
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.CharcoalLight
@@ -68,6 +82,7 @@ import com.organizer.chat.ui.screens.location.getStatusColor
 // Fixed colors for message bubbles (readable on both light/dark backgrounds)
 private val MessageTextColor = androidx.compose.ui.graphics.Color(0xFF1A1A1A)
 private val MessageSecondaryColor = androidx.compose.ui.graphics.Color(0xFF666666)
+
 
 // Available reaction emojis
 val ALLOWED_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "😡", "✅", "⚠️", "🙏", "🎉", "👋", "😘")
@@ -146,6 +161,11 @@ fun MessageBubble(
             }
         }
 
+        // Callback for long press - will be passed to content components
+        val onLongPress: (() -> Unit)? = if (isMyMessage && onDelete != null) {
+            { showDeleteDialog = true }
+        } else null
+
         Box {
             Surface(
                 shape = bubbleShape,
@@ -157,10 +177,30 @@ fun MessageBubble(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     // Content based on message type
+                    // Each component handles its own tap AND long press via combinedClickable
                     when (message.type) {
-                        "audio" -> AudioMessageContent(message.content, message.id)
-                        "image" -> ImageMessageContent(message.content, message.caption)
-                        else -> TextMessageContent(message.content)
+                        "audio" -> AudioMessageContent(
+                            base64Content = message.content,
+                            messageId = message.id,
+                            onLongPress = onLongPress
+                        )
+                        "image" -> ImageMessageContent(
+                            imageUrl = message.content,
+                            caption = message.caption,
+                            onLongPress = onLongPress
+                        )
+                        "file" -> FileMessageContent(
+                            fileUrl = message.content,
+                            fileName = message.fileName,
+                            fileSize = message.fileSize,
+                            mimeType = message.mimeType,
+                            caption = message.caption,
+                            onLongPress = onLongPress
+                        )
+                        else -> TextMessageContent(
+                            content = message.content,
+                            onLongPress = onLongPress
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(4.dp))
@@ -172,19 +212,6 @@ fun MessageBubble(
                         modifier = Modifier.align(Alignment.End)
                     )
                 }
-            }
-
-            // Long press overlay for delete
-            if (isMyMessage && onDelete != null) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onLongPress = { showDeleteDialog = true }
-                            )
-                        }
-                )
             }
         }
 
@@ -249,8 +276,12 @@ private val urlPattern = Regex(
 private val LinkColor = Color(0xFF1976D2)
 
 @Composable
-private fun TextMessageContent(content: String) {
+private fun TextMessageContent(
+    content: String,
+    onLongPress: (() -> Unit)? = null
+) {
     val context = LocalContext.current
+    val layoutResult = remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
 
     val annotatedString = buildAnnotatedString {
         var lastIndex = 0
@@ -290,15 +321,28 @@ private fun TextMessageContent(content: String) {
         }
     }
 
-    ClickableText(
+    // Use Text with pointerInput to handle both tap (URLs) and long press (delete)
+    Text(
         text = annotatedString,
         style = MaterialTheme.typography.bodyMedium,
-        onClick = { offset ->
-            annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
-                .firstOrNull()?.let { annotation ->
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(annotation.item))
-                    context.startActivity(intent)
+        onTextLayout = { layoutResult.value = it },
+        modifier = Modifier.pointerInput(onLongPress) {
+            detectTapGestures(
+                onTap = { offset ->
+                    // Find which character was tapped
+                    layoutResult.value?.let { layout ->
+                        val position = layout.getOffsetForPosition(offset)
+                        annotatedString.getStringAnnotations(tag = "URL", start = position, end = position)
+                            .firstOrNull()?.let { annotation ->
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(annotation.item))
+                                context.startActivity(intent)
+                            }
+                    }
+                },
+                onLongPress = {
+                    onLongPress?.invoke()
                 }
+            )
         }
     )
 }
@@ -378,8 +422,13 @@ private fun SystemMessageContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AudioMessageContent(base64Content: String, messageId: String) {
+private fun AudioMessageContent(
+    base64Content: String,
+    messageId: String,
+    onLongPress: (() -> Unit)? = null
+) {
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
@@ -394,41 +443,44 @@ private fun AudioMessageContent(base64Content: String, messageId: String) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .padding(vertical = 4.dp)
-            .clickable {
-                if (isPlaying) {
-                    mediaPlayer?.stop()
-                    mediaPlayer?.release()
-                    mediaPlayer = null
-                    isPlaying = false
-                } else {
-                    try {
-                        // Extract base64 data (remove data:audio/...;base64, prefix if present)
-                        val base64Data = if (base64Content.contains(",")) {
-                            base64Content.substringAfter(",")
-                        } else {
-                            base64Content
-                        }
-
-                        val audioBytes = Base64.decode(base64Data, Base64.DEFAULT)
-                        val tempFile = File(context.cacheDir, "audio_$messageId.tmp")
-                        FileOutputStream(tempFile).use { it.write(audioBytes) }
-
-                        mediaPlayer = MediaPlayer().apply {
-                            setDataSource(tempFile.absolutePath)
-                            prepare()
-                            start()
-                            setOnCompletionListener {
-                                isPlaying = false
-                                release()
-                                mediaPlayer = null
+            .combinedClickable(
+                onClick = {
+                    if (isPlaying) {
+                        mediaPlayer?.stop()
+                        mediaPlayer?.release()
+                        mediaPlayer = null
+                        isPlaying = false
+                    } else {
+                        try {
+                            // Extract base64 data (remove data:audio/...;base64, prefix if present)
+                            val base64Data = if (base64Content.contains(",")) {
+                                base64Content.substringAfter(",")
+                            } else {
+                                base64Content
                             }
+
+                            val audioBytes = Base64.decode(base64Data, Base64.DEFAULT)
+                            val tempFile = File(context.cacheDir, "audio_$messageId.tmp")
+                            FileOutputStream(tempFile).use { it.write(audioBytes) }
+
+                            mediaPlayer = MediaPlayer().apply {
+                                setDataSource(tempFile.absolutePath)
+                                prepare()
+                                start()
+                                setOnCompletionListener {
+                                    isPlaying = false
+                                    release()
+                                    mediaPlayer = null
+                                }
+                            }
+                            isPlaying = true
+                        } catch (e: Exception) {
+                            e.printStackTrace()
                         }
-                        isPlaying = true
-                    } catch (e: Exception) {
-                        e.printStackTrace()
                     }
-                }
-            }
+                },
+                onLongClick = { onLongPress?.invoke() }
+            )
     ) {
         Icon(
             imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
@@ -445,9 +497,49 @@ private fun AudioMessageContent(base64Content: String, messageId: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ImageMessageContent(imageUrl: String, caption: String?) {
+private fun ImageMessageContent(
+    imageUrl: String,
+    caption: String?,
+    onLongPress: (() -> Unit)? = null
+) {
+    val context = LocalContext.current
     var showFullscreen by remember { mutableStateOf(false) }
+
+    // Permission state for Android 8-9
+    var hasStoragePermission by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    var pendingDownloadUrl by remember { mutableStateOf<String?>(null) }
+
+    val storagePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasStoragePermission = isGranted
+        if (isGranted && pendingDownloadUrl != null) {
+            performImageDownload(context, pendingDownloadUrl!!)
+            pendingDownloadUrl = null
+        } else if (!isGranted) {
+            Toast.makeText(context, "Permission requise pour telecharger", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun handleDownload(url: String) {
+        if (ImageDownloader.needsStoragePermission() && !hasStoragePermission) {
+            pendingDownloadUrl = url
+            storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            performImageDownload(context, url)
+        }
+    }
 
     Column {
         if (imageUrl.startsWith("data:")) {
@@ -468,14 +560,21 @@ private fun ImageMessageContent(imageUrl: String, caption: String?) {
                         modifier = Modifier
                             .widthIn(max = 250.dp)
                             .heightIn(max = 300.dp)
-                            .clickable { showFullscreen = true },
+                            .combinedClickable(
+                                onClick = { showFullscreen = true },
+                                onLongClick = { onLongPress?.invoke() }
+                            ),
                         contentScale = ContentScale.Crop
                     )
 
                     if (showFullscreen) {
                         FullscreenImageDialog(
                             imageUrl = imageUrl,
-                            onDismiss = { showFullscreen = false }
+                            onDismiss = { showFullscreen = false },
+                            onDownload = {
+                                handleDownload(imageUrl)
+                                showFullscreen = false
+                            }
                         )
                     }
                 }
@@ -496,14 +595,21 @@ private fun ImageMessageContent(imageUrl: String, caption: String?) {
                 modifier = Modifier
                     .widthIn(max = 250.dp)
                     .heightIn(max = 300.dp)
-                    .clickable { showFullscreen = true },
+                    .combinedClickable(
+                        onClick = { showFullscreen = true },
+                        onLongClick = { onLongPress?.invoke() }
+                    ),
                 contentScale = ContentScale.Crop
             )
 
             if (showFullscreen) {
                 FullscreenImageDialog(
                     imageUrl = fullImageUrl,
-                    onDismiss = { showFullscreen = false }
+                    onDismiss = { showFullscreen = false },
+                    onDownload = {
+                        handleDownload(fullImageUrl)
+                        showFullscreen = false
+                    }
                 )
             }
         }
@@ -520,10 +626,159 @@ private fun ImageMessageContent(imageUrl: String, caption: String?) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FileMessageContent(
+    fileUrl: String,
+    fileName: String?,
+    fileSize: Long?,
+    mimeType: String?,
+    caption: String?,
+    onLongPress: (() -> Unit)? = null
+) {
+    val context = LocalContext.current
+    var isDownloading by remember { mutableStateOf(false) }
+
+    // Color for file icon and download icon
+    val linkColor = Color(0xFF6B9FFF)
+
+    Column {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MessageSecondaryColor.copy(alpha = 0.1f),
+            modifier = Modifier
+                .combinedClickable(
+                    onClick = {
+                        if (!isDownloading) {
+                            isDownloading = true
+                            downloadFile(context, fileUrl, fileName ?: "file") {
+                                isDownloading = false
+                            }
+                        }
+                    },
+                    onLongClick = { onLongPress?.invoke() }
+                )
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = getFileIcon(mimeType),
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                    tint = linkColor
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = fileName ?: "Fichier",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MessageTextColor,
+                        maxLines = 2
+                    )
+                    if (fileSize != null) {
+                        Text(
+                            text = formatFileSize(fileSize),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MessageSecondaryColor
+                        )
+                    }
+                }
+                if (isDownloading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Download",
+                        tint = linkColor
+                    )
+                }
+            }
+        }
+
+        // Show caption if present
+        if (!caption.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = caption,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MessageTextColor
+            )
+        }
+    }
+}
+
+private fun getFileIcon(mimeType: String?): androidx.compose.ui.graphics.vector.ImageVector {
+    return when {
+        mimeType?.startsWith("application/pdf") == true -> Icons.Default.PictureAsPdf
+        mimeType?.contains("word") == true -> Icons.Default.InsertDriveFile
+        mimeType?.contains("excel") == true -> Icons.Default.InsertDriveFile
+        mimeType?.contains("powerpoint") == true -> Icons.Default.InsertDriveFile
+        else -> Icons.Default.InsertDriveFile
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+        else -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
+    }
+}
+
+private fun downloadFile(context: Context, fileUrl: String, fileName: String, onComplete: () -> Unit) {
+    val fullUrl = if (fileUrl.startsWith("/")) {
+        ApiClient.getBaseUrl().trimEnd('/') + fileUrl
+    } else {
+        fileUrl
+    }
+
+    try {
+        val request = DownloadManager.Request(Uri.parse(fullUrl)).apply {
+            setTitle(fileName)
+            setDescription("Telechargement en cours...")
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+        }
+
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        downloadManager.enqueue(request)
+
+        Toast.makeText(context, "Telechargement demarre...", Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        Toast.makeText(context, "Erreur: ${e.message}", Toast.LENGTH_SHORT).show()
+    }
+    onComplete()
+}
+
+private fun performImageDownload(context: Context, imageUrl: String) {
+    when (val result = ImageDownloader.downloadImage(context, imageUrl)) {
+        is ImageDownloader.DownloadResult.Success -> {
+            Toast.makeText(
+                context,
+                "Image enregistree: ${result.fileName}",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        is ImageDownloader.DownloadResult.Error -> {
+            Toast.makeText(
+                context,
+                "Erreur: ${result.message}",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+}
+
 @Composable
 private fun FullscreenImageDialog(
     imageUrl: String,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onDownload: () -> Unit
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
@@ -612,11 +867,34 @@ private fun FullscreenImageDialog(
                 )
             }
 
+            // Download button (top-left)
+            IconButton(
+                onClick = onDownload,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = "Telecharger l'image",
+                    tint = Color.White
+                )
+            }
+
+            // Close button (top-right)
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(16.dp)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    )
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,

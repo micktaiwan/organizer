@@ -111,6 +111,34 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 
 4. **Pattern de reference** : Voir `ChatScreen.kt` lignes 375-391 pour un exemple complet d'OutlinedTextField correctement style.
 
+### Android Gesture Handling - CRITICAL
+
+In Jetpack Compose, touch events bubble **bottom-up** (child → parent). If a child has `clickable` or `ClickableText`, it consumes events BEFORE the parent can react.
+
+**Rule**: To have both tap AND long press on a component with interactive children, handle BOTH gestures AT THE CHILD LEVEL using `combinedClickable` or `detectTapGestures`.
+
+**Pattern for clickable text with long press** (e.g., URLs + delete on long press):
+```kotlin
+Text(
+    text = annotatedString,
+    onTextLayout = { layoutResult.value = it },
+    modifier = Modifier.pointerInput(onLongPress) {
+        detectTapGestures(
+            onTap = { offset ->
+                // Handle tap (e.g., open URL)
+                layoutResult.value?.let { layout ->
+                    val position = layout.getOffsetForPosition(offset)
+                    // Check annotations at position...
+                }
+            },
+            onLongPress = { onLongPress?.invoke() }
+        )
+    }
+)
+```
+
+**See**: [android/docs/long_press_debug.md](android/docs/long_press_debug.md) for full investigation and all approaches tested.
+
 ## Tech Stack
 
 ### Frontend

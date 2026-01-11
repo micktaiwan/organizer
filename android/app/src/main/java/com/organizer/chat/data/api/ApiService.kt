@@ -57,6 +57,14 @@ interface ApiService {
         @Part("caption") caption: RequestBody?
     ): MessageResponse
 
+    @Multipart
+    @POST("upload/file")
+    suspend fun uploadFileMessage(
+        @Part file: MultipartBody.Part,
+        @Part("roomId") roomId: RequestBody,
+        @Part("caption") caption: RequestBody?
+    ): MessageResponse
+
     @PATCH("messages/{messageId}/read")
     suspend fun markAsRead(@Path("messageId") messageId: String): MessageResponse
 

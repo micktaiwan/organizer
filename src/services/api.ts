@@ -134,9 +134,12 @@ interface Message {
   _id: string;
   roomId: string;
   senderId: string | User;
-  type: 'text' | 'image' | 'audio' | 'system';
+  type: 'text' | 'image' | 'audio' | 'system' | 'file';
   content: string;
   caption?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
   status: 'sent' | 'delivered' | 'read';
   readBy: string[];
   reactions?: Reaction[];
@@ -350,6 +353,17 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ roomId, type, content }),
     });
+  }
+
+  async uploadFile(roomId: string, file: File, caption?: string): Promise<{ message: Message }> {
+    const formData = new FormData();
+    formData.append('roomId', roomId);
+    formData.append('file', file, file.name);
+    if (caption) {
+      formData.append('caption', caption);
+    }
+
+    return this.uploadRequest<{ message: Message }>('/upload/file', formData);
   }
 
   async markMessageAsRead(id: string): Promise<{ message: Message }> {
