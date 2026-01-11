@@ -70,6 +70,16 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _userLocationUpdated = MutableSharedFlow<UserLocationUpdatedEvent>(replay = 1, extraBufferCapacity = 10)
     val userLocationUpdated: SharedFlow<UserLocationUpdatedEvent> = _userLocationUpdated.asSharedFlow()
 
+    // Room events
+    private val _roomCreated = MutableSharedFlow<RoomCreatedEvent>(replay = 0, extraBufferCapacity = 10)
+    val roomCreated: SharedFlow<RoomCreatedEvent> = _roomCreated.asSharedFlow()
+
+    private val _roomUpdated = MutableSharedFlow<RoomUpdatedEvent>(replay = 0, extraBufferCapacity = 10)
+    val roomUpdated: SharedFlow<RoomUpdatedEvent> = _roomUpdated.asSharedFlow()
+
+    private val _roomDeleted = MutableSharedFlow<RoomDeletedEvent>(replay = 0, extraBufferCapacity = 10)
+    val roomDeleted: SharedFlow<RoomDeletedEvent> = _roomDeleted.asSharedFlow()
+
     fun connect() {
         val token = tokenManager.getTokenSync()
         if (token == null) {
@@ -344,6 +354,52 @@ class SocketManager(private val tokenManager: TokenManager) {
                     Log.e(TAG, "Error parsing user:location-updated", e)
                 }
             }
+
+            // Room events
+            on("room:created") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val roomJson = data.getJSONObject("room")
+                    val event = RoomCreatedEvent(
+                        roomId = roomJson.getString("_id"),
+                        roomName = roomJson.getString("name"),
+                        roomType = roomJson.optString("type", "public")
+                    )
+                    Log.d(TAG, "Room created: ${event.roomName} (${event.roomId})")
+                    _roomCreated.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing room:created", e)
+                }
+            }
+
+            on("room:updated") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val roomJson = data.getJSONObject("room")
+                    val event = RoomUpdatedEvent(
+                        roomId = roomJson.getString("_id"),
+                        roomName = roomJson.getString("name")
+                    )
+                    Log.d(TAG, "Room updated: ${event.roomName} (${event.roomId})")
+                    _roomUpdated.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing room:updated", e)
+                }
+            }
+
+            on("room:deleted") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = RoomDeletedEvent(
+                        roomId = data.getString("roomId"),
+                        roomName = data.optString("roomName", "")
+                    )
+                    Log.d(TAG, "Room deleted: ${event.roomName} (${event.roomId})")
+                    _roomDeleted.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing room:deleted", e)
+                }
+            }
         }
     }
 
@@ -505,4 +561,21 @@ data class UserLocationData(
     val city: String?,
     val country: String?,
     val updatedAt: String?
+)
+
+// Room events
+data class RoomCreatedEvent(
+    val roomId: String,
+    val roomName: String,
+    val roomType: String
+)
+
+data class RoomUpdatedEvent(
+    val roomId: String,
+    val roomName: String
+)
+
+data class RoomDeletedEvent(
+    val roomId: String,
+    val roomName: String
 )

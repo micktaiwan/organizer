@@ -316,6 +316,12 @@ class ApiService {
     });
   }
 
+  async deleteRoom(roomId: string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/rooms/${roomId}`, {
+      method: 'DELETE',
+    });
+  }
+
   async getRoomMessages(roomId: string, limit = 50, before?: string): Promise<{ messages: Message[] }> {
     let url = `/rooms/${roomId}/messages?limit=${limit}`;
     if (before) url += `&before=${encodeURIComponent(before)}`;

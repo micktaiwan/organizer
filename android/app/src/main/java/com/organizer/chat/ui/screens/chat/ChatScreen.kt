@@ -115,9 +115,19 @@ fun ChatScreen(
         }
     }
 
-    // Auto-scroll to bottom when messages change
-    LaunchedEffect(uiState.messages) {
-        if (uiState.messages.isNotEmpty()) {
+    // Navigate back if this room is deleted
+    LaunchedEffect(chatService, roomId) {
+        chatService?.roomDeleted?.collect { event ->
+            if (event.roomId == roomId) {
+                android.util.Log.d("ChatScreen", "Room deleted, navigating back: ${event.roomName}")
+                onBackClick()
+            }
+        }
+    }
+
+    // Auto-scroll to bottom when messages change (only if shouldScrollToBottom is true)
+    LaunchedEffect(uiState.messages, uiState.shouldScrollToBottom) {
+        if (uiState.messages.isNotEmpty() && uiState.shouldScrollToBottom) {
             // Small delay to let LazyColumn layout the new items
             delay(50)
             listState.animateScrollToItem(uiState.messages.size - 1)
@@ -245,6 +255,29 @@ fun ChatScreen(
                             .padding(horizontal = 8.dp),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
+                        // Load More button at the top
+                        if (uiState.hasMoreMessages) {
+                            item(key = "load_more") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (uiState.isLoadingMore) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        TextButton(onClick = { viewModel.loadMoreMessages() }) {
+                                            Text("Charger plus de messages")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         items(uiState.messages, key = { it.id }) { message ->
                             MessageBubble(
                                 message = message,

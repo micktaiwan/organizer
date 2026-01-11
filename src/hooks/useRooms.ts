@@ -183,6 +183,47 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     return () => unsubReacted();
   }, [currentRoomId]);
 
+  // Listen for room events (created, updated)
+  useEffect(() => {
+    if (!userId) return;
+
+    const refreshRooms = async () => {
+      try {
+        const { rooms: updatedRooms } = await api.getRooms();
+        setRooms(updatedRooms);
+      } catch (error) {
+        console.error('Failed to refresh rooms:', error);
+      }
+    };
+
+    const unsubRoomCreated = socketService.on('room:created', async (data: any) => {
+      console.log('Room created event received:', data.room?.name);
+      await refreshRooms();
+    });
+
+    const unsubRoomUpdated = socketService.on('room:updated', async (data: any) => {
+      console.log('Room updated event received:', data.room?.name);
+      await refreshRooms();
+    });
+
+    const unsubRoomDeleted = socketService.on('room:deleted', async (data: any) => {
+      console.log('Room deleted event received:', data.roomName);
+      // Remove the deleted room from local state
+      setRooms(prev => prev.filter(r => r._id !== data.roomId));
+      // If we were in the deleted room, clear selection
+      if (currentRoomId === data.roomId) {
+        setCurrentRoomId(null);
+        setMessages([]);
+      }
+    });
+
+    return () => {
+      unsubRoomCreated();
+      unsubRoomUpdated();
+      unsubRoomDeleted();
+    };
+  }, [userId, currentRoomId]);
+
   // Load message history
   const loadMessages = useCallback(async () => {
     if (!currentRoomId) return;
@@ -392,6 +433,36 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     setCurrentRoomId(roomId);
   }, []);
 
+  // Create a new public room
+  const createRoom = useCallback(async (name: string) => {
+    try {
+      const { room } = await api.createRoom(name, 'public');
+      const { rooms: updatedRooms } = await api.getRooms();
+      setRooms(updatedRooms);
+      setCurrentRoomId(room._id);
+      return room;
+    } catch (error) {
+      console.error('Failed to create room:', error);
+      throw error;
+    }
+  }, []);
+
+  // Delete a room (creator only)
+  const deleteRoom = useCallback(async (roomId: string) => {
+    try {
+      await api.deleteRoom(roomId);
+      // Room will be removed via socket event, but also update locally
+      setRooms(prev => prev.filter(r => r._id !== roomId));
+      if (currentRoomId === roomId) {
+        setCurrentRoomId(null);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Failed to delete room:', error);
+      throw error;
+    }
+  }, [currentRoomId]);
+
   return {
     // Rooms
     rooms,
@@ -413,5 +484,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     selectRoom,
     joinRoom,
     leaveRoom,
+    createRoom,
+    deleteRoom,
   };
 };

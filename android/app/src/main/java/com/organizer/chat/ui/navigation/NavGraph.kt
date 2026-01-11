@@ -119,6 +119,7 @@ fun NavGraph(
                 tokenManager = tokenManager,
                 authRepository = authRepository,
                 appPreferences = appPreferences,
+                chatService = chatService,
                 onRoomClick = { room ->
                     navController.navigate(Routes.chat(room.id, room.name))
                 },

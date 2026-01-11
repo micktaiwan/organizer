@@ -14,7 +14,7 @@ import java.io.File
 class MessageRepository {
     private val api = ApiClient.getService()
 
-    suspend fun getMessages(roomId: String, limit: Int = 50, before: String? = null): Result<List<Message>> {
+    suspend fun getMessages(roomId: String, limit: Int = 20, before: String? = null): Result<List<Message>> {
         return try {
             val response = api.getMessages(roomId, limit, before)
             Result.success(response.messages)

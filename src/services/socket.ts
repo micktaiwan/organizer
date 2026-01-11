@@ -64,6 +64,10 @@ class SocketService {
       'label:created',
       'label:updated',
       'label:deleted',
+      // Room events
+      'room:created',
+      'room:updated',
+      'room:deleted',
     ];
 
     events.forEach((event) => {

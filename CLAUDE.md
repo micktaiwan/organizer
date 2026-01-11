@@ -70,6 +70,47 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - Many intermediate builds are for testing and won't be published
 - Update version numbers only when explicitly requested by the user
 
+### Android UI - CRITICAL Color Rules
+
+**IMPORTANT**: L'app Android utilise un theme "Charcoal" sombre. Les couleurs par defaut de Material3 rendent de nombreux elements INVISIBLES.
+
+**Regles obligatoires pour tout nouveau composant UI :**
+
+1. **OutlinedTextField** - TOUJOURS ajouter les couleurs explicites :
+   ```kotlin
+   import com.organizer.chat.ui.theme.AccentBlue
+
+   OutlinedTextField(
+       // ... other props ...
+       colors = OutlinedTextFieldDefaults.colors(
+           cursorColor = AccentBlue,
+           focusedBorderColor = AccentBlue,
+           unfocusedBorderColor = AccentBlue.copy(alpha = 0.5f)
+       )
+   )
+   ```
+
+2. **TextButton dans les dialogs** - TOUJOURS specifier la couleur :
+   ```kotlin
+   TextButton(
+       onClick = { ... },
+       colors = ButtonDefaults.textButtonColors(
+           contentColor = AccentBlue,
+           disabledContentColor = AccentBlue.copy(alpha = 0.38f)
+       )
+   ) {
+       Text("Label")
+   }
+   ```
+
+3. **Reference des couleurs disponibles** (voir `ui/theme/Theme.kt`) :
+   - `AccentBlue` (#6B9FFF) - couleur d'accent principale, utiliser pour curseurs, bordures, boutons
+   - `Charcoal` (#2D2D2D) - fond principal
+   - `CharcoalLight` (#3D3D3D) - fond secondaire
+   - `OnlineGreen` (#4CAF50) - indicateur en ligne
+
+4. **Pattern de reference** : Voir `ChatScreen.kt` lignes 375-391 pour un exemple complet d'OutlinedTextField correctement style.
+
 ## Tech Stack
 
 ### Frontend

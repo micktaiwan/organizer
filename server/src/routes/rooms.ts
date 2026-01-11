@@ -7,7 +7,11 @@ const router = Router();
 router.use(authMiddleware);
 
 const createRoomSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z.string()
+    .min(1, 'Le nom est requis')
+    .max(100, 'Le nom ne doit pas dépasser 100 caractères')
+    .transform(s => s.trim())
+    .refine(s => s.length > 0, 'Le nom ne peut pas être vide'),
   type: z.enum(['public', 'private']),
   memberIds: z.array(z.string()).optional(),
 });
@@ -108,7 +112,17 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
       res.status(201).json({ room });
     } else {
-      // Public room
+      // Public room - check for duplicate name
+      const existingRoom = await Room.findOne({
+        name: data.name,
+        type: 'public',
+      });
+
+      if (existingRoom) {
+        res.status(409).json({ error: 'Un salon public avec ce nom existe déjà' });
+        return;
+      }
+
       const room = new Room({
         name: data.name,
         type: 'public',
@@ -120,6 +134,13 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
       await room.save();
       await room.populate('members.userId', 'username displayName isOnline');
+      await room.populate('createdBy', 'username displayName');
+
+      // Emit socket event to notify all connected users
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('room:created', { room });
+      }
 
       res.status(201).json({ room });
     }
@@ -164,6 +185,13 @@ router.post('/:roomId/join', async (req: AuthRequest, res: Response): Promise<vo
     });
     await room.save();
     await room.populate('members.userId', 'username displayName isOnline');
+    await room.populate('createdBy', 'username displayName');
+
+    // Notify all clients about room update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('room:updated', { room });
+    }
 
     res.json({ room });
   } catch (error) {
@@ -191,11 +219,89 @@ router.post('/:roomId/leave', async (req: AuthRequest, res: Response): Promise<v
     // Remove member
     room.members = room.members.filter(m => m.userId.toString() !== req.userId);
     await room.save();
+    await room.populate('members.userId', 'username displayName isOnline');
+    await room.populate('createdBy', 'username displayName');
+
+    // Notify all clients about room update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('room:updated', { room });
+    }
 
     res.json({ success: true });
   } catch (error) {
     console.error('Leave room error:', error);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// DELETE /rooms/:roomId - Delete a room (creator only)
+router.delete('/:roomId', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const room = await Room.findById(req.params.roomId);
+
+    if (!room) {
+      res.status(404).json({ error: 'Salon non trouvé' });
+      return;
+    }
+
+    // Can't delete lobby
+    if (room.isLobby || room.type === 'lobby') {
+      res.status(403).json({ error: 'Le lobby ne peut pas être supprimé' });
+      return;
+    }
+
+    // Only creator can delete
+    if (room.createdBy.toString() !== req.userId) {
+      res.status(403).json({ error: 'Seul le créateur peut supprimer ce salon' });
+      return;
+    }
+
+    const { Message } = await import('../models/index.js');
+    const fs = await import('fs/promises');
+    const path = await import('path');
+
+    // Find all messages to get file paths
+    const messages = await Message.find({ roomId: req.params.roomId });
+
+    // Delete associated files (images, audio)
+    const uploadsDir = path.default.join(process.cwd(), 'public', 'uploads');
+    for (const message of messages) {
+      if (message.type === 'image' || message.type === 'audio') {
+        // Content contains the file URL like /uploads/filename.ext
+        const urlPath = message.content;
+        if (urlPath && urlPath.startsWith('/uploads/')) {
+          const filename = urlPath.replace('/uploads/', '');
+          const filePath = path.default.join(uploadsDir, filename);
+          try {
+            await fs.default.unlink(filePath);
+            console.log(`Deleted file: ${filePath}`);
+          } catch (err) {
+            // File might not exist, continue anyway
+            console.log(`Could not delete file: ${filePath}`);
+          }
+        }
+      }
+    }
+
+    // Delete all messages for this room
+    const deleteResult = await Message.deleteMany({ roomId: req.params.roomId });
+    console.log(`Deleted ${deleteResult.deletedCount} messages for room ${room.name}`);
+
+    // Delete the room
+    await Room.findByIdAndDelete(req.params.roomId);
+    console.log(`Deleted room: ${room.name}`);
+
+    // Emit socket event to notify all connected users
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('room:deleted', { roomId: req.params.roomId, roomName: room.name });
+    }
+
+    res.json({ success: true, message: 'Salon supprimé avec succès' });
+  } catch (error) {
+    console.error('Delete room error:', error);
+    res.status(500).json({ error: 'Erreur lors de la suppression du salon' });
   }
 });
 
@@ -218,7 +324,7 @@ router.get('/:roomId/messages', async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const limit = parseInt(req.query.limit as string) || 50;
+    const limit = parseInt(req.query.limit as string) || 20;
     const before = req.query.before as string;
 
     const query: Record<string, unknown> = { roomId: req.params.roomId };

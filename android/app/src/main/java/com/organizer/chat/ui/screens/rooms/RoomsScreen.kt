@@ -21,6 +21,8 @@ import com.organizer.chat.data.model.ApkVersionInfo
 import com.organizer.chat.data.model.Room
 import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.RoomRepository
+import com.organizer.chat.service.ChatService
+import com.organizer.chat.ui.components.CreateRoomDialog
 import com.organizer.chat.ui.theme.OnlineGreen
 import com.organizer.chat.util.AppPreferences
 import com.organizer.chat.util.TokenManager
@@ -34,6 +36,7 @@ fun RoomsScreen(
     tokenManager: TokenManager,
     authRepository: AuthRepository,
     appPreferences: AppPreferences,
+    chatService: ChatService?,
     onRoomClick: (Room) -> Unit,
     onSettingsClick: () -> Unit,
     onLogout: () -> Unit
@@ -43,6 +46,7 @@ fun RoomsScreen(
         tokenManager = tokenManager,
         authRepository = authRepository,
         appPreferences = appPreferences,
+        chatService = chatService,
         onRoomClick = onRoomClick,
         onSettingsClick = onSettingsClick,
         onLogout = onLogout
@@ -56,12 +60,80 @@ fun RoomsContent(
     tokenManager: TokenManager,
     authRepository: AuthRepository,
     appPreferences: AppPreferences,
+    chatService: ChatService?,
     onRoomClick: (Room) -> Unit,
     onSettingsClick: () -> Unit,
     onLogout: () -> Unit
 ) {
     val viewModel = remember { RoomsViewModel(roomRepository, tokenManager, authRepository) }
     val uiState by viewModel.uiState.collectAsState()
+
+    // Track last message timestamps for sorting (persists across recompositions)
+    var lastMessageAt by remember { mutableStateOf(RoomsViewModel.lastMessageTimestamps.toMap()) }
+
+    // Observe new messages to update lastMessageAt
+    LaunchedEffect(chatService) {
+        chatService?.messages?.collect { event ->
+            RoomsViewModel.lastMessageTimestamps[event.roomId] = System.currentTimeMillis()
+            lastMessageAt = RoomsViewModel.lastMessageTimestamps.toMap()
+        }
+    }
+
+    // Observe room:created to refresh room list
+    LaunchedEffect(chatService) {
+        chatService?.roomCreated?.collect { event ->
+            android.util.Log.d("RoomsScreen", "Room created event received: ${event.roomName}")
+            viewModel.loadRooms()
+        }
+    }
+
+    // Observe room:updated to refresh room list (e.g., when member count changes)
+    LaunchedEffect(chatService) {
+        chatService?.roomUpdated?.collect { event ->
+            android.util.Log.d("RoomsScreen", "Room updated event received: ${event.roomName}")
+            viewModel.loadRooms()
+        }
+    }
+
+    // Observe room:deleted to refresh room list
+    LaunchedEffect(chatService) {
+        chatService?.roomDeleted?.collect { event ->
+            android.util.Log.d("RoomsScreen", "Room deleted event received: ${event.roomName}")
+            viewModel.loadRooms()
+        }
+    }
+
+    // Sort rooms by lastMessageAt (most recent first), then by updatedAt from server
+    val sortedRooms = remember(uiState.rooms, lastMessageAt) {
+        uiState.rooms.sortedByDescending { room ->
+            lastMessageAt[room.id] ?: room.updatedAt?.let {
+                try {
+                    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                        .parse(it.substringBefore("."))?.time
+                } catch (e: Exception) {
+                    null
+                }
+            } ?: 0L
+        }
+    }
+
+    // Handle navigation after room creation
+    LaunchedEffect(uiState.createdRoom) {
+        uiState.createdRoom?.let { room ->
+            onRoomClick(room)
+            viewModel.clearCreatedRoom()
+        }
+    }
+
+    // Show create room dialog
+    if (uiState.showCreateRoomDialog) {
+        CreateRoomDialog(
+            isLoading = uiState.isCreatingRoom,
+            errorMessage = uiState.createRoomError,
+            onDismiss = { viewModel.hideCreateRoomDialog() },
+            onCreate = { name -> viewModel.createRoom(name) }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -81,6 +153,14 @@ fun RoomsContent(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { viewModel.showCreateRoomDialog() },
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Nouveau salon")
+            }
         }
     ) { paddingValues ->
         Box(
@@ -111,7 +191,7 @@ fun RoomsContent(
                     }
                 }
 
-                uiState.rooms.isEmpty() -> {
+                sortedRooms.isEmpty() -> {
                     Text(
                         text = "Aucune conversation",
                         modifier = Modifier.align(Alignment.Center),
@@ -124,12 +204,15 @@ fun RoomsContent(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(uiState.rooms, key = { it.id }) { room ->
+                        items(sortedRooms, key = { it.id }) { room ->
                             RoomItem(
                                 room = room,
                                 displayName = viewModel.getRoomDisplayName(room),
                                 subtitle = viewModel.getRoomSubtitle(room),
-                                onClick = { onRoomClick(room) }
+                                isMember = viewModel.isMember(room),
+                                canLeave = viewModel.canLeaveRoom(room),
+                                onClick = { onRoomClick(room) },
+                                onLeaveRoom = { viewModel.leaveRoom(room.id) }
                             )
                         }
 
@@ -228,8 +311,22 @@ private fun RoomItem(
     room: Room,
     displayName: String,
     subtitle: String,
-    onClick: () -> Unit
+    isMember: Boolean,
+    canLeave: Boolean,
+    onClick: () -> Unit,
+    onLeaveRoom: () -> Unit
 ) {
+    // Use dimmed colors for non-member rooms
+    val iconColor = if (isMember) {
+        when (room.type) {
+            "lobby" -> MaterialTheme.colorScheme.tertiary
+            "public" -> MaterialTheme.colorScheme.secondary
+            else -> MaterialTheme.colorScheme.primary
+        }
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -245,11 +342,7 @@ private fun RoomItem(
             Surface(
                 modifier = Modifier.size(48.dp),
                 shape = MaterialTheme.shapes.medium,
-                color = when (room.type) {
-                    "lobby" -> MaterialTheme.colorScheme.tertiary
-                    "public" -> MaterialTheme.colorScheme.secondary
-                    else -> MaterialTheme.colorScheme.primary
-                }
+                color = iconColor
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -259,7 +352,7 @@ private fun RoomItem(
                             else -> Icons.Default.Person
                         },
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary
+                        tint = if (isMember) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline
                     )
                 }
             }
@@ -298,6 +391,20 @@ private fun RoomItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+
+            // Leave button (only for non-lobby rooms where user is member)
+            if (canLeave) {
+                IconButton(
+                    onClick = onLeaveRoom,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = "Quitter le salon",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                    )
+                }
             }
 
             Icon(

@@ -34,6 +34,25 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
+    // Auto-join public rooms when sending a message
+    if (!isMember && isPublic) {
+      room.members.push({
+        userId: req.userId as any,
+        joinedAt: new Date(),
+        lastReadAt: null,
+      });
+      await room.save();
+      await room.populate('members.userId', 'username displayName isOnline');
+      await room.populate('createdBy', 'username displayName');
+      console.log(`User ${req.userId} auto-joined public room ${room.name}`);
+
+      // Notify all clients about room update
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('room:updated', { room });
+      }
+    }
+
     const message = new Message({
       roomId: data.roomId,
       senderId: req.userId,
