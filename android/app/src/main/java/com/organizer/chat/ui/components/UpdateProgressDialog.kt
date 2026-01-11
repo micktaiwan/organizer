@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.organizer.chat.data.model.DownloadStatus
 import com.organizer.chat.data.model.UpdateDownloadState
+import com.organizer.chat.ui.theme.AccentBlue
 import java.io.File
 
 @Composable
@@ -93,13 +94,19 @@ fun UpdateProgressDialog(
         confirmButton = {
             when (val status = state.status) {
                 is DownloadStatus.ReadyToInstall -> {
-                    TextButton(onClick = { onInstall(status.file) }) {
+                    TextButton(
+                        onClick = { onInstall(status.file) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+                    ) {
                         Text("Installer")
                     }
                 }
                 is DownloadStatus.Error -> {
                     if (status.error.canRetry) {
-                        TextButton(onClick = onRetry) {
+                        TextButton(
+                            onClick = onRetry,
+                            colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+                        ) {
                             Text("Réessayer")
                         }
                     }
@@ -111,12 +118,18 @@ fun UpdateProgressDialog(
             when (state.status) {
                 is DownloadStatus.Downloading,
                 is DownloadStatus.Error -> {
-                    TextButton(onClick = onCancel) {
+                    TextButton(
+                        onClick = onCancel,
+                        colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+                    ) {
                         Text("Annuler")
                     }
                 }
                 is DownloadStatus.ReadyToInstall -> {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+                    ) {
                         Text("Plus tard")
                     }
                 }
