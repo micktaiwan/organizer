@@ -185,6 +185,8 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     return () => unsubReacted();
   }, [currentRoomId]);
 
+  // Note: user:status-changed is now handled by UserStatusContext
+
   // Listen for room events (created, updated)
   useEffect(() => {
     if (!userId) return;

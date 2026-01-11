@@ -51,6 +51,30 @@ Based on your analysis of the actual code changes (not just file names), write r
 - Bugs fixed
 - Improvements made (UX improvements, performance, etc.)
 
+**Categorize changes by platform** based on modified file paths:
+- `android/` → **Android**
+- `src/`, `src-tauri/` → **Desktop**
+- `server/` → **Serveur**
+- Changes affecting multiple platforms or shared logic → **Général**
+
+Format the release notes with sections using emojis (only include sections that have changes):
+
+```
+🌐 Général
+• Feature affecting all platforms
+
+🤖 Android
+• Android-specific feature
+
+🖥️ Desktop
+• Desktop-specific feature
+
+⚙️ Serveur
+• Backend/API changes
+```
+
+Note: Use emojis instead of markdown bold (**) because the chat clients render plain text only.
+
 Be specific about what changed. Include all significant changes - the announcement message will use the same content as the release notes.
 
 ### Step 3: Show Summary and Get Confirmation

@@ -35,6 +35,7 @@ class SocketService {
 
     // Re-emit events to registered handlers
     const events = [
+      'users:init',
       'user:online',
       'user:offline',
       'user:status-changed',

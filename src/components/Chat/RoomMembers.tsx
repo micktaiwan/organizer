@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Phone, Video, Users, VolumeX } from 'lucide-react';
 import { Room } from '../../services/api';
-import { UserStatus } from '../../types';
+import { useUserStatus } from '../../contexts/UserStatusContext';
 
 interface RoomMembersProps {
   room: Room | null;
@@ -17,6 +17,7 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
   callState,
 }) => {
   const [showMembers, setShowMembers] = useState(false);
+  const { getStatus } = useUserStatus();
 
   if (!room || callState !== 'idle') {
     return null;
@@ -50,9 +51,11 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
               const user = typeof member.userId === 'object' ? member.userId : null;
               if (!user) return null;
 
-              const status: UserStatus = (member.userId as any).status || 'available';
-              const statusMessage = (member.userId as any).statusMessage;
-              const isMuted = (member.userId as any).isMuted;
+              // Get status from global cache instead of room data
+              const userStatusData = getStatus(user.id);
+              const status = userStatusData?.status || 'available';
+              const statusMessage = userStatusData?.statusMessage;
+              const isMuted = userStatusData?.isMuted;
 
               return (
                 <div key={user.id} className="room-member-item">

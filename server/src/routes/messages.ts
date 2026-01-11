@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import fs from 'fs';
 import path from 'path';
+import { Types } from 'mongoose';
 import { Message, Room, ALLOWED_EMOJIS } from '../models/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { emitNewMessage } from '../utils/socketEmit.js';
@@ -247,6 +248,24 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
 
     const roomId = message.roomId.toString();
     await Message.findByIdAndDelete(req.params.id);
+
+    // Update unread counts for all room members
+    const room = await Room.findById(roomId);
+    if (room) {
+      const io = req.app.get('io');
+      if (io) {
+        for (const member of room.members) {
+          const memberId = member.userId.toString();
+          // Recalculate unread count for this member
+          const unreadCount = await Message.countDocuments({
+            roomId: new Types.ObjectId(roomId),
+            senderId: { $ne: new Types.ObjectId(memberId) },
+            readBy: { $ne: new Types.ObjectId(memberId) },
+          });
+          io.to(`user:${memberId}`).emit('unread:updated', { roomId, unreadCount });
+        }
+      }
+    }
 
     res.json({ success: true, roomId, messageId: req.params.id });
   } catch (error) {
