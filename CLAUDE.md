@@ -41,7 +41,7 @@ The deploy script syncs files via rsync and rebuilds Docker containers on the re
 
 **SSH Access**: Use `ubuntu@51.210.150.25` (not `root@`). Example:
 ```bash
-ssh ubuntu@51.210.150.25 "docker logs organizer-server --tail 50"
+ssh ubuntu@51.210.150.25 "docker logs organizer-api --tail 50"
 ```
 
 ### Android Development

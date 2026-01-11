@@ -6,6 +6,7 @@ import { readFile } from '@tauri-apps/plugin-fs';
 import { compressImage, blobToDataUrl, isImageFile, formatFileSize } from "./utils/imageCompression";
 import { useAuth } from "./contexts/AuthContext";
 import { useServerConfig } from "./contexts/ServerConfigContext";
+import { useUserStatus } from "./contexts/UserStatusContext";
 import { useWebRTCCall } from "./hooks/useWebRTCCall";
 // import { useContacts } from "./hooks/useContacts";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder";
@@ -61,24 +62,36 @@ function App() {
 
   const username = user?.displayName || "";
 
-  // User status - initialize from user data
-  const [userStatus, setUserStatus] = useState<UserStatus>(user?.status || 'available');
-  const [userStatusMessage, setUserStatusMessage] = useState<string | null>(user?.statusMessage || null);
-  const [userIsMuted, setUserIsMuted] = useState(user?.isMuted || false);
+  // User status - read from global cache, with local override for optimistic updates
+  const { getStatus } = useUserStatus();
+  const myStatusFromCache = user?.id ? getStatus(user.id) : undefined;
 
-  // Sync status when user data changes (e.g., on login)
+  // Local state for optimistic updates when user changes their own status
+  const [localStatusOverride, setLocalStatusOverride] = useState<{
+    status?: UserStatus;
+    statusMessage?: string | null;
+    isMuted?: boolean;
+  } | null>(null);
+
+  // Use local override if set, otherwise use cache
+  const userStatus = localStatusOverride?.status ?? myStatusFromCache?.status ?? 'available';
+  const userStatusMessage = localStatusOverride?.statusMessage ?? myStatusFromCache?.statusMessage ?? null;
+  const userIsMuted = localStatusOverride?.isMuted ?? myStatusFromCache?.isMuted ?? false;
+  const userStatusExpiresAt = myStatusFromCache?.statusExpiresAt ?? null;
+
+  // Clear local override when cache updates (server confirmed the change)
   useEffect(() => {
-    if (user) {
-      setUserStatus(user.status || 'available');
-      setUserStatusMessage(user.statusMessage || null);
-      setUserIsMuted(user.isMuted || false);
+    if (myStatusFromCache && localStatusOverride) {
+      // If cache matches our local override, clear it
+      if (myStatusFromCache.status === localStatusOverride.status) {
+        setLocalStatusOverride(null);
+      }
     }
-  }, [user]);
+  }, [myStatusFromCache, localStatusOverride]);
 
   const handleStatusChange = (status: UserStatus, statusMessage: string | null, isMuted: boolean) => {
-    setUserStatus(status);
-    setUserStatusMessage(statusMessage);
-    setUserIsMuted(isMuted);
+    // Optimistic update
+    setLocalStatusOverride({ status, statusMessage, isMuted });
   };
 
   const handleCreateRoom = async (name: string) => {
@@ -409,6 +422,7 @@ function App() {
               serverName={selectedServer?.name}
               userStatus={userStatus}
               userStatusMessage={userStatusMessage}
+              userStatusExpiresAt={userStatusExpiresAt}
               userIsMuted={userIsMuted}
               callState={callState}
               onStartCall={startCall}

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -103,7 +104,8 @@ fun getStatusLabel(status: String): String = when (status) {
 @Composable
 fun LocationScreen(
     chatService: ChatService?,
-    viewModel: LocationViewModel
+    viewModel: LocationViewModel,
+    onSettingsClick: () -> Unit
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -170,8 +172,19 @@ fun LocationScreen(
             TopAppBar(
                 title = { Text("Users") },
                 actions = {
-                    IconButton(onClick = { viewModel.loadLocations() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Rafraichir")
+                    if (uiState.isRefreshing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp).padding(4.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        IconButton(onClick = { viewModel.refresh() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Rafraichir")
+                        }
+                    }
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(Icons.Default.Settings, contentDescription = "Parametres")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

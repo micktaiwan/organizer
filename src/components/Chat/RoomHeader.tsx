@@ -12,6 +12,7 @@ interface RoomHeaderProps {
   serverName?: string;
   userStatus: UserStatus;
   userStatusMessage: string | null;
+  userStatusExpiresAt?: string | null;
   userIsMuted: boolean;
   callState: string;
   onStartCall: (targetUserId: string, withCamera: boolean) => void;
@@ -28,6 +29,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   serverName,
   userStatus,
   userStatusMessage,
+  userStatusExpiresAt,
   userIsMuted,
   callState,
   onStartCall,
@@ -86,6 +88,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
           <StatusSelector
             currentStatus={userStatus}
             currentStatusMessage={userStatusMessage}
+            currentStatusExpiresAt={userStatusExpiresAt}
             currentIsMuted={userIsMuted}
             onStatusChange={onStatusChange}
           />

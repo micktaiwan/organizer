@@ -17,6 +17,7 @@ interface ChatHeaderProps {
   serverName?: string;
   userStatus?: UserStatus;
   userStatusMessage?: string | null;
+  userStatusExpiresAt?: string | null;
   userIsMuted?: boolean;
   onStatusChange?: (status: UserStatus, statusMessage: string | null, isMuted: boolean) => void;
 }
@@ -36,6 +37,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   serverName,
   userStatus = 'available',
   userStatusMessage = null,
+  userStatusExpiresAt,
   userIsMuted = false,
   onStatusChange,
 }) => {
@@ -72,6 +74,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         <StatusSelector
           currentStatus={userStatus}
           currentStatusMessage={userStatusMessage}
+          currentStatusExpiresAt={userStatusExpiresAt}
           currentIsMuted={userIsMuted}
           onStatusChange={onStatusChange}
         />
