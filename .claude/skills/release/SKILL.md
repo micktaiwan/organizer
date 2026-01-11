@@ -37,10 +37,13 @@ When arguments are provided:
 
 ### Step 1: Analyze Uncommitted Changes
 
-1. Get staged and unstaged changes: `git diff HEAD` (shows all uncommitted changes)
-2. Get list of modified files: `git diff HEAD --name-only`
-3. Read the actual code changes for significant files to understand what changed
-4. Get current version from `android/app/build.gradle.kts`
+1. Get list of modified files: `git diff HEAD --name-only`
+2. Get current version from `android/app/build.gradle.kts`
+3. **Read the diff of ALL modified files** - do not skip any file:
+   - Use `git diff HEAD` to get the complete diff
+   - Review EVERY file's changes, not just those that seem important
+   - Even small changes (1-2 lines) can be user-visible features
+4. Before generating release notes, list what changed in EACH modified file
 
 If there are no uncommitted changes, inform the user and stop.
 
