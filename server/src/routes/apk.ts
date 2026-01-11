@@ -189,25 +189,27 @@ router.get('/download/:filename', async (req: Request, res: Response): Promise<v
   }
 });
 
-// GET /apk/versions - Admin only, list all versions
-router.get(
-  '/versions',
-  authMiddleware,
-  adminMiddleware,
-  async (_req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const versions = await ApkVersion.find()
-        .sort({ versionCode: -1 })
-        .populate('uploadedBy', 'username displayName')
-        .select('-__v');
+// GET /apk/versions - Public, list all versions (with optional limit)
+router.get('/versions', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = parseInt(req.query.limit as string, 10);
 
-      res.json({ versions });
-    } catch (error) {
-      console.error('List APK versions error:', error);
-      res.status(500).json({ error: 'Server error' });
+    let query = ApkVersion.find()
+      .sort({ versionCode: -1 })
+      .select('version versionCode releaseNotes isLatest createdAt');
+
+    if (limit > 0) {
+      query = query.limit(limit);
     }
+
+    const versions = await query;
+
+    res.json({ versions });
+  } catch (error) {
+    console.error('List APK versions error:', error);
+    res.status(500).json({ error: 'Server error' });
   }
-);
+});
 
 // DELETE /apk/:version - Admin only, delete a version
 router.delete(

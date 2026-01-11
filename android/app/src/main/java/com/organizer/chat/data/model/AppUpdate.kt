@@ -46,3 +46,16 @@ data class UpdateDownloadState(
     val updateInfo: AppUpdateInfo? = null,
     val downloadId: Long = -1
 )
+
+// Version history response
+data class ApkVersionsResponse(
+    val versions: List<ApkVersionInfo>
+)
+
+data class ApkVersionInfo(
+    val version: String,
+    val versionCode: Int,
+    val releaseNotes: String,
+    val isLatest: Boolean,
+    val createdAt: String
+)

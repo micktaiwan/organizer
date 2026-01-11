@@ -16,12 +16,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.organizer.chat.data.api.ApiClient
+import com.organizer.chat.data.model.ApkVersionInfo
 import com.organizer.chat.data.model.Room
 import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.RoomRepository
 import com.organizer.chat.ui.theme.OnlineGreen
 import com.organizer.chat.util.AppPreferences
 import com.organizer.chat.util.TokenManager
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -129,7 +133,7 @@ fun RoomsContent(
                             )
                         }
 
-                        // Easter egg footer
+                        // Easter egg footer with version history
                         item {
                             val context = LocalContext.current
                             val versionName = try {
@@ -138,7 +142,30 @@ fun RoomsContent(
                                 "unknown"
                             }
 
-                            val releaseNotes by appPreferences.releaseNotes.collectAsState(initial = null)
+                            // Fetch version history
+                            var versionHistory by remember { mutableStateOf<List<ApkVersionInfo>>(emptyList()) }
+                            LaunchedEffect(Unit) {
+                                try {
+                                    val response = ApiClient.getService().getApkVersions(limit = 5)
+                                    versionHistory = response.versions
+                                } catch (e: Exception) {
+                                    // Silently fail - version history is not critical
+                                }
+                            }
+
+                            // Get current version info from server
+                            val currentVersionInfo = versionHistory.find { it.version == versionName }
+                            val currentVersionNotes = currentVersionInfo?.releaseNotes
+                            val currentVersionDate = currentVersionInfo?.createdAt?.let { createdAt ->
+                                try {
+                                    val isoFormatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                                    val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.FRANCE)
+                                    val date = isoFormatter.parse(createdAt.substringBefore("."))
+                                    date?.let { dateFormatter.format(it) }
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            }
 
                             Column(
                                 modifier = Modifier
@@ -158,11 +185,35 @@ fun RoomsContent(
                                     textAlign = TextAlign.Center
                                 )
                                 Text(
-                                    text = if (releaseNotes != null) "v$versionName - $releaseNotes" else "v$versionName",
+                                    text = buildString {
+                                        append("v$versionName")
+                                        if (!currentVersionDate.isNullOrEmpty()) append(" ($currentVersionDate)")
+                                        if (!currentVersionNotes.isNullOrEmpty()) append("\n$currentVersionNotes")
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.outline,
                                     textAlign = TextAlign.Center
                                 )
+
+                                // Version history section
+                                if (versionHistory.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 32.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "Historique des versions",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    versionHistory.filter { it.version != versionName }.forEach { version ->
+                                        VersionHistoryItem(version = version)
+                                    }
+                                }
                             }
                         }
                     }
@@ -258,4 +309,52 @@ private fun RoomItem(
     }
 
     HorizontalDivider()
+}
+
+@Composable
+private fun VersionHistoryItem(version: ApkVersionInfo) {
+    val dateFormatter = remember {
+        SimpleDateFormat("dd MMM yyyy", Locale.FRANCE)
+    }
+    val isoFormatter = remember {
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+    }
+
+    val formattedDate = try {
+        val date = isoFormatter.parse(version.createdAt.substringBefore("."))
+        date?.let { dateFormatter.format(it) } ?: ""
+    } catch (e: Exception) {
+        ""
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "v${version.version}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (formattedDate.isNotEmpty()) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = formattedDate,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+    }
+    if (version.releaseNotes.isNotEmpty()) {
+        Text(
+            text = version.releaseNotes,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+    }
 }
