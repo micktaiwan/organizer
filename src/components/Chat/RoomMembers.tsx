@@ -1,7 +1,34 @@
 import React, { useState } from 'react';
-import { Phone, Video, Users, VolumeX } from 'lucide-react';
+import { Phone, Video, Users, VolumeX, Clock } from 'lucide-react';
 import { Room } from '../../services/api';
 import { useUserStatus } from '../../contexts/UserStatusContext';
+import { UserStatus } from '../../types';
+
+const STATUS_LABELS: Record<UserStatus, string> = {
+  available: 'Disponible',
+  busy: 'Occupé',
+  away: 'Absent',
+  dnd: 'Ne pas déranger',
+};
+
+function formatExpiresIn(expiresAt: string | null): string | null {
+  if (!expiresAt) return null;
+  const expires = new Date(expiresAt);
+  const now = new Date();
+  if (expires <= now) return null;
+
+  const diffMs = expires.getTime() - now.getTime();
+  const diffMinutes = Math.round(diffMs / 60000);
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes} min`;
+  }
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}h`;
+  }
+  return null;
+}
 
 interface RoomMembersProps {
   room: Room | null;
@@ -52,13 +79,17 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
               if (!user) return null;
 
               // Get status from global cache instead of room data
-              const userStatusData = getStatus(user.id);
+              // Note: populated user has _id from MongoDB, not id
+              const userId = user.id || (user as any)._id?.toString();
+              const userStatusData = getStatus(userId);
               const status = userStatusData?.status || 'available';
               const statusMessage = userStatusData?.statusMessage;
+              const statusExpiresAt = userStatusData?.statusExpiresAt ?? null;
               const isMuted = userStatusData?.isMuted;
+              const expiresIn = formatExpiresIn(statusExpiresAt);
 
               return (
-                <div key={user.id} className="room-member-item">
+                <div key={userId} className="room-member-item">
                   <div className="member-info">
                     <div className="member-name">
                       <span className={`status-dot ${status}`} />
@@ -66,6 +97,15 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
                       {isMuted && <VolumeX size={14} style={{ marginLeft: '0.25rem', opacity: 0.6 }} />}
                     </div>
                     <div className="member-username">@{user.username}</div>
+                    <div className="member-status-info">
+                      <span className={`member-status-label ${status}`}>{STATUS_LABELS[status]}</span>
+                      {expiresIn && (
+                        <span className="member-status-expires">
+                          <Clock size={12} />
+                          {expiresIn}
+                        </span>
+                      )}
+                    </div>
                     {statusMessage && (
                       <div className="member-status-message">"{statusMessage}"</div>
                     )}
@@ -74,7 +114,7 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
                     <button
                       className="call-button audio"
                       onClick={() => {
-                        onStartCall(user.id, false);
+                        onStartCall(userId, false);
                         setShowMembers(false);
                       }}
                       title="Appel audio"
@@ -84,7 +124,7 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
                     <button
                       className="call-button video"
                       onClick={() => {
-                        onStartCall(user.id, true);
+                        onStartCall(userId, true);
                         setShowMembers(false);
                       }}
                       title="Appel vidéo"

@@ -30,6 +30,7 @@ import com.organizer.chat.data.model.*
 import com.organizer.chat.data.repository.NoteRepository
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.util.TokenManager
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import android.content.ClipData
@@ -37,6 +38,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import com.organizer.chat.ui.theme.AccentBlue
+import com.organizer.chat.ui.theme.OnlineGreen
 
 // Note colors palette (dark theme - 6 colors)
 val noteColors = listOf(
@@ -47,6 +49,13 @@ val noteColors = listOf(
     "#3d1a3d", // Dark Purple
     "#3d2a1a"  // Dark Brown
 )
+
+// Save status for auto-save indicator
+enum class SaveStatus {
+    Idle,      // No changes or already saved
+    Saving,    // Save in progress
+    Saved      // Just saved (show checkmark)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,7 +83,8 @@ fun NoteDetailScreen(
     var selectedColor by remember { mutableStateOf("#1a1a1a") }
     var checklistItems by remember { mutableStateOf<List<EditableChecklistItem>>(emptyList()) }
     var newItemText by remember { mutableStateOf("") }
-    var hasChanges by remember { mutableStateOf(false) }
+    var saveStatus by remember { mutableStateOf(SaveStatus.Idle) }
+    var pendingVersion by remember { mutableStateOf(0) }
     var focusItemIndex by remember { mutableStateOf(-1) }
 
     // UI state
@@ -145,7 +155,7 @@ fun NoteDetailScreen(
             ?.filter { it.noteId == noteId && it.triggeredBy != currentUserId }
             ?.collect { event ->
                 // Another user updated this note
-                if (!hasChanges) {
+                if (saveStatus == SaveStatus.Idle) {
                     // No local changes, reload the note
                     val result = noteRepository.getNote(noteId)
                     result.onSuccess { loadedNote ->
@@ -187,7 +197,7 @@ fun NoteDetailScreen(
                                     order = item.order
                                 )
                             }
-                            hasChanges = false
+                            saveStatus = SaveStatus.Idle
                         }
                     }
                 }
@@ -261,7 +271,7 @@ fun NoteDetailScreen(
             )
             return result.fold(
                 onSuccess = {
-                    hasChanges = false
+                    saveStatus = SaveStatus.Idle
                     true
                 },
                 onFailure = { error ->
@@ -272,24 +282,27 @@ fun NoteDetailScreen(
         } else {
             // Update existing note
             val request = UpdateNoteRequest(
+                type = noteType,
                 title = title,
                 content = if (noteType == "note") content else null,
                 color = selectedColor,
                 items = if (noteType == "checklist") {
-                    checklistItems.mapIndexed { index, item ->
-                        UpdateChecklistItemRequest(
-                            id = item.id.takeIf { it.isNotEmpty() },
-                            text = item.text,
-                            checked = item.checked,
-                            order = index
-                        )
-                    }
+                    checklistItems
+                        .filter { it.text.isNotBlank() }
+                        .mapIndexed { index, item ->
+                            UpdateChecklistItemRequest(
+                                id = item.id.takeIf { it.isNotEmpty() },
+                                text = item.text,
+                                checked = item.checked,
+                                order = index
+                            )
+                        }
                 } else null
             )
             val result = noteRepository.updateNote(noteId!!, request)
             return result.fold(
                 onSuccess = {
-                    hasChanges = false
+                    saveStatus = SaveStatus.Idle
                     true
                 },
                 onFailure = { error ->
@@ -315,6 +328,26 @@ fun NoteDetailScreen(
         saveAndGoBack()
     }
 
+    // Auto-save with debounce for existing notes
+    LaunchedEffect(pendingVersion) {
+        if (pendingVersion > 0 && !isNewNote && saveStatus != SaveStatus.Saving) {
+            delay(1500) // 1.5s debounce
+            scope.launch {
+                saveStatus = SaveStatus.Saving
+                val success = saveNoteAsync()
+                saveStatus = if (success) SaveStatus.Saved else SaveStatus.Idle
+            }
+        }
+    }
+
+    // Reset saved indicator after 2s
+    LaunchedEffect(saveStatus) {
+        if (saveStatus == SaveStatus.Saved) {
+            delay(2000)
+            saveStatus = SaveStatus.Idle
+        }
+    }
+
     // Delete function
     fun deleteNote() {
         if (noteId != null) {
@@ -338,7 +371,24 @@ fun NoteDetailScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(if (isNewNote) "Nouvelle note" else "Modifier") },
+                title = {
+                    Column {
+                        Text(if (isNewNote) "Nouvelle note" else "Modifier")
+                        when (saveStatus) {
+                            SaveStatus.Saving -> Text(
+                                text = "Sauvegarde...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AccentBlue
+                            )
+                            SaveStatus.Saved -> Text(
+                                text = "Sauvegardé ✓",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnlineGreen
+                            )
+                            else -> {} // Nothing for Idle and Pending
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = { saveAndGoBack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
@@ -397,6 +447,7 @@ fun NoteDetailScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
+                    .imePadding()
                     .padding(16.dp)
             ) {
                 // Title input
@@ -405,7 +456,7 @@ fun NoteDetailScreen(
                         value = title,
                         onValueChange = {
                             title = it
-                            hasChanges = true
+                            pendingVersion++
                         },
                         textStyle = TextStyle(
                             fontSize = MaterialTheme.typography.headlineSmall.fontSize,
@@ -437,7 +488,7 @@ fun NoteDetailScreen(
                                 value = content,
                                 onValueChange = {
                                     content = it
-                                    hasChanges = true
+                                    pendingVersion++
                                 },
                                 textStyle = TextStyle(
                                     fontSize = MaterialTheme.typography.bodyLarge.fontSize,
@@ -470,19 +521,19 @@ fun NoteDetailScreen(
                                     checklistItems = checklistItems.toMutableList().apply {
                                         this[index] = item.copy(text = newText)
                                     }
-                                    hasChanges = true
+                                    pendingVersion++
                                 },
                                 onCheckedChange = { checked ->
                                     checklistItems = checklistItems.toMutableList().apply {
                                         this[index] = item.copy(checked = checked)
                                     }
-                                    hasChanges = true
+                                    pendingVersion++
                                 },
                                 onDelete = {
                                     checklistItems = checklistItems.toMutableList().apply {
                                         removeAt(index)
                                     }
-                                    hasChanges = true
+                                    pendingVersion++
                                 },
                                 onInsertAfter = { textAfter ->
                                     checklistItems = checklistItems.toMutableList().apply {
@@ -494,7 +545,7 @@ fun NoteDetailScreen(
                                         ))
                                     }
                                     focusItemIndex = index + 1
-                                    hasChanges = true
+                                    pendingVersion++
                                 },
                                 shouldFocus = focusItemIndex == index,
                                 onFocused = { focusItemIndex = -1 }
@@ -534,7 +585,7 @@ fun NoteDetailScreen(
                                             order = checklistItems.size
                                         )
                                         newItemText = ""
-                                        hasChanges = true
+                                        pendingVersion++
                                     }
                                 }
 
@@ -599,7 +650,7 @@ fun NoteDetailScreen(
                                 .size(40.dp)
                                 .clickable {
                                     selectedColor = colorHex
-                                    hasChanges = true
+                                    pendingVersion++
                                     showColorPicker = false
                                 },
                             shape = CircleShape,
@@ -651,7 +702,7 @@ fun NoteDetailScreen(
                                         .joinToString("\n") { it.text }
                                 }
                                 noteType = "note"
-                                hasChanges = true
+                                pendingVersion++
                             }
                             showTypeSelector = false
                         }
@@ -674,7 +725,7 @@ fun NoteDetailScreen(
                                     }
                                     content = ""
                                 }
-                                hasChanges = true
+                                pendingVersion++
                             }
                             showTypeSelector = false
                         }

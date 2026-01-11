@@ -142,6 +142,10 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response): Promi
         isAdmin: req.user!.isAdmin,
         isOnline: req.user!.isOnline,
         lastSeen: req.user!.lastSeen,
+        status: req.user!.status,
+        statusMessage: req.user!.statusMessage,
+        statusExpiresAt: req.user!.statusExpiresAt,
+        isMuted: req.user!.isMuted,
       },
     });
   } catch (error) {

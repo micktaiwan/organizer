@@ -120,7 +120,8 @@ fun HomeScreen(
                 HomeTab.USERS -> {
                     LocationScreen(
                         chatService = chatService,
-                        viewModel = locationViewModel
+                        viewModel = locationViewModel,
+                        onSettingsClick = onSettingsClick
                     )
                 }
             }

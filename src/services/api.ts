@@ -262,10 +262,10 @@ class ApiService {
     });
   }
 
-  async updateStatus(status?: string, statusMessage?: string | null, isMuted?: boolean): Promise<{ success: boolean }> {
+  async updateStatus(status?: string, statusMessage?: string | null, isMuted?: boolean, expiresAt?: string | null): Promise<{ success: boolean }> {
     return this.request<{ success: boolean }>('/users/status', {
       method: 'PUT',
-      body: JSON.stringify({ status, statusMessage, isMuted }),
+      body: JSON.stringify({ status, statusMessage, isMuted, expiresAt }),
     });
   }
 

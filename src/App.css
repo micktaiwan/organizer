@@ -2549,6 +2549,51 @@ button.copied {
   white-space: nowrap;
 }
 
+.member-status-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.member-status-label {
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.member-status-label.available {
+  background: rgba(52, 199, 89, 0.15);
+  color: #34c759;
+}
+
+.member-status-label.busy {
+  background: rgba(255, 149, 0, 0.15);
+  color: #ff9500;
+}
+
+.member-status-label.away {
+  background: rgba(255, 59, 48, 0.15);
+  color: #ff3b30;
+}
+
+.member-status-label.dnd {
+  background: rgba(142, 142, 147, 0.15);
+  color: #8e8e93;
+}
+
+.member-status-expires {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #999;
+}
+
+.member-status-expires svg {
+  opacity: 0.7;
+}
+
 .member-actions {
   display: flex;
   gap: 0.5rem;
@@ -2730,6 +2775,26 @@ button.copied {
   }
 
   .member-username {
+    color: #777;
+  }
+
+  .member-status-label.available {
+    background: rgba(52, 199, 89, 0.2);
+  }
+
+  .member-status-label.busy {
+    background: rgba(255, 149, 0, 0.2);
+  }
+
+  .member-status-label.away {
+    background: rgba(255, 59, 48, 0.2);
+  }
+
+  .member-status-label.dnd {
+    background: rgba(142, 142, 147, 0.2);
+  }
+
+  .member-status-expires {
     color: #777;
   }
 
