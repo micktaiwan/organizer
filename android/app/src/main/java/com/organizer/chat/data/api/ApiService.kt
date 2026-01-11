@@ -39,6 +39,9 @@ interface ApiService {
     @POST("rooms/{roomId}/leave")
     suspend fun leaveRoom(@Path("roomId") roomId: String): SuccessResponse
 
+    @POST("rooms/{roomId}/read")
+    suspend fun markRoomAsRead(@Path("roomId") roomId: String): SuccessResponse
+
     @POST("rooms")
     suspend fun createRoom(@Body request: CreateRoomRequest): RoomResponse
 
@@ -50,7 +53,8 @@ interface ApiService {
     @POST("upload/image")
     suspend fun uploadImageMessage(
         @Part image: MultipartBody.Part,
-        @Part("roomId") roomId: RequestBody
+        @Part("roomId") roomId: RequestBody,
+        @Part("caption") caption: RequestBody?
     ): MessageResponse
 
     @PATCH("messages/{messageId}/read")

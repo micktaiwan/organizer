@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Phone, Video, Users, Volume2, VolumeX } from 'lucide-react';
+import { Phone, Video, Users, VolumeX } from 'lucide-react';
 import { Room } from '../../services/api';
 import { UserStatus } from '../../types';
 

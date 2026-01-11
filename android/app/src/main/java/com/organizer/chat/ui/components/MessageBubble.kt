@@ -150,7 +150,7 @@ fun MessageBubble(
                 // Content based on message type
                 when (message.type) {
                     "audio" -> AudioMessageContent(message.content, message.id)
-                    "image" -> ImageMessageContent(message.content)
+                    "image" -> ImageMessageContent(message.content, message.caption)
                     else -> TextMessageContent(message.content)
                 }
 
@@ -398,63 +398,75 @@ private fun AudioMessageContent(base64Content: String, messageId: String) {
 }
 
 @Composable
-private fun ImageMessageContent(imageUrl: String) {
+private fun ImageMessageContent(imageUrl: String, caption: String?) {
     var showFullscreen by remember { mutableStateOf(false) }
 
-    if (imageUrl.startsWith("data:")) {
-        // Base64 data URL (clipboard paste) - decode manually
-        val base64Data = imageUrl.substringAfter(",")
-        val imageBytes = try {
-            Base64.decode(base64Data, Base64.DEFAULT)
-        } catch (e: Exception) {
-            null
-        }
+    Column {
+        if (imageUrl.startsWith("data:")) {
+            // Base64 data URL (clipboard paste) - decode manually
+            val base64Data = imageUrl.substringAfter(",")
+            val imageBytes = try {
+                Base64.decode(base64Data, Base64.DEFAULT)
+            } catch (e: Exception) {
+                null
+            }
 
-        if (imageBytes != null) {
-            val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Image",
-                    modifier = Modifier
-                        .widthIn(max = 250.dp)
-                        .heightIn(max = 300.dp)
-                        .clickable { showFullscreen = true },
-                    contentScale = ContentScale.Crop
-                )
-
-                if (showFullscreen) {
-                    FullscreenImageDialog(
-                        imageUrl = imageUrl,
-                        onDismiss = { showFullscreen = false }
+            if (imageBytes != null) {
+                val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Image",
+                        modifier = Modifier
+                            .widthIn(max = 250.dp)
+                            .heightIn(max = 300.dp)
+                            .clickable { showFullscreen = true },
+                        contentScale = ContentScale.Crop
                     )
+
+                    if (showFullscreen) {
+                        FullscreenImageDialog(
+                            imageUrl = imageUrl,
+                            onDismiss = { showFullscreen = false }
+                        )
+                    }
                 }
             }
-        }
-    } else {
-        // HTTP URL - use Coil
-        val fullImageUrl = if (imageUrl.startsWith("/")) {
-            // Relative URL from server - prefix with API base URL
-            ApiClient.getBaseUrl().trimEnd('/') + imageUrl
         } else {
-            // Full URL - use as-is
-            imageUrl
+            // HTTP URL - use Coil
+            val fullImageUrl = if (imageUrl.startsWith("/")) {
+                // Relative URL from server - prefix with API base URL
+                ApiClient.getBaseUrl().trimEnd('/') + imageUrl
+            } else {
+                // Full URL - use as-is
+                imageUrl
+            }
+
+            AsyncImage(
+                model = fullImageUrl,
+                contentDescription = "Image",
+                modifier = Modifier
+                    .widthIn(max = 250.dp)
+                    .heightIn(max = 300.dp)
+                    .clickable { showFullscreen = true },
+                contentScale = ContentScale.Crop
+            )
+
+            if (showFullscreen) {
+                FullscreenImageDialog(
+                    imageUrl = fullImageUrl,
+                    onDismiss = { showFullscreen = false }
+                )
+            }
         }
 
-        AsyncImage(
-            model = fullImageUrl,
-            contentDescription = "Image",
-            modifier = Modifier
-                .widthIn(max = 250.dp)
-                .heightIn(max = 300.dp)
-                .clickable { showFullscreen = true },
-            contentScale = ContentScale.Crop
-        )
-
-        if (showFullscreen) {
-            FullscreenImageDialog(
-                imageUrl = fullImageUrl,
-                onDismiss = { showFullscreen = false }
+        // Show caption if present
+        if (!caption.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = caption,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MessageTextColor
             )
         }
     }

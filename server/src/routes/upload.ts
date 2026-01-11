@@ -123,7 +123,7 @@ router.post('/image', upload.single('image'), async (req: AuthRequest, res: Resp
       return;
     }
 
-    const { roomId } = req.body;
+    const { roomId, caption } = req.body;
 
     if (!roomId) {
       res.status(400).json({ error: 'roomId est requis' });
@@ -165,6 +165,7 @@ router.post('/image', upload.single('image'), async (req: AuthRequest, res: Resp
       senderId: req.userId,
       type: 'image',
       content: urlPath, // Store relative path
+      caption: caption || undefined,
       status: 'sent',
       readBy: [req.userId]
     });

@@ -9,6 +9,7 @@ import com.organizer.chat.data.model.Message
 import com.organizer.chat.data.model.MessageSender
 import com.organizer.chat.data.model.Reaction
 import com.organizer.chat.data.repository.MessageRepository
+import com.organizer.chat.data.repository.RoomRepository
 import java.time.Instant
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.util.ImageCompressor
@@ -44,6 +45,7 @@ data class ChatUiState(
 class ChatViewModel(
     private val roomId: String,
     private val messageRepository: MessageRepository,
+    private val roomRepository: RoomRepository,
     private val chatService: ChatService?,
     private val tokenManager: TokenManager,
     context: Context
@@ -68,10 +70,24 @@ class ChatViewModel(
         loadMessages()
         observeServiceMessages()
         joinRoom()
+        markRoomAsRead()
     }
 
     private fun joinRoom() {
         chatService?.socketManager?.joinRoom(roomId)
+    }
+
+    private fun markRoomAsRead() {
+        viewModelScope.launch {
+            roomRepository.markRoomAsRead(roomId).fold(
+                onSuccess = {
+                    Log.d(TAG, "Room $roomId marked as read")
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Failed to mark room as read: ${error.message}")
+                }
+            )
+        }
     }
 
     private fun loadCurrentUser() {
@@ -265,6 +281,15 @@ class ChatViewModel(
 
     fun sendMessage() {
         val content = _uiState.value.messageInput.trim()
+        val imageUri = _uiState.value.selectedImageUri
+
+        // If image is selected, send image with optional caption
+        if (imageUri != null) {
+            sendImageWithCaption(imageUri, content)
+            return
+        }
+
+        // Otherwise, send text-only message
         if (content.isEmpty()) return
 
         viewModelScope.launch {
@@ -404,7 +429,7 @@ class ChatViewModel(
 
     fun selectImage(uri: Uri) {
         _uiState.value = _uiState.value.copy(selectedImageUri = uri)
-        sendImageMessage(uri)
+        // Don't send immediately - wait for user to press Send
     }
 
     fun clearSelectedImage() {
@@ -417,11 +442,15 @@ class ChatViewModel(
         )
     }
 
-    private fun sendImageMessage(imageUri: Uri) {
+    private fun sendImageWithCaption(imageUri: Uri, caption: String) {
         compressingJob?.cancel()
         compressingJob = viewModelScope.launch {
             try {
-                _uiState.value = _uiState.value.copy(isCompressingImage = true)
+                _uiState.value = _uiState.value.copy(
+                    isCompressingImage = true,
+                    messageInput = ""  // Clear input immediately
+                )
+                chatService?.socketManager?.notifyTypingStop(roomId)
                 Log.d(TAG, "Compressing image...")
 
                 // Compress image
@@ -444,8 +473,12 @@ class ChatViewModel(
                     isUploadingImage = true
                 )
 
-                // Upload image
-                val result = messageRepository.uploadAndSendImage(roomId, compressedFile)
+                // Upload image with optional caption
+                val result = messageRepository.uploadAndSendImage(
+                    roomId,
+                    compressedFile,
+                    caption.ifEmpty { null }
+                )
 
                 result.fold(
                     onSuccess = { message ->

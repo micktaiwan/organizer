@@ -161,6 +161,7 @@ fun NavGraph(
                 roomId = roomId,
                 roomName = roomName,
                 messageRepository = messageRepository,
+                roomRepository = roomRepository,
                 chatService = chatService,
                 tokenManager = tokenManager,
                 onBackClick = { navController.popBackStack() }

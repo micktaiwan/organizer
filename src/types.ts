@@ -15,6 +15,7 @@ export interface Message {
   content?: string; // Alternative content field from server
   type?: "text" | "image" | "audio" | "system"; // Message type from server
   image?: string; // base64 data URL
+  caption?: string; // Optional caption for image messages
   audio?: string; // base64 audio data URL for voice messages
   sender: "me" | "them";
   senderName?: string; // For multi-user rooms

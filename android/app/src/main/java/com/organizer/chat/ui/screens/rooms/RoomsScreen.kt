@@ -100,6 +100,14 @@ fun RoomsContent(
         }
     }
 
+    // Observe unread:updated to refresh room list (updates unread count badges)
+    LaunchedEffect(chatService) {
+        chatService?.unreadUpdated?.collect { event ->
+            android.util.Log.d("RoomsScreen", "Unread updated: room=${event.roomId}, count=${event.unreadCount}")
+            viewModel.loadRooms()
+        }
+    }
+
     // Rooms are already sorted by lastMessageAt from the server
     val sortedRooms = uiState.rooms
 
@@ -197,6 +205,7 @@ fun RoomsContent(
                                 subtitle = viewModel.getRoomSubtitle(room),
                                 isMember = viewModel.isMember(room),
                                 canLeave = viewModel.canLeaveRoom(room),
+                                unreadCount = room.unreadCount,
                                 onClick = { onRoomClick(room) },
                                 onLeaveRoom = { viewModel.leaveRoom(room.id) }
                             )
@@ -329,6 +338,7 @@ private fun RoomItem(
     subtitle: String,
     isMember: Boolean,
     canLeave: Boolean,
+    unreadCount: Int,
     onClick: () -> Unit,
     onLeaveRoom: () -> Unit
 ) {
@@ -407,6 +417,20 @@ private fun RoomItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+
+            // Unread count badge
+            if (unreadCount > 0) {
+                Badge(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                ) {
+                    Text(
+                        text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
             }
 
             // Leave button (only for non-lobby rooms where user is member)

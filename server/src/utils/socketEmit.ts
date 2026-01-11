@@ -1,5 +1,6 @@
 import { Server, Socket } from 'socket.io';
-import { Room } from '../models/index.js';
+import { Types } from 'mongoose';
+import { Room, Message } from '../models/index.js';
 
 interface MessageEmitData {
   io: Server;
@@ -40,4 +41,24 @@ export async function emitNewMessage({ io, socket, roomId, userId, message }: Me
   // Use socket.to() to exclude sender, or io.to() to include all
   const broadcaster = socket ? socket.to(`room:${roomId}`) : io.to(`room:${roomId}`);
   broadcaster.emit('message:new', payload);
+
+  // Emit unread:updated to all room members (except sender)
+  if (room) {
+    for (const member of room.members) {
+      const memberId = member.userId.toString();
+      if (memberId !== userId) {
+        // Calculate unread count for this member
+        const unreadCount = await Message.countDocuments({
+          roomId: new Types.ObjectId(roomId),
+          senderId: { $ne: new Types.ObjectId(memberId) },
+          readBy: { $ne: new Types.ObjectId(memberId) },
+        });
+
+        io.to(`user:${memberId}`).emit('unread:updated', {
+          roomId,
+          unreadCount,
+        });
+      }
+    }
+  }
 }

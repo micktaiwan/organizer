@@ -21,6 +21,7 @@ import com.organizer.chat.data.socket.RoomCreatedEvent
 import com.organizer.chat.data.socket.RoomDeletedEvent
 import com.organizer.chat.data.socket.RoomUpdatedEvent
 import com.organizer.chat.data.socket.SocketManager
+import com.organizer.chat.data.socket.UnreadUpdatedEvent
 import com.organizer.chat.util.TokenManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +69,10 @@ class ChatService : Service() {
 
     val roomDeleted: SharedFlow<RoomDeletedEvent>
         get() = socketManager.roomDeleted
+
+    // Unread count updates
+    val unreadUpdated: SharedFlow<UnreadUpdatedEvent>
+        get() = socketManager.unreadUpdated
 
     // Track current room for notification filtering
     private var currentRoomId: String? = null

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Settings, Globe, LogOut, MessageCircle, StickyNote } from "lucide-react";
+import { MessageCircle, StickyNote } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
@@ -11,8 +11,6 @@ import { useWebRTCCall } from "./hooks/useWebRTCCall";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder";
 import { useRooms } from "./hooks/useRooms";
 import { useNotes } from "./hooks/useNotes";
-import { Button } from "./components/ui/Button";
-import { StatusSelector } from "./components/ui/StatusSelector";
 import { UserStatus } from "./types";
 import { UpdateNoteRequest } from "./services/api";
 // TODO: Restore Contact-related features in room context
@@ -23,7 +21,8 @@ import { AuthScreen } from "./components/Auth/AuthScreen";
 import { ServerConfigScreen } from "./components/ServerConfig/ServerConfigScreen";
 import { RoomList } from "./components/Chat/RoomList";
 import { RoomMessaging } from "./components/Chat/RoomMessaging";
-import { RoomMembers } from "./components/Chat/RoomMembers";
+import { RoomHeader } from "./components/Chat/RoomHeader";
+import "./components/Chat/RoomHeader.css";
 import { CreateRoomModal } from "./components/Chat/CreateRoomModal";
 import { CallOverlay } from "./components/Call/CallOverlay";
 import { IncomingCallModal } from "./components/Call/IncomingCallModal";
@@ -394,49 +393,21 @@ function App() {
 
         <div className="chat-main">
           {currentRoom && (
-            <div className="chat-room-header">
-              <h2>{currentRoom.name}</h2>
-              <div className="room-header-actions">
-                <RoomMembers
-                  room={currentRoom}
-                  currentUserId={user?.id}
-                  onStartCall={startCall}
-                  callState={callState}
-                />
-                <div className="header-group header-secondary">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<Settings size={18} />}
-                    onClick={() => setShowAdminPanel(true)}
-                    title="Administration"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<Globe size={18} />}
-                    onClick={handleChangeServer}
-                    title={`Serveur: ${selectedServer?.name || 'Inconnu'}`}
-                  />
-                </div>
-                <div className="header-group header-user">
-                  <StatusSelector
-                    currentStatus={userStatus}
-                    currentStatusMessage={userStatusMessage}
-                    currentIsMuted={userIsMuted}
-                    onStatusChange={handleStatusChange}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<LogOut size={18} />}
-                    onClick={logout}
-                  >
-                    {username}
-                  </Button>
-                </div>
-              </div>
-            </div>
+            <RoomHeader
+              room={currentRoom}
+              currentUserId={user?.id}
+              username={username}
+              serverName={selectedServer?.name}
+              userStatus={userStatus}
+              userStatusMessage={userStatusMessage}
+              userIsMuted={userIsMuted}
+              callState={callState}
+              onStartCall={startCall}
+              onStatusChange={handleStatusChange}
+              onOpenSettings={() => setShowAdminPanel(true)}
+              onChangeServer={handleChangeServer}
+              onLogout={logout}
+            />
           )}
 
           <RoomMessaging

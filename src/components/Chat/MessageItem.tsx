@@ -148,13 +148,16 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
         )}
         <div className="bubble">
           {msg.image && (
-            <img
-              src={getImageUrl(msg.image)}
-              alt="Image"
-              className="message-image"
-              onClick={() => setShowFullscreenImage(true)}
-              style={{ cursor: 'pointer' }}
-            />
+            <div className="image-with-caption">
+              <img
+                src={getImageUrl(msg.image)}
+                alt="Image"
+                className="message-image"
+                onClick={() => setShowFullscreenImage(true)}
+                style={{ cursor: 'pointer' }}
+              />
+              {msg.caption && <span className="image-caption">{msg.caption}</span>}
+            </div>
           )}
           {msg.audio && (
             <div className="audio-message">

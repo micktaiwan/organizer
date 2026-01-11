@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserStatus } from '../../types';
 import { api } from '../../services/api';
+import './StatusSelector.css';
 
 interface StatusSelectorProps {
   currentStatus: UserStatus;

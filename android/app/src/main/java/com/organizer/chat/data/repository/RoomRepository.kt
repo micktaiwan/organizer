@@ -51,4 +51,13 @@ class RoomRepository {
             Result.failure(e)
         }
     }
+
+    suspend fun markRoomAsRead(roomId: String): Result<Boolean> {
+        return try {
+            val response = api.markRoomAsRead(roomId)
+            Result.success(response.success)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
