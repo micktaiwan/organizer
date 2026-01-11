@@ -22,6 +22,8 @@ import com.organizer.chat.data.model.Label
 import com.organizer.chat.data.model.Note
 import com.organizer.chat.data.repository.NoteRepository
 import com.organizer.chat.service.ChatService
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -400,17 +402,65 @@ fun NoteCard(
                 }
             }
 
-            // Pin indicator
-            if (note.isPinned) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Icon(
-                    imageVector = Icons.Default.PushPin,
-                    contentDescription = "Epinglee",
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.primary
+            // Pin indicator and date
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (note.isPinned) {
+                    Icon(
+                        imageVector = Icons.Default.PushPin,
+                        contentDescription = "Epinglee",
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Spacer(modifier = Modifier.width(1.dp))
+                }
+
+                // Modification date
+                Text(
+                    text = formatNoteDate(note.updatedAt ?: note.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
             }
         }
+    }
+}
+
+private fun formatNoteDate(isoDate: String): String {
+    return try {
+        val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        inputFormat.timeZone = TimeZone.getTimeZone("UTC")
+        val date = inputFormat.parse(isoDate) ?: return ""
+
+        val now = Calendar.getInstance()
+        val noteDate = Calendar.getInstance().apply { time = date }
+
+        when {
+            // Today: show "Auj. HH:mm"
+            now.get(Calendar.YEAR) == noteDate.get(Calendar.YEAR) &&
+            now.get(Calendar.DAY_OF_YEAR) == noteDate.get(Calendar.DAY_OF_YEAR) -> {
+                "Auj. " + SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+            }
+            // Yesterday
+            now.get(Calendar.YEAR) == noteDate.get(Calendar.YEAR) &&
+            now.get(Calendar.DAY_OF_YEAR) - noteDate.get(Calendar.DAY_OF_YEAR) == 1 -> {
+                "Hier"
+            }
+            // Same year: show day and month
+            now.get(Calendar.YEAR) == noteDate.get(Calendar.YEAR) -> {
+                SimpleDateFormat("d MMM", Locale.FRENCH).format(date)
+            }
+            // Different year: show full date
+            else -> {
+                SimpleDateFormat("d MMM yy", Locale.FRENCH).format(date)
+            }
+        }
+    } catch (e: Exception) {
+        ""
     }
 }
 

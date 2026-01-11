@@ -66,6 +66,9 @@ interface ApiService {
         @Body request: ReactRequest
     ): ReactResponse
 
+    @DELETE("messages/{messageId}")
+    suspend fun deleteMessage(@Path("messageId") messageId: String): SuccessResponse
+
     // Users
     @GET("users/search")
     suspend fun searchUsers(@Query("q") query: String): UsersSearchResponse

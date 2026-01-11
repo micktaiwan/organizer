@@ -65,4 +65,13 @@ class MessageRepository {
             Result.failure(e)
         }
     }
+
+    suspend fun deleteMessage(messageId: String): Result<Boolean> {
+        return try {
+            api.deleteMessage(messageId)
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

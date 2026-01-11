@@ -546,7 +546,7 @@ fun NoteDetailScreen(
                                     onCheckedChange = { checked ->
                                         checklistItems = checklistItems.toMutableList().apply {
                                             this[index] = item.copy(checked = checked)
-                                        }
+                                        }.sortedBy { it.checked }
                                         pendingVersion++
                                     },
                                     onDelete = {

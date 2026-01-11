@@ -5,9 +5,11 @@ import android.graphics.BitmapFactory
 import android.media.MediaPlayer
 import android.net.Uri
 import android.util.Base64
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -20,11 +22,14 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,12 +72,14 @@ private val MessageSecondaryColor = androidx.compose.ui.graphics.Color(0xFF66666
 // Available reaction emojis
 val ALLOWED_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "😡", "✅", "⚠️", "🙏", "🎉", "👋", "😘")
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
     message: Message,
     isMyMessage: Boolean,
     currentUserId: String? = null,
-    onReact: ((String) -> Unit)? = null
+    onReact: ((String) -> Unit)? = null,
+    onDelete: (() -> Unit)? = null
 ) {
     // System messages get special rendering
     if (message.type == "system") {
@@ -87,6 +94,7 @@ fun MessageBubble(
     }
 
     var showReactionPicker by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     val bubbleShape = if (isMyMessage) {
         RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
@@ -138,29 +146,44 @@ fun MessageBubble(
             }
         }
 
-        Surface(
-            shape = bubbleShape,
-            color = bubbleColor,
-            shadowElevation = 1.dp,
-            modifier = Modifier.widthIn(max = 280.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        Box {
+            Surface(
+                shape = bubbleShape,
+                color = bubbleColor,
+                shadowElevation = 1.dp,
+                modifier = Modifier.widthIn(max = 280.dp)
             ) {
-                // Content based on message type
-                when (message.type) {
-                    "audio" -> AudioMessageContent(message.content, message.id)
-                    "image" -> ImageMessageContent(message.content, message.caption)
-                    else -> TextMessageContent(message.content)
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    // Content based on message type
+                    when (message.type) {
+                        "audio" -> AudioMessageContent(message.content, message.id)
+                        "image" -> ImageMessageContent(message.content, message.caption)
+                        else -> TextMessageContent(message.content)
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = formatTime(message.createdAt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MessageSecondaryColor,
+                        modifier = Modifier.align(Alignment.End)
+                    )
                 }
+            }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = formatTime(message.createdAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MessageSecondaryColor,
-                    modifier = Modifier.align(Alignment.End)
+            // Long press overlay for delete
+            if (isMyMessage && onDelete != null) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onLongPress = { showDeleteDialog = true }
+                            )
+                        }
                 )
             }
         }
@@ -187,6 +210,31 @@ fun MessageBubble(
                 showReactionPicker = false
             },
             onDismiss = { showReactionPicker = false }
+        )
+    }
+
+    // Delete confirmation dialog
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Supprimer le message") },
+            text = { Text("Voulez-vous vraiment supprimer ce message ?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDelete?.invoke()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Supprimer")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Annuler")
+                }
+            }
         )
     }
 }
