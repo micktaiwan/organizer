@@ -47,8 +47,13 @@ fun HomeScreen(
     val selectedTab = HomeTab.entries[selectedTabIndex]
 
     // Create ViewModel at HomeScreen level so it persists across tab switches
-    val locationViewModel = remember {
-        LocationViewModel(context, chatService?.socketManager)
+    val locationViewModel = remember { LocationViewModel(context) }
+
+    // Initialize socket manager when it becomes available
+    LaunchedEffect(chatService?.socketManager) {
+        chatService?.socketManager?.let { manager ->
+            locationViewModel.setSocketManager(manager)
+        }
     }
 
     Scaffold(
