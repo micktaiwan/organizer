@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.AlertDialog
@@ -37,10 +38,16 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -71,6 +78,8 @@ import com.organizer.chat.data.model.TrackPoint
 import com.organizer.chat.data.model.TrackSummary
 import com.organizer.chat.data.model.TrackWithUserInfo
 import com.organizer.chat.data.model.UserWithLocation
+import com.organizer.chat.ui.screens.map.MapSettings
+import com.organizer.chat.ui.screens.map.MapTileSource
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.Charcoal
 import com.organizer.chat.ui.theme.CharcoalLight
@@ -115,6 +124,13 @@ fun MapScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.showMapSettings() }) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = "Options de la carte",
+                            tint = Color.White
+                        )
+                    }
                     IconButton(onClick = { viewModel.showHistoryDialog() }) {
                         Icon(
                             imageVector = Icons.Default.History,
@@ -180,11 +196,12 @@ fun MapScreen(
                     tracks = uiState.tracks,
                     trackingUsers = uiState.trackingUsers,
                     historyTrackId = uiState.viewingHistoryTrack?.let { "history_${it.id}" },
+                    mapSettings = uiState.mapSettings,
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Legend (only in live mode)
-                if (uiState.viewingHistoryTrack == null && uiState.trackingUsers.isNotEmpty()) {
+                // Legend (only in live mode and if enabled)
+                if (uiState.viewingHistoryTrack == null && uiState.trackingUsers.isNotEmpty() && uiState.mapSettings.showLegend) {
                     Card(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -276,6 +293,15 @@ fun MapScreen(
             onDismiss = { viewModel.dismissDeleteConfirmation() }
         )
     }
+
+    // Map settings bottom sheet
+    if (uiState.showMapSettings) {
+        MapSettingsBottomSheet(
+            settings = uiState.mapSettings,
+            onDismiss = { viewModel.dismissMapSettings() },
+            onSettingsChange = { viewModel.updateMapSettings(it) }
+        )
+    }
 }
 
 @Composable
@@ -285,6 +311,7 @@ private fun OsmMapView(
     tracks: Map<String, List<TrackPoint>>,
     trackingUsers: Set<String>,
     historyTrackId: String?,
+    mapSettings: MapSettings,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -307,7 +334,7 @@ private fun OsmMapView(
     AndroidView(
         factory = { ctx ->
             MapView(ctx).apply {
-                setTileSource(TileSourceFactory.MAPNIK)
+                setTileSource(getTileSource(mapSettings.tileSource))
                 setMultiTouchControls(true)
                 controller.setZoom(14.0)
 
@@ -319,18 +346,23 @@ private fun OsmMapView(
         },
         modifier = modifier,
         update = { map ->
+            // Update tile source if changed
+            if (map.tileProvider.tileSource != getTileSource(mapSettings.tileSource)) {
+                map.setTileSource(getTileSource(mapSettings.tileSource))
+            }
             // === Update polylines ===
-            val currentTrackIds = tracks.keys.toSet()
+            val currentTrackIds = if (mapSettings.showTracks) tracks.keys.toSet() else emptySet()
             val existingTrackIds = polylinesMap.keys.toSet()
 
-            // Remove polylines for tracks that no longer exist
+            // Remove polylines for tracks that no longer exist or if tracks are hidden
             (existingTrackIds - currentTrackIds).forEach { trackId ->
                 polylinesMap[trackId]?.let { map.overlays.remove(it) }
                 polylinesMap.remove(trackId)
             }
 
-            // Add or update polylines
-            tracks.forEach { (trackId, points) ->
+            // Add or update polylines (only if showTracks is enabled)
+            if (mapSettings.showTracks) {
+                tracks.forEach { (trackId, points) ->
                 if (points.size >= 2) {
                     val geoPoints = points.map { GeoPoint(it.lat, it.lng) }
                     val existingPolyline = polylinesMap[trackId]
@@ -350,20 +382,26 @@ private fun OsmMapView(
                     }
                 }
             }
+            }
 
             // === Update markers ===
-            val currentUserIds = users.mapNotNull { if (it.location != null) it.id else null }.toSet()
+            val currentUserIds = if (mapSettings.showMarkers) {
+                users.mapNotNull { if (it.location != null) it.id else null }.toSet()
+            } else {
+                emptySet()
+            }
             val existingUserIds = markersMap.keys.toSet()
 
-            // Remove markers for users that no longer exist or have no location
+            // Remove markers for users that no longer exist, have no location, or if markers are hidden
             (existingUserIds - currentUserIds).forEach { userId ->
                 markersMap[userId]?.let { map.overlays.remove(it) }
                 markersMap.remove(userId)
                 markerStatesCache.remove(userId)
             }
 
-            // Add or update markers
-            users.forEach { user ->
+            // Add or update markers (only if showMarkers is enabled)
+            if (mapSettings.showMarkers) {
+                users.forEach { user ->
                 user.location?.let { location ->
                     val existingMarker = markersMap[user.id]
                     val newPosition = GeoPoint(location.lat, location.lng)
@@ -398,6 +436,7 @@ private fun OsmMapView(
                         map.overlays.add(marker)
                     }
                 }
+            }
             }
 
             // === Center map ===
@@ -830,6 +869,164 @@ private fun DeleteTrackDialog(
         containerColor = CharcoalLight,
         shape = RoundedCornerShape(16.dp)
     )
+}
+
+private fun getTileSource(source: MapTileSource): org.osmdroid.tileprovider.tilesource.ITileSource {
+    return when (source) {
+        MapTileSource.MAPNIK -> TileSourceFactory.MAPNIK
+        MapTileSource.CYCLEMAP -> TileSourceFactory.CYCLEMAP
+        MapTileSource.PUBLIC_TRANSPORT -> TileSourceFactory.PUBLIC_TRANSPORT
+        MapTileSource.WIKIMEDIA -> TileSourceFactory.WIKIMEDIA
+    }
+}
+
+@Composable
+private fun MapSettingsBottomSheet(
+    settings: MapSettings,
+    onDismiss: () -> Unit,
+    onSettingsChange: (MapSettings) -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = CharcoalLight
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = "Options de la carte",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            // Tile source section
+            Text(
+                text = "Style de carte",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            MapTileSource.entries.forEach { source ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSettingsChange(settings.copy(tileSource = source)) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = settings.tileSource == source,
+                        onClick = { onSettingsChange(settings.copy(tileSource = source)) },
+                        colors = RadioButtonDefaults.colors(
+                            selectedColor = AccentBlue,
+                            unselectedColor = Color.White.copy(alpha = 0.6f)
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = source.displayName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White
+                    )
+                }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 16.dp),
+                color = Color.White.copy(alpha = 0.2f)
+            )
+
+            // Display options section
+            Text(
+                text = "Affichage",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            // Show tracks toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Afficher les trajets",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White
+                )
+                Switch(
+                    checked = settings.showTracks,
+                    onCheckedChange = { onSettingsChange(settings.copy(showTracks = it)) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = AccentBlue,
+                        checkedTrackColor = AccentBlue.copy(alpha = 0.5f),
+                        uncheckedThumbColor = Color.White.copy(alpha = 0.6f),
+                        uncheckedTrackColor = Color.White.copy(alpha = 0.3f)
+                    )
+                )
+            }
+
+            // Show markers toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Afficher les marqueurs",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White
+                )
+                Switch(
+                    checked = settings.showMarkers,
+                    onCheckedChange = { onSettingsChange(settings.copy(showMarkers = it)) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = AccentBlue,
+                        checkedTrackColor = AccentBlue.copy(alpha = 0.5f),
+                        uncheckedThumbColor = Color.White.copy(alpha = 0.6f),
+                        uncheckedTrackColor = Color.White.copy(alpha = 0.3f)
+                    )
+                )
+            }
+
+            // Show legend toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Afficher la légende",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White
+                )
+                Switch(
+                    checked = settings.showLegend,
+                    onCheckedChange = { onSettingsChange(settings.copy(showLegend = it)) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = AccentBlue,
+                        checkedTrackColor = AccentBlue.copy(alpha = 0.5f),
+                        uncheckedThumbColor = Color.White.copy(alpha = 0.6f),
+                        uncheckedTrackColor = Color.White.copy(alpha = 0.3f)
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
 }
 
 @Composable
