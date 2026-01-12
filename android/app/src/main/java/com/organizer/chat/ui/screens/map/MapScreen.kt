@@ -175,6 +175,7 @@ fun MapScreen(
             } else {
                 // OSMDroid MapView
                 OsmMapView(
+                    currentUserId = uiState.currentUserId,
                     users = uiState.users,
                     tracks = uiState.tracks,
                     trackingUsers = uiState.trackingUsers,
@@ -279,6 +280,7 @@ fun MapScreen(
 
 @Composable
 private fun OsmMapView(
+    currentUserId: String?,
     users: List<UserWithLocation>,
     tracks: Map<String, List<TrackPoint>>,
     trackingUsers: Set<String>,
@@ -309,7 +311,7 @@ private fun OsmMapView(
                 setMultiTouchControls(true)
                 controller.setZoom(14.0)
 
-                // Default to Paris
+                // Default to Paris (will be replaced if user has location)
                 controller.setCenter(GeoPoint(48.8566, 2.3522))
 
                 mapView = this
@@ -417,9 +419,13 @@ private fun OsmMapView(
                 hasInitializedCenter = false
             }
 
-            // Live mode: center on first user with location - only once
+            // Live mode: center on current user's location (or first user with location) - only once
             if (historyTrackId == null && !hasInitializedCenter && users.isNotEmpty()) {
-                users.firstOrNull { it.location != null }?.location?.let { location ->
+                // Try to center on current user first
+                val userToCenter = users.firstOrNull { it.id == currentUserId && it.location != null }
+                    ?: users.firstOrNull { it.location != null }
+
+                userToCenter?.location?.let { location ->
                     map.controller.setCenter(GeoPoint(location.lat, location.lng))
                     map.controller.setZoom(14.0)
                     hasInitializedCenter = true

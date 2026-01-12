@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class MapUiState(
+    val currentUserId: String? = null,
     val users: List<UserWithLocation> = emptyList(),
     val tracks: Map<String, List<TrackPoint>> = emptyMap(), // userId -> points
     val trackingUsers: Set<String> = emptySet(), // userIds currently tracking
@@ -64,7 +65,7 @@ class MapViewModel(
     private val tokenManager = TokenManager(context)
     private val currentUserId: String? = tokenManager.getUserIdSync()
 
-    private val _uiState = MutableStateFlow(MapUiState())
+    private val _uiState = MutableStateFlow(MapUiState(currentUserId = currentUserId))
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
 
     init {
