@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface IUserLocation {
   lat: number;
@@ -30,6 +30,10 @@ export interface IUser extends Document {
   lastSeen: Date;
   location?: IUserLocation | null;
   appVersion?: IAppVersion | null;
+  // Tracking mode
+  isTracking: boolean;
+  trackingExpiresAt: Date | null;
+  currentTrackId: Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -113,6 +117,20 @@ const UserSchema = new Schema<IUser>(
         versionCode: { type: Number, required: true },
         updatedAt: { type: Date, default: Date.now },
       },
+      default: null,
+    },
+    // Tracking mode
+    isTracking: {
+      type: Boolean,
+      default: false,
+    },
+    trackingExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    currentTrackId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Track',
       default: null,
     },
   },

@@ -5,3 +5,5 @@ export { Room, type IRoom } from './Room.js';
 export { ApkVersion, type IApkVersion } from './ApkVersion.js';
 export { Note, type INote, type NoteType, type IChecklistItem } from './Note.js';
 export { Label, type ILabel } from './Label.js';
+export { LocationHistory, type ILocationHistory } from './LocationHistory.js';
+export { Track, type ITrack, type ITrackPoint } from './Track.js';

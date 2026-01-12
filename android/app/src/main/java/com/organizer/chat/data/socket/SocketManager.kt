@@ -73,6 +73,13 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _userLocationUpdated = MutableSharedFlow<UserLocationUpdatedEvent>(replay = 1, extraBufferCapacity = 10)
     val userLocationUpdated: SharedFlow<UserLocationUpdatedEvent> = _userLocationUpdated.asSharedFlow()
 
+    // Tracking events
+    private val _userTrackingChanged = MutableSharedFlow<UserTrackingChangedEvent>(replay = 1, extraBufferCapacity = 10)
+    val userTrackingChanged: SharedFlow<UserTrackingChangedEvent> = _userTrackingChanged.asSharedFlow()
+
+    private val _userTrackPoint = MutableSharedFlow<UserTrackPointEvent>(replay = 0, extraBufferCapacity = 50)
+    val userTrackPoint: SharedFlow<UserTrackPointEvent> = _userTrackPoint.asSharedFlow()
+
     // Room events
     private val _roomCreated = MutableSharedFlow<RoomCreatedEvent>(replay = 0, extraBufferCapacity = 10)
     val roomCreated: SharedFlow<RoomCreatedEvent> = _roomCreated.asSharedFlow()
@@ -390,6 +397,46 @@ class SocketManager(private val tokenManager: TokenManager) {
                 }
             }
 
+            // Tracking events
+            on("user:tracking-changed") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = UserTrackingChangedEvent(
+                        userId = data.getString("userId"),
+                        username = data.optString("username", ""),
+                        displayName = data.optString("displayName", ""),
+                        isTracking = data.getBoolean("isTracking"),
+                        trackingExpiresAt = if (data.isNull("trackingExpiresAt")) null else data.optString("trackingExpiresAt"),
+                        trackId = if (data.isNull("trackId")) null else data.optString("trackId")
+                    )
+                    Log.d(TAG, "User tracking changed: ${event.userId} -> ${event.isTracking}")
+                    _userTrackingChanged.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing user:tracking-changed", e)
+                }
+            }
+
+            on("user:track-point") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val pointObj = data.getJSONObject("point")
+                    val event = UserTrackPointEvent(
+                        userId = data.getString("userId"),
+                        trackId = data.getString("trackId"),
+                        point = TrackPointData(
+                            lat = pointObj.getDouble("lat"),
+                            lng = pointObj.getDouble("lng"),
+                            accuracy = if (pointObj.isNull("accuracy")) null else pointObj.optDouble("accuracy").toFloat(),
+                            timestamp = pointObj.optString("timestamp")
+                        )
+                    )
+                    Log.d(TAG, "Track point received: ${event.userId} at ${event.point.lat},${event.point.lng}")
+                    _userTrackPoint.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing user:track-point", e)
+                }
+            }
+
             // Room events
             on("room:created") { args ->
                 try {
@@ -643,4 +690,27 @@ data class RoomDeletedEvent(
 data class UnreadUpdatedEvent(
     val roomId: String,
     val unreadCount: Int
+)
+
+// Tracking events
+data class UserTrackingChangedEvent(
+    val userId: String,
+    val username: String,
+    val displayName: String,
+    val isTracking: Boolean,
+    val trackingExpiresAt: String?,
+    val trackId: String?
+)
+
+data class UserTrackPointEvent(
+    val userId: String,
+    val trackId: String,
+    val point: TrackPointData
+)
+
+data class TrackPointData(
+    val lat: Double,
+    val lng: Double,
+    val accuracy: Float?,
+    val timestamp: String?
 )

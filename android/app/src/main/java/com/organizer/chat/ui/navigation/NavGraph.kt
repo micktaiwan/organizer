@@ -1,6 +1,8 @@
 package com.organizer.chat.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -14,6 +16,8 @@ import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.screens.chat.ChatScreen
 import com.organizer.chat.ui.screens.home.HomeScreen
 import com.organizer.chat.ui.screens.login.LoginScreen
+import com.organizer.chat.ui.screens.map.MapScreen
+import com.organizer.chat.ui.screens.map.MapViewModel
 import com.organizer.chat.ui.screens.notes.NoteDetailScreen
 import com.organizer.chat.ui.screens.register.RegisterScreen
 import com.organizer.chat.ui.screens.rooms.RoomsScreen
@@ -27,6 +31,7 @@ object Routes {
     const val HOME = "home"
     const val ROOMS = "rooms"  // Keep for backwards compatibility
     const val SETTINGS = "settings"
+    const val MAP = "map"
     const val CHAT = "chat/{roomId}/{roomName}"
     const val NOTE_DETAIL = "note/{noteId}"
     const val NOTE_CREATE = "note/create"
@@ -103,6 +108,9 @@ fun NavGraph(
                 onCreateNote = {
                     navController.navigate(Routes.NOTE_CREATE)
                 },
+                onMapClick = {
+                    navController.navigate(Routes.MAP)
+                },
                 onLogout = {
                     onLogout()
                     navController.navigate(Routes.LOGIN) {
@@ -144,6 +152,17 @@ fun NavGraph(
                         popUpTo(Routes.HOME) { inclusive = true }
                     }
                 }
+            )
+        }
+
+        composable(Routes.MAP) {
+            val context = LocalContext.current
+            val viewModel = remember {
+                MapViewModel(context, chatService?.socketManager)
+            }
+            MapScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

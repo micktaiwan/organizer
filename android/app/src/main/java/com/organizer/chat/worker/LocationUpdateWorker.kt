@@ -81,6 +81,7 @@ class LocationUpdateWorker(
                 val updateResult = repository.updateLocation(
                     lat = location.latitude,
                     lng = location.longitude,
+                    accuracy = if (location.hasAccuracy()) location.accuracy else null,
                     street = address?.street,
                     city = address?.city,
                     country = address?.country

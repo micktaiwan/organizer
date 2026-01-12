@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.os.Build
 import com.organizer.chat.data.api.ApiClient
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.service.TrackingService
 import com.organizer.chat.util.TokenManager
 
 class OrganizerApp : Application() {
@@ -51,8 +52,18 @@ class OrganizerApp : Application() {
                 setShowBadge(true)
             }
 
+            // Tracking channel (low priority, silent)
+            val trackingChannel = NotificationChannel(
+                TrackingService.CHANNEL_TRACKING,
+                "Suivi en temps réel",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Notification affichée pendant le suivi de position"
+                setShowBadge(false)
+            }
+
             notificationManager.createNotificationChannels(
-                listOf(serviceChannel, messagesChannel)
+                listOf(serviceChannel, messagesChannel, trackingChannel)
             )
         }
     }
