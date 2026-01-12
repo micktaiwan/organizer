@@ -46,7 +46,8 @@ data class ChatUiState(
     val isUploadingFile: Boolean = false,
     val hasMoreMessages: Boolean = true,
     val isLoadingMore: Boolean = false,
-    val shouldScrollToBottom: Boolean = true
+    val shouldScrollToBottom: Boolean = true,
+    val roomMemberCount: Int = 0
 )
 
 class ChatViewModel(
@@ -77,8 +78,10 @@ class ChatViewModel(
 
     init {
         loadCurrentUser()
+        loadRoomInfo()
         loadMessages()
         observeServiceMessages()
+        observeMessageReadEvents()
         observeTypingState()
         joinRoom()
         markRoomAsRead()
@@ -139,6 +142,25 @@ class ChatViewModel(
         }
     }
 
+    private fun loadRoomInfo() {
+        viewModelScope.launch {
+            roomRepository.getRoom(roomId).fold(
+                onSuccess = { room ->
+                    // Only count human members (exclude bots)
+                    val humanMemberCount = room.members.count { !it.userId.isBot }
+                    Log.d(TAG, "Room ${room.name}: ${room.members.size} members, $humanMemberCount humans")
+                    room.members.forEach { member ->
+                        Log.d(TAG, "  - ${member.userId.username}: isBot=${member.userId.isBot}")
+                    }
+                    _uiState.value = _uiState.value.copy(roomMemberCount = humanMemberCount)
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Failed to load room info: ${error.message}")
+                }
+            )
+        }
+    }
+
     fun loadMessages() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
@@ -154,6 +176,8 @@ class ChatViewModel(
                         hasMoreMessages = messages.size == MESSAGE_PAGE_SIZE,
                         shouldScrollToBottom = true
                     )
+                    // Mark unread messages as read
+                    markUnreadMessagesAsRead(messages)
                 },
                 onFailure = { error ->
                     Log.e(TAG, "Failed to load messages: ${error.message}")
@@ -163,6 +187,27 @@ class ChatViewModel(
                     )
                 }
             )
+        }
+    }
+
+    private fun markUnreadMessagesAsRead(messages: List<Message>) {
+        viewModelScope.launch {
+            val currentUserId = _uiState.value.currentUserId ?: return@launch
+            val unreadIds = messages
+                .filter { it.senderId.id != currentUserId && !it.readBy.contains(currentUserId) }
+                .map { it.id }
+
+            if (unreadIds.isNotEmpty()) {
+                Log.d(TAG, "Marking ${unreadIds.size} messages as read")
+                messageRepository.markMessagesAsRead(unreadIds).fold(
+                    onSuccess = {
+                        chatService?.socketManager?.notifyMessagesRead(roomId, unreadIds)
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Failed to mark messages as read: ${error.message}")
+                    }
+                )
+            }
         }
     }
 
@@ -233,6 +278,10 @@ class ChatViewModel(
 
                         if (addMessageIfNotExists(newMessage)) {
                             Log.d(TAG, "Added new message from socket: ${event.messageId}")
+                            // Mark as read immediately since we're viewing the room
+                            if (event.from != _uiState.value.currentUserId) {
+                                markUnreadMessagesAsRead(listOf(newMessage))
+                            }
                         }
                     }
                 }
@@ -317,6 +366,24 @@ class ChatViewModel(
         }
     }
 
+    private fun observeMessageReadEvents() {
+        chatService?.let { service ->
+            viewModelScope.launch {
+                service.socketManager.messageRead.collect { event ->
+                    if (event.roomId == roomId) {
+                        Log.d(TAG, "Messages read by ${event.from}: ${event.messageIds}")
+                        // Update readBy for affected messages
+                        val updatedMessages = _uiState.value.messages.map { msg ->
+                            if (event.messageIds.contains(msg.id) && !msg.readBy.contains(event.from)) {
+                                msg.copy(readBy = msg.readBy + event.from)
+                            } else msg
+                        }
+                        _uiState.value = _uiState.value.copy(messages = updatedMessages)
+                    }
+                }
+            }
+        }
+    }
 
     fun sendMessage() {
         val content = textFieldState.text.toString().trim()

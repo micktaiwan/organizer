@@ -70,6 +70,9 @@ interface ApiService {
     @PATCH("messages/{messageId}/read")
     suspend fun markAsRead(@Path("messageId") messageId: String): MessageResponse
 
+    @POST("messages/read-bulk")
+    suspend fun markMessagesAsRead(@Body request: MarkMessagesReadRequest): SuccessResponse
+
     @POST("messages/{messageId}/react")
     suspend fun reactToMessage(
         @Path("messageId") messageId: String,
@@ -222,4 +225,8 @@ data class StatusUser(
     val statusMessage: String?,
     val statusExpiresAt: String?,
     val isMuted: Boolean
+)
+
+data class MarkMessagesReadRequest(
+    val messageIds: List<String>
 )

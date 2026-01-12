@@ -69,6 +69,9 @@ import java.util.*
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -77,6 +80,8 @@ import com.organizer.chat.util.ImageDownloader
 import androidx.compose.ui.text.style.TextAlign
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.CharcoalLight
+import com.organizer.chat.ui.theme.OfflineGray
+import com.organizer.chat.ui.theme.OnlineGreen
 import com.organizer.chat.ui.screens.users.getStatusColor
 
 // Fixed colors for message bubbles (readable on both light/dark backgrounds)
@@ -95,6 +100,7 @@ fun MessageBubble(
     isGroupedWithPrevious: Boolean = false,
     isLastInGroup: Boolean = true,
     currentUserId: String? = null,
+    roomMemberCount: Int = 0,
     onReact: ((String) -> Unit)? = null,
     onDelete: (() -> Unit)? = null
 ) {
@@ -207,16 +213,28 @@ fun MessageBubble(
                         )
                     }
 
-                    // Timestamp - only show if last in group
+                    // Timestamp and read receipt - only show if last in group
                     if (isLastInGroup) {
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        Text(
-                            text = formatTime(message.createdAt),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MessageSecondaryColor,
-                            modifier = Modifier.align(Alignment.End)
-                        )
+                        Row(
+                            modifier = Modifier.align(Alignment.End),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = formatTime(message.createdAt),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MessageSecondaryColor
+                            )
+                            // Show read receipt only for own messages
+                            if (isMyMessage) {
+                                ReadReceipt(
+                                    message = message,
+                                    roomMemberCount = roomMemberCount
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -911,6 +929,37 @@ private fun FullscreenImageDialog(
             }
         }
     }
+}
+
+@Composable
+private fun ReadReceipt(
+    message: Message,
+    roomMemberCount: Int
+) {
+    // Calculate if all other members have read
+    // For a message to be "fully read", readBy should contain all members except sender
+    // roomMemberCount includes the sender, so we need (roomMemberCount - 1) readers
+    val isAllRead = if (roomMemberCount > 1) {
+        message.readBy.size >= roomMemberCount - 1
+    } else {
+        // Fallback for unknown member count: any read = green
+        message.readBy.isNotEmpty()
+    }
+
+    val icon = when {
+        message.status == "sending" -> Icons.Default.Done  // Single checkmark for pending
+        isAllRead -> Icons.Default.CheckCircle  // Filled circle with check for read
+        else -> Icons.Default.DoneAll  // Double checkmark for sent
+    }
+
+    val tint = if (isAllRead) OnlineGreen else OfflineGray
+
+    Icon(
+        imageVector = icon,
+        contentDescription = if (isAllRead) "Lu" else "Envoyé",
+        modifier = Modifier.size(14.dp),
+        tint = tint
+    )
 }
 
 private fun formatTime(isoDate: String): String {
