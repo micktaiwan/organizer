@@ -296,6 +296,24 @@ class ChatViewModel(
                     }
                 }
             }
+
+            // Observe user status changes to update message senders
+            viewModelScope.launch {
+                service.socketManager.userStatusChanged.collect { event ->
+                    Log.d(TAG, "User status changed: ${event.userId} -> ${event.status} / ${event.statusMessage}")
+                    val updatedMessages = _uiState.value.messages.map { msg ->
+                        if (msg.senderId.id == event.userId) {
+                            msg.copy(
+                                senderId = msg.senderId.copy(
+                                    status = event.status,
+                                    statusMessage = event.statusMessage
+                                )
+                            )
+                        } else msg
+                    }
+                    _uiState.value = _uiState.value.copy(messages = updatedMessages)
+                }
+            }
         }
     }
 

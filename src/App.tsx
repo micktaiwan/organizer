@@ -30,6 +30,7 @@ import { IncomingCallModal } from "./components/Call/IncomingCallModal";
 // import { ContactModal } from "./components/Contact/ContactModal";
 import { AdminPanel } from "./components/Admin/AdminPanel";
 import { NotesList, NoteEditor, LabelManager } from "./components/Notes";
+import { ConnectionBanner } from "./components/ui/ConnectionBanner";
 
 import "./App.css";
 
@@ -442,6 +443,8 @@ function App() {
 
   return (
     <main className="chat-container">
+      <ConnectionBanner />
+
       {isCompressing && (
         <div className="loading-overlay">
           <div className="loading-spinner" />

@@ -61,6 +61,7 @@ object ApiClient {
 
         val gson = GsonBuilder()
             .registerTypeAdapter(Reaction::class.java, reactionDeserializer)
+            .serializeNulls()
             .create()
 
         retrofit = Retrofit.Builder()
