@@ -92,6 +92,7 @@ export function setupSocket(httpServer: HttpServer): Server {
       statusMessage: user?.statusMessage,
       statusExpiresAt: user?.statusExpiresAt,
       isMuted: user?.isMuted,
+      appVersion: user?.appVersion,
     };
 
     // Notifier les autres utilisateurs du statut online
@@ -108,7 +109,7 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     const usersInSameRooms = await User.find({
       _id: { $in: uniqueUserIds }
-    }).select('_id username displayName status statusMessage statusExpiresAt isMuted isOnline');
+    }).select('_id username displayName status statusMessage statusExpiresAt isMuted isOnline appVersion');
 
     socket.emit('users:init', {
       users: usersInSameRooms.map(u => ({
@@ -120,6 +121,7 @@ export function setupSocket(httpServer: HttpServer): Server {
         statusExpiresAt: u.statusExpiresAt,
         isMuted: u.isMuted,
         isOnline: u.isOnline,
+        appVersion: u.appVersion,
       }))
     });
 

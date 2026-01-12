@@ -96,7 +96,12 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
                       {user.displayName}
                       {isMuted && <VolumeX size={14} style={{ marginLeft: '0.25rem', opacity: 0.6 }} />}
                     </div>
-                    <div className="member-username">@{user.username}</div>
+                    <div className="member-username">
+                      @{user.username}
+                      {userStatusData?.appVersion && (
+                        <span className="member-version">v{userStatusData.appVersion.versionName}</span>
+                      )}
+                    </div>
                     <div className="member-status-info">
                       <span className={`member-status-label ${status}`}>{STATUS_LABELS[status]}</span>
                       {expiresIn && (

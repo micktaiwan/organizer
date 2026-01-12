@@ -77,7 +77,7 @@ import com.organizer.chat.util.ImageDownloader
 import androidx.compose.ui.text.style.TextAlign
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.CharcoalLight
-import com.organizer.chat.ui.screens.location.getStatusColor
+import com.organizer.chat.ui.screens.users.getStatusColor
 
 // Fixed colors for message bubbles (readable on both light/dark backgrounds)
 private val MessageTextColor = androidx.compose.ui.graphics.Color(0xFF1A1A1A)
