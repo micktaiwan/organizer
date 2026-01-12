@@ -8,6 +8,12 @@ import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.organizer.chat.data.api.ApiClient
+import com.organizer.chat.data.model.LocationHistoryEntry
+import com.organizer.chat.data.model.SetTrackingRequest
+import com.organizer.chat.data.model.Track
+import com.organizer.chat.data.model.TrackingResponse
+import com.organizer.chat.data.model.TrackSummary
+import com.organizer.chat.data.model.TrackWithUserInfo
 import com.organizer.chat.data.model.UpdateLocationRequest
 import com.organizer.chat.data.model.UserLocation
 import com.organizer.chat.data.model.UserWithLocation
@@ -41,12 +47,13 @@ class LocationRepository(private val context: Context) {
     suspend fun updateLocation(
         lat: Double,
         lng: Double,
+        accuracy: Float?,
         street: String?,
         city: String?,
         country: String?
     ): Result<UserLocation?> {
         return try {
-            val request = UpdateLocationRequest(lat, lng, street, city, country)
+            val request = UpdateLocationRequest(lat, lng, accuracy, street, city, country)
             val response = api.updateLocation(request)
             Result.success(response.location)
         } catch (e: Exception) {
@@ -79,6 +86,16 @@ class LocationRepository(private val context: Context) {
             Result.success(location)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get current location", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getLocationHistory(userId: String, limit: Int = 10): Result<List<LocationHistoryEntry>> {
+        return try {
+            val response = api.getLocationHistory(userId, limit)
+            Result.success(response.history)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get location history for user $userId", e)
             Result.failure(e)
         }
     }
@@ -118,6 +135,48 @@ class LocationRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Reverse geocoding failed", e)
             null
+        }
+    }
+
+    // Tracking methods
+    suspend fun setTracking(enabled: Boolean, expiresInMinutes: Int? = null): Result<TrackingResponse> {
+        return try {
+            val request = SetTrackingRequest(enabled, expiresInMinutes)
+            val response = api.setTracking(request)
+            Result.success(response)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set tracking", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getTrack(userId: String): Result<Track?> {
+        return try {
+            val response = api.getTrack(userId)
+            Result.success(response.track)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get track for user $userId", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getTracks(userId: String? = null): Result<List<TrackSummary>> {
+        return try {
+            val response = api.getTracks(userId)
+            Result.success(response.tracks)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get tracks", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getTrackById(trackId: String): Result<TrackWithUserInfo?> {
+        return try {
+            val response = api.getTrackById(trackId)
+            Result.success(response.track)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get track by id $trackId", e)
+            Result.failure(e)
         }
     }
 }

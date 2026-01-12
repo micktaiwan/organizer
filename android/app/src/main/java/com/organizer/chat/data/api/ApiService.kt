@@ -172,6 +172,25 @@ interface ApiService {
 
     @GET("users/locations")
     suspend fun getUsersWithLocations(): UsersWithLocationResponse
+
+    @GET("users/{userId}/location-history")
+    suspend fun getLocationHistory(
+        @Path("userId") userId: String,
+        @Query("limit") limit: Int = 10
+    ): LocationHistoryResponse
+
+    // Tracking
+    @PUT("users/tracking")
+    suspend fun setTracking(@Body request: SetTrackingRequest): TrackingResponse
+
+    @GET("users/{userId}/track")
+    suspend fun getTrack(@Path("userId") userId: String): TrackResponse
+
+    @GET("users/tracks")
+    suspend fun getTracks(@Query("userId") userId: String? = null): TracksListResponse
+
+    @GET("users/tracks/{trackId}")
+    suspend fun getTrackById(@Path("trackId") trackId: String): TrackByIdResponse
 }
 
 data class UsersSearchResponse(

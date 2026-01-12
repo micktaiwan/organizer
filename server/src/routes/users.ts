@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
-import { User } from '../models/index.js';
+import mongoose from 'mongoose';
+import { User, LocationHistory, Track, Room, Message } from '../models/index.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -43,7 +44,7 @@ router.get('/search', async (req: AuthRequest, res: Response): Promise<void> => 
 router.get('/locations', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const users = await User.find({ 'location.lat': { $exists: true } })
-      .select('username displayName isOnline location appVersion status statusMessage statusExpiresAt')
+      .select('username displayName isOnline location appVersion status statusMessage statusExpiresAt isTracking trackingExpiresAt currentTrackId')
       .sort({ 'location.updatedAt': -1 });
 
     const now = new Date();
@@ -65,6 +66,171 @@ router.get('/locations', async (req: AuthRequest, res: Response): Promise<void> 
   } catch (error) {
     console.error('Get locations error:', error);
     res.status(500).json({ error: 'Erreur lors de la récupération des positions' });
+  }
+});
+
+// GET /users/:userId/location-history - Récupérer l'historique des positions d'un utilisateur
+// IMPORTANT: Cette route doit être AVANT /users/:id sinon "location-history" sera interprété comme un id
+router.get('/:userId/location-history', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 50); // Default 10, max 50
+
+    // Valider que userId est un ObjectId valide
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ error: 'ID utilisateur invalide' });
+      return;
+    }
+
+    const history = await LocationHistory.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .select('lat lng accuracy street city country createdAt');
+
+    res.json({
+      history: history.map((h) => ({
+        lat: h.lat,
+        lng: h.lng,
+        accuracy: h.accuracy,
+        street: h.street,
+        city: h.city,
+        country: h.country,
+        createdAt: h.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error('Get location history error:', error);
+    res.status(500).json({ error: "Erreur lors de la récupération de l'historique" });
+  }
+});
+
+// GET /users/tracks - Récupérer tous les tracks (historique)
+router.get('/tracks', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.query.userId as string | undefined;
+
+    // Build query
+    const query: Record<string, unknown> = {};
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        res.status(400).json({ error: 'ID utilisateur invalide' });
+        return;
+      }
+      query.userId = userId;
+    }
+
+    // Get tracks with user info
+    const tracks = await Track.find(query)
+      .sort({ startedAt: -1 })
+      .limit(50)
+      .lean();
+
+    // Get user info for all tracks
+    const userIds = [...new Set(tracks.map((t) => t.userId.toString()))];
+    const users = await User.find({ _id: { $in: userIds } })
+      .select('username displayName')
+      .lean();
+
+    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+
+    const tracksWithUserInfo = tracks.map((track) => {
+      const user = userMap.get(track.userId.toString());
+      return {
+        id: track._id,
+        userId: track.userId,
+        username: user?.username || 'unknown',
+        displayName: user?.displayName || 'Unknown',
+        startedAt: track.startedAt,
+        endedAt: track.endedAt,
+        isActive: track.isActive,
+        pointsCount: track.points.length,
+      };
+    });
+
+    res.json({ tracks: tracksWithUserInfo });
+  } catch (error) {
+    console.error('Get tracks error:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des tracks' });
+  }
+});
+
+// GET /users/tracks/:trackId - Récupérer un track spécifique par son ID
+router.get('/tracks/:trackId', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { trackId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(trackId)) {
+      res.status(400).json({ error: 'ID track invalide' });
+      return;
+    }
+
+    const track = await Track.findById(trackId).lean();
+    if (!track) {
+      res.status(404).json({ error: 'Track non trouvé' });
+      return;
+    }
+
+    // Get user info
+    const user = await User.findById(track.userId).select('username displayName').lean();
+
+    res.json({
+      track: {
+        id: track._id,
+        userId: track.userId,
+        username: user?.username || 'unknown',
+        displayName: user?.displayName || 'Unknown',
+        points: track.points,
+        startedAt: track.startedAt,
+        endedAt: track.endedAt,
+        isActive: track.isActive,
+      },
+    });
+  } catch (error) {
+    console.error('Get track by id error:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération du track' });
+  }
+});
+
+// GET /users/:userId/track - Récupérer le track actif d'un utilisateur
+// IMPORTANT: Cette route doit être AVANT /users/:id
+router.get('/:userId/track', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ error: 'ID utilisateur invalide' });
+      return;
+    }
+
+    const user = await User.findById(userId).select('isTracking currentTrackId displayName');
+    if (!user) {
+      res.status(404).json({ error: 'Utilisateur non trouvé' });
+      return;
+    }
+
+    if (!user.isTracking || !user.currentTrackId) {
+      res.json({ track: null });
+      return;
+    }
+
+    const track = await Track.findById(user.currentTrackId);
+    if (!track) {
+      res.json({ track: null });
+      return;
+    }
+
+    res.json({
+      track: {
+        id: track._id,
+        userId: track.userId,
+        points: track.points,
+        startedAt: track.startedAt,
+        isActive: track.isActive,
+      },
+    });
+  } catch (error) {
+    console.error('Get track error:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération du track' });
   }
 });
 
@@ -167,7 +333,7 @@ router.put('/status', async (req: AuthRequest, res: Response): Promise<void> => 
 // PUT /users/location - Mettre à jour sa position
 router.put('/location', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { lat, lng, street, city, country } = req.body;
+    const { lat, lng, accuracy, street, city, country } = req.body;
 
     // Validation: lat/lng sont requis
     if (typeof lat !== 'number' || typeof lng !== 'number') {
@@ -202,6 +368,68 @@ router.put('/location', async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
+    // Sauvegarder dans l'historique
+    const lastPosition = await LocationHistory.findOne({ userId: req.userId })
+      .sort({ createdAt: -1 })
+      .select('street city accuracy');
+
+    const newStreet = street || null;
+    const newCity = city || null;
+    const newAccuracy = typeof accuracy === 'number' ? accuracy : null;
+
+    const hasAddressChanged = !lastPosition ||
+      lastPosition.street !== newStreet ||
+      lastPosition.city !== newCity;
+
+    if (hasAddressChanged) {
+      // Nouvelle adresse → créer une entrée
+      await LocationHistory.create({
+        userId: req.userId,
+        lat,
+        lng,
+        accuracy: newAccuracy,
+        street: newStreet,
+        city: newCity,
+        country: country || null,
+      });
+    } else if (newAccuracy !== null) {
+      // Même adresse → mettre à jour si meilleure accuracy
+      const lastAccuracy = lastPosition.accuracy;
+      const isBetterAccuracy = lastAccuracy === null || newAccuracy < lastAccuracy;
+
+      if (isBetterAccuracy) {
+        await LocationHistory.findByIdAndUpdate(lastPosition._id, {
+          lat,
+          lng,
+          accuracy: newAccuracy,
+        });
+      }
+    }
+
+    // Si l'utilisateur est en mode tracking, ajouter le point au track actif
+    if (user.isTracking && user.currentTrackId) {
+      const trackPoint = {
+        lat,
+        lng,
+        accuracy: newAccuracy,
+        timestamp: new Date(),
+      };
+
+      await Track.findByIdAndUpdate(user.currentTrackId, {
+        $push: { points: trackPoint },
+      });
+
+      // Émettre le nouveau point de track via Socket.io
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('user:track-point', {
+          userId: req.userId,
+          trackId: user.currentTrackId,
+          point: trackPoint,
+        });
+      }
+    }
+
     // Émettre via Socket.io
     const io = req.app.get('io');
     if (io) {
@@ -218,6 +446,135 @@ router.put('/location', async (req: AuthRequest, res: Response): Promise<void> =
   } catch (error) {
     console.error('Update location error:', error);
     res.status(500).json({ error: 'Erreur lors de la mise à jour de la position' });
+  }
+});
+
+// PUT /users/tracking - Activer/désactiver le mode suivi en temps réel
+router.put('/tracking', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { enabled, expiresIn } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: 'Le champ enabled est requis' });
+      return;
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) {
+      res.status(404).json({ error: 'Utilisateur non trouvé' });
+      return;
+    }
+
+    const io = req.app.get('io');
+
+    if (enabled) {
+      // Activer le tracking
+      const expiresAt = expiresIn
+        ? new Date(Date.now() + expiresIn * 60 * 1000)
+        : null;
+
+      // Créer un nouveau track
+      const track = await Track.create({
+        userId: req.userId,
+        points: [],
+        startedAt: new Date(),
+        isActive: true,
+      });
+
+      // Mettre à jour l'utilisateur
+      user.isTracking = true;
+      user.trackingExpiresAt = expiresAt;
+      user.currentTrackId = track._id as mongoose.Types.ObjectId;
+      await user.save();
+
+      // TODO: Envoyer un message au lobby (désactivé pour l'instant)
+      // const lobby = await Room.findOne({ isLobby: true });
+      // if (lobby) {
+      //   const systemMessage = await Message.create({
+      //     roomId: lobby._id,
+      //     senderId: req.userId,
+      //     type: 'system',
+      //     content: `🛤️ ${user.displayName} a activé le suivi en temps réel`,
+      //   });
+      //
+      //   if (io) {
+      //     io.to(`room:${lobby._id}`).emit('message:new', {
+      //       message: systemMessage,
+      //       roomId: lobby._id,
+      //     });
+      //   }
+      // }
+
+      // Émettre l'événement tracking changed
+      if (io) {
+        io.emit('user:tracking-changed', {
+          userId: req.userId,
+          username: user.username,
+          displayName: user.displayName,
+          isTracking: true,
+          trackingExpiresAt: expiresAt,
+          trackId: track._id,
+        });
+      }
+
+      res.json({
+        success: true,
+        isTracking: true,
+        trackingExpiresAt: expiresAt,
+        trackId: track._id,
+      });
+    } else {
+      // Désactiver le tracking
+      if (user.currentTrackId) {
+        await Track.findByIdAndUpdate(user.currentTrackId, {
+          isActive: false,
+          endedAt: new Date(),
+        });
+      }
+
+      user.isTracking = false;
+      user.trackingExpiresAt = null;
+      user.currentTrackId = null;
+      await user.save();
+
+      // TODO: Envoyer un message au lobby (désactivé pour l'instant)
+      // const lobby = await Room.findOne({ isLobby: true });
+      // if (lobby) {
+      //   const systemMessage = await Message.create({
+      //     roomId: lobby._id,
+      //     senderId: req.userId,
+      //     type: 'system',
+      //     content: `🛤️ ${user.displayName} a désactivé le suivi`,
+      //   });
+      //
+      //   if (io) {
+      //     io.to(`room:${lobby._id}`).emit('message:new', {
+      //       message: systemMessage,
+      //       roomId: lobby._id,
+      //     });
+      //   }
+      // }
+
+      // Émettre l'événement tracking changed
+      if (io) {
+        io.emit('user:tracking-changed', {
+          userId: req.userId,
+          username: user.username,
+          displayName: user.displayName,
+          isTracking: false,
+          trackingExpiresAt: null,
+          trackId: null,
+        });
+      }
+
+      res.json({
+        success: true,
+        isTracking: false,
+      });
+    }
+  } catch (error) {
+    console.error('Update tracking error:', error);
+    res.status(500).json({ error: 'Erreur lors de la mise à jour du suivi' });
   }
 });
 

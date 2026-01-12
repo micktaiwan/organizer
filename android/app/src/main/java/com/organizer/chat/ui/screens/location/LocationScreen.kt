@@ -31,9 +31,11 @@ import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -68,6 +70,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.organizer.chat.data.model.LocationHistoryEntry
 import com.organizer.chat.data.model.UserWithLocation
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.theme.AccentBlue
@@ -105,7 +108,8 @@ fun getStatusLabel(status: String): String = when (status) {
 fun LocationScreen(
     chatService: ChatService?,
     viewModel: LocationViewModel,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    onMapClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -167,11 +171,25 @@ fun LocationScreen(
         )
     }
 
+    // Location history dialog
+    uiState.selectedUserForHistory?.let { user ->
+        LocationHistoryDialog(
+            user = user,
+            history = uiState.locationHistory,
+            isLoading = uiState.isLoadingHistory,
+            error = uiState.historyError,
+            onDismiss = { viewModel.dismissLocationHistory() }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Users") },
                 actions = {
+                    IconButton(onClick = onMapClick) {
+                        Icon(Icons.Default.Map, contentDescription = "Carte")
+                    }
                     if (uiState.isRefreshing) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(24.dp).padding(4.dp),
@@ -247,7 +265,10 @@ fun LocationScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(uiState.users, key = { it.id }) { user ->
-                            UserLocationCard(user = user)
+                            UserLocationCard(
+                                user = user,
+                                onClick = { viewModel.showLocationHistory(user) }
+                            )
                         }
                     }
                 }
@@ -333,7 +354,10 @@ private fun EmptyContent(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun UserLocationCard(user: UserWithLocation) {
+fun UserLocationCard(
+    user: UserWithLocation,
+    onClick: () -> Unit = {}
+) {
     val statusColor = getStatusColor(user.status)
     val isExpired = user.statusExpiresAt?.let { isStatusExpired(it) } ?: false
     val effectiveStatus = if (isExpired) "available" else user.status
@@ -341,7 +365,9 @@ fun UserLocationCard(user: UserWithLocation) {
     val effectiveStatusColor = getStatusColor(effectiveStatus)
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
@@ -369,6 +395,17 @@ fun UserLocationCard(user: UserWithLocation) {
                         text = user.displayName,
                         style = MaterialTheme.typography.titleMedium
                     )
+
+                    // Tracking indicator
+                    if (user.isTracking == true) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.Timeline,
+                            contentDescription = "En suivi",
+                            modifier = Modifier.size(16.dp),
+                            tint = StatusAvailable // Green
+                        )
+                    }
 
                     // Online/Offline indicator
                     Spacer(modifier = Modifier.width(8.dp))
@@ -710,4 +747,123 @@ private fun calculateExpiresAt(minutes: Int): String? {
     val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
     formatter.timeZone = TimeZone.getTimeZone("UTC")
     return formatter.format(calendar.time)
+}
+
+@Composable
+fun LocationHistoryDialog(
+    user: UserWithLocation,
+    history: List<LocationHistoryEntry>,
+    isLoading: Boolean,
+    error: String?,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Historique de ${user.displayName}") },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(400.dp)
+            ) {
+                when {
+                    isLoading -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                    error != null -> {
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                    history.isEmpty() -> {
+                        Text(
+                            text = "Aucun historique disponible",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                    else -> {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(history) { entry ->
+                                LocationHistoryItem(entry = entry)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+            ) {
+                Text("Fermer")
+            }
+        }
+    )
+}
+
+@Composable
+private fun LocationHistoryItem(entry: LocationHistoryEntry) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.LocationOn,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = AccentBlue
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                // Location text
+                val locationText = buildString {
+                    entry.street?.let { append(it) }
+                    if (entry.street != null && entry.city != null) append(", ")
+                    entry.city?.let { append(it) }
+                }.ifEmpty { "Position inconnue" }
+
+                Text(
+                    text = locationText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                // TimeAgo timestamp + accuracy
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = formatTimestamp(entry.createdAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                    entry.accuracy?.let { acc ->
+                        Text(
+                            text = " - ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                        Text(
+                            text = "±${acc.toInt()}m",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

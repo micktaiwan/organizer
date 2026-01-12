@@ -39,6 +39,7 @@ fun HomeScreen(
     onSettingsClick: () -> Unit,
     onNoteClick: (String) -> Unit,
     onCreateNote: () -> Unit,
+    onMapClick: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
@@ -121,7 +122,8 @@ fun HomeScreen(
                     LocationScreen(
                         chatService = chatService,
                         viewModel = locationViewModel,
-                        onSettingsClick = onSettingsClick
+                        onSettingsClick = onSettingsClick,
+                        onMapClick = onMapClick
                     )
                 }
             }

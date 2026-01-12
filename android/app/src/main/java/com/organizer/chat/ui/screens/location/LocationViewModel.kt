@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.organizer.chat.data.api.ApiClient
 import com.organizer.chat.data.api.UpdateStatusRequest
+import com.organizer.chat.data.model.LocationHistoryEntry
 import com.organizer.chat.data.model.UserWithLocation
 import com.organizer.chat.data.repository.LocationRepository
 import com.organizer.chat.data.socket.SocketManager
@@ -24,7 +25,12 @@ data class LocationUiState(
     val myStatus: String = "available",
     val myStatusMessage: String? = null,
     val myStatusExpiresAt: String? = null,
-    val isUpdatingStatus: Boolean = false
+    val isUpdatingStatus: Boolean = false,
+    // Location history dialog state
+    val selectedUserForHistory: UserWithLocation? = null,
+    val locationHistory: List<LocationHistoryEntry> = emptyList(),
+    val isLoadingHistory: Boolean = false,
+    val historyError: String? = null
 )
 
 class LocationViewModel(
@@ -180,6 +186,7 @@ class LocationViewModel(
                 val updateResult = locationRepository.updateLocation(
                     lat = location.latitude,
                     lng = location.longitude,
+                    accuracy = if (location.hasAccuracy()) location.accuracy else null,
                     street = address?.street,
                     city = address?.city,
                     country = address?.country
@@ -242,6 +249,48 @@ class LocationViewModel(
      */
     fun clearStatus() {
         updateStatus("available", null, null)
+    }
+
+    /**
+     * Ouvre le dialog d'historique des positions pour un utilisateur
+     */
+    fun showLocationHistory(user: UserWithLocation) {
+        _uiState.value = _uiState.value.copy(
+            selectedUserForHistory = user,
+            locationHistory = emptyList(),
+            isLoadingHistory = true,
+            historyError = null
+        )
+
+        viewModelScope.launch {
+            val result = locationRepository.getLocationHistory(user.id, limit = 10)
+            result.fold(
+                onSuccess = { history ->
+                    _uiState.value = _uiState.value.copy(
+                        locationHistory = history,
+                        isLoadingHistory = false
+                    )
+                },
+                onFailure = { error ->
+                    _uiState.value = _uiState.value.copy(
+                        historyError = error.message ?: "Erreur lors du chargement",
+                        isLoadingHistory = false
+                    )
+                }
+            )
+        }
+    }
+
+    /**
+     * Ferme le dialog d'historique des positions
+     */
+    fun dismissLocationHistory() {
+        _uiState.value = _uiState.value.copy(
+            selectedUserForHistory = null,
+            locationHistory = emptyList(),
+            isLoadingHistory = false,
+            historyError = null
+        )
     }
 
     override fun onCleared() {
