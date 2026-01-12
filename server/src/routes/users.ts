@@ -578,6 +578,98 @@ router.put('/tracking', async (req: AuthRequest, res: Response): Promise<void> =
   }
 });
 
+// POST /users/tracks/sync - Sync a complete track from an offline client
+router.post('/tracks/sync', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { localTrackId, startedAt, stoppedAt, points } = req.body;
+
+    // Validation
+    if (!localTrackId || !startedAt || !stoppedAt || !Array.isArray(points)) {
+      res.status(400).json({
+        success: false,
+        error: 'Champs requis: localTrackId, startedAt, stoppedAt, points'
+      });
+      return;
+    }
+
+    if (points.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'Le track doit contenir au moins un point'
+      });
+      return;
+    }
+
+    // Create track with all its points
+    const trackPoints = points.map((p: { lat: number; lng: number; accuracy?: number; timestamp: number; street?: string; city?: string; country?: string }) => ({
+      lat: p.lat,
+      lng: p.lng,
+      accuracy: p.accuracy,
+      timestamp: new Date(p.timestamp),
+      street: p.street,
+      city: p.city,
+      country: p.country,
+    }));
+
+    const track = await Track.create({
+      userId: req.userId,
+      points: trackPoints,
+      startedAt: new Date(startedAt),
+      endedAt: new Date(stoppedAt),
+      isActive: false,
+    });
+
+    console.log(`Synced track ${track._id} from local ${localTrackId}: ${points.length} points`);
+
+    res.json({
+      success: true,
+      trackId: track._id,
+    });
+  } catch (error) {
+    console.error('Sync track error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la synchronisation du track'
+    });
+  }
+});
+
+// DELETE /users/tracks/:trackId - Delete a track (owner or admin only)
+router.delete('/tracks/:trackId', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { trackId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(trackId)) {
+      res.status(400).json({ error: 'ID track invalide' });
+      return;
+    }
+
+    const track = await Track.findById(trackId);
+    if (!track) {
+      res.status(404).json({ error: 'Track non trouvé' });
+      return;
+    }
+
+    // Check permissions: owner or admin
+    const currentUser = await User.findById(req.userId).select('isAdmin');
+    const isOwner = track.userId.toString() === req.userId;
+    const isAdmin = currentUser?.isAdmin === true;
+
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Non autorisé à supprimer ce track' });
+      return;
+    }
+
+    await Track.findByIdAndDelete(trackId);
+    console.log(`Track ${trackId} deleted by user ${req.userId} (owner: ${isOwner}, admin: ${isAdmin})`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete track error:', error);
+    res.status(500).json({ error: 'Erreur lors de la suppression du track' });
+  }
+});
+
 // PATCH /users/me - Mettre à jour son profil
 router.patch('/me', async (req: AuthRequest, res: Response): Promise<void> => {
   try {

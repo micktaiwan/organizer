@@ -179,6 +179,16 @@ class LocationRepository(private val context: Context) {
             Result.failure(e)
         }
     }
+
+    suspend fun deleteTrack(trackId: String): Result<Boolean> {
+        return try {
+            val response = api.deleteTrack(trackId)
+            Result.success(response.success)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to delete track $trackId", e)
+            Result.failure(e)
+        }
+    }
 }
 
 data class GeocodedAddress(

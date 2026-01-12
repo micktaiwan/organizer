@@ -2,8 +2,10 @@ package com.organizer.chat.ui.screens.map
 
 import android.content.Context
 import android.graphics.drawable.Drawable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +26,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -227,6 +231,18 @@ fun MapScreen(
                             .padding(bottom = 80.dp) // Above the FAB
                     )
                 }
+
+                // Pending tracks indicator
+                if (uiState.pendingTracksCount > 0) {
+                    PendingTracksIndicator(
+                        count = uiState.pendingTracksCount,
+                        isSyncing = uiState.isSyncingTracks,
+                        onSyncClick = { viewModel.syncPendingTracks() },
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(16.dp)
+                    )
+                }
             }
         }
     }
@@ -245,7 +261,18 @@ fun MapScreen(
             tracks = uiState.trackHistory,
             isLoading = uiState.isLoadingHistory,
             onDismiss = { viewModel.dismissHistoryDialog() },
-            onSelectTrack = { track -> viewModel.selectHistoryTrack(track) }
+            onSelectTrack = { track -> viewModel.selectHistoryTrack(track) },
+            onDeleteTrack = { track -> viewModel.showDeleteConfirmation(track) }
+        )
+    }
+
+    // Delete track confirmation dialog
+    uiState.trackToDelete?.let { track ->
+        DeleteTrackDialog(
+            track = track,
+            isDeleting = uiState.isDeletingTrack,
+            onConfirm = { viewModel.confirmDeleteTrack() },
+            onDismiss = { viewModel.dismissDeleteConfirmation() }
         )
     }
 }
@@ -469,7 +496,8 @@ private fun TrackHistoryDialog(
     tracks: List<TrackSummary>,
     isLoading: Boolean,
     onDismiss: () -> Unit,
-    onSelectTrack: (TrackSummary) -> Unit
+    onSelectTrack: (TrackSummary) -> Unit,
+    onDeleteTrack: (TrackSummary) -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -506,7 +534,8 @@ private fun TrackHistoryDialog(
                             items(tracks) { track ->
                                 TrackHistoryItem(
                                     track = track,
-                                    onClick = { onSelectTrack(track) }
+                                    onClick = { onSelectTrack(track) },
+                                    onLongPress = { onDeleteTrack(track) }
                                 )
                             }
                         }
@@ -530,15 +559,20 @@ private fun TrackHistoryDialog(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TrackHistoryItem(
     track: TrackSummary,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress
+            ),
         colors = CardDefaults.cardColors(
             containerColor = Charcoal
         ),
@@ -716,4 +750,131 @@ private fun getMarkerIcon(context: Context, isTracking: Boolean, isOnline: Boole
         }
     )
     return drawable
+}
+
+@Composable
+private fun DeleteTrackDialog(
+    track: TrackSummary,
+    isDeleting: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!isDeleting) onDismiss() },
+        title = {
+            Text(
+                text = "Supprimer ce trajet ?",
+                color = Color.White
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = "Trajet de ${track.displayName}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${formatTrackDate(track.startedAt)} • ${track.pointsCount} points",
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Cette action est irréversible.",
+                    color = Color(0xFFE57373),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = !isDeleting,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = Color(0xFFE57373),
+                    disabledContentColor = Color(0xFFE57373).copy(alpha = 0.38f)
+                )
+            ) {
+                if (isDeleting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = Color(0xFFE57373),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Supprimer")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isDeleting,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = AccentBlue,
+                    disabledContentColor = AccentBlue.copy(alpha = 0.38f)
+                )
+            ) {
+                Text("Annuler")
+            }
+        },
+        containerColor = CharcoalLight,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+@Composable
+private fun PendingTracksIndicator(
+    count: Int,
+    isSyncing: Boolean,
+    onSyncClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.clickable(enabled = !isSyncing) { onSyncClick() },
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFF9800)), // Orange warning color
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isSyncing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.CloudOff,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = if (isSyncing) "Sync..." else "$count trajet${if (count > 1) "s" else ""} en attente",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = Color.White
+            )
+
+            if (!isSyncing) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.Default.Sync,
+                    contentDescription = "Synchroniser",
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
 }
