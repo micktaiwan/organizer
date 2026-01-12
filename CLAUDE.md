@@ -14,6 +14,24 @@ organizer/
 └── android/            # Android native app (Kotlin/Jetpack Compose)
 ```
 
+## Claude Code Notes
+
+### Toujours utiliser des chemins absolus pour les scripts
+
+Le working directory de Claude Code peut être un sous-dossier du projet (ex: `android/`). Les commandes avec `cd server` échoueront car le chemin est relatif à la racine du projet, pas au working directory courant.
+
+**Mauvais** :
+```bash
+cd server && ./upload-apk.sh ...
+```
+
+**Bon** :
+```bash
+/Users/mickaelfm/projects/perso/organizer/server/upload-apk.sh ...
+```
+
+Utiliser des chemins absolus pour tous les scripts : `upload-apk.sh`, `send-announcement.sh`, `deploy.sh`, etc.
+
 ## Commands
 
 ### Frontend Development
