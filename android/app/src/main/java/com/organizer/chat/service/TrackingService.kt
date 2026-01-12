@@ -18,9 +18,8 @@ import com.google.android.gms.location.Priority
 import com.organizer.chat.MainActivity
 import com.organizer.chat.OrganizerApp
 import com.organizer.chat.R
-import com.organizer.chat.data.api.ApiClient
-import com.organizer.chat.data.model.UpdateLocationRequest
 import com.organizer.chat.data.repository.GeocodedAddress
+import com.organizer.chat.data.repository.LocalTrackRepository
 import com.organizer.chat.data.repository.LocationRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +28,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import java.util.concurrent.TimeUnit
 
@@ -72,12 +72,17 @@ class TrackingService : Service() {
     private var expiresAt: Long? = null
     private var isTracking = false
     private lateinit var locationRepository: LocationRepository
+    private lateinit var localTrackRepository: LocalTrackRepository
+    private lateinit var trackSyncManager: TrackSyncManager
+    private var currentLocalTrackId: String? = null
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "TrackingService onCreate")
         createNotificationChannel()
         locationRepository = LocationRepository(this)
+        localTrackRepository = LocalTrackRepository(this)
+        trackSyncManager = TrackSyncManager.getInstance(this)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -113,6 +118,10 @@ class TrackingService : Service() {
 
         // Start location updates loop
         serviceScope.launch {
+            // Create local track to store points
+            currentLocalTrackId = localTrackRepository.createTrack()
+            Log.d(TAG, "Created local track: $currentLocalTrackId")
+
             while (isActive && isTracking) {
                 // Check expiration
                 expiresAt?.let { expiry ->
@@ -123,8 +132,8 @@ class TrackingService : Service() {
                     }
                 }
 
-                // Get and send location
-                sendLocationUpdate()
+                // Get and save location locally
+                saveLocationUpdate()
 
                 // Wait for next update
                 delay(UPDATE_INTERVAL_MS)
@@ -141,14 +150,31 @@ class TrackingService : Service() {
 
         Log.d(TAG, "Stopping tracking")
         isTracking = false
+
+        // Mark local track as finished (blocking to ensure it's done before service stops)
+        currentLocalTrackId?.let { trackId ->
+            runBlocking {
+                localTrackRepository.stopTrack(trackId)
+                Log.d(TAG, "Local track stopped: $trackId")
+            }
+            // Trigger sync (non-blocking, TrackSyncManager has its own scope)
+            trackSyncManager.syncPendingTracks()
+        }
+        currentLocalTrackId = null
+
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     @Suppress("MissingPermission")
-    private suspend fun sendLocationUpdate() {
+    private suspend fun saveLocationUpdate() {
         try {
+            val trackId = currentLocalTrackId ?: run {
+                Log.w(TAG, "No current track ID")
+                return
+            }
+
             val locationRequest = CurrentLocationRequest.Builder()
                 .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
                 .setMaxUpdateAgeMillis(10_000) // Accept location up to 10s old for fresher positions
@@ -162,8 +188,9 @@ class TrackingService : Service() {
                 // Reverse geocode
                 val address = locationRepository.reverseGeocode(location.latitude, location.longitude)
 
-                // Send to server
-                val result = locationRepository.updateLocation(
+                // 1. Save locally first (always)
+                localTrackRepository.addPoint(
+                    trackId = trackId,
                     lat = location.latitude,
                     lng = location.longitude,
                     accuracy = location.accuracy,
@@ -171,19 +198,34 @@ class TrackingService : Service() {
                     city = address?.city,
                     country = address?.country
                 )
+                Log.d(TAG, "Point saved locally")
 
-                if (result.isSuccess) {
-                    Log.d(TAG, "Location sent successfully")
-                    // Update notification with address
-                    updateNotification(address)
-                } else {
-                    Log.e(TAG, "Failed to send location: ${result.exceptionOrNull()?.message}")
+                // 2. Try to send to server for live view (if network available)
+                // This allows other users to see the position in real-time
+                try {
+                    val result = locationRepository.updateLocation(
+                        lat = location.latitude,
+                        lng = location.longitude,
+                        accuracy = location.accuracy,
+                        street = address?.street,
+                        city = address?.city,
+                        country = address?.country
+                    )
+                    if (result.isSuccess) {
+                        Log.d(TAG, "Location also sent to server for live view")
+                    }
+                } catch (e: Exception) {
+                    // Not a problem if live send fails, we have the point locally
+                    Log.d(TAG, "Could not send live location (offline?): ${e.message}")
                 }
+
+                // Update notification with address
+                updateNotification(address)
             } else {
                 Log.w(TAG, "Location is null")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting/sending location", e)
+            Log.e(TAG, "Error getting/saving location", e)
         }
     }
 

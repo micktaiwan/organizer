@@ -47,7 +47,75 @@ When arguments are provided:
 
 If there are no uncommitted changes, inform the user and stop.
 
-### Step 2: Generate Release Notes
+### Step 2: Code Review
+
+Review all modified files against these rules:
+
+#### Rule 1: No French in Code (except UI)
+
+French is **only allowed** in:
+- User-visible strings (UI labels, messages displayed to users)
+- **API error responses** (messages returned to clients that may be displayed in the UI)
+- Release notes and announcements
+
+French is **NOT allowed** in:
+- Variable names, function names, class names
+- Code comments
+- Log messages (console.log, Log.d, println, etc.)
+- **Internal exception messages** (thrown errors caught by code, not shown to users)
+- TODO/FIXME comments
+
+**How to check:**
+1. Review the diff (`git diff HEAD`) for each modified file
+2. Look for French words in:
+   - Comments (`//`, `/* */`, `#`, `<!-- -->`)
+   - Log statements
+   - Variable/function names
+3. Exclude strings that are clearly user-facing (displayed in UI)
+
+**If violations found:**
+- List each violation with file, line, and the problematic text
+- Ask the user: "Fix these issues before continuing?" with options:
+  - "Yes, fix them" → Make the corrections (translate to English)
+  - "Skip review" → Continue without fixing (user's choice)
+
+#### Rule 2: Technology-Aware Code Review with Context7
+
+**Step 2.1: Detect Technologies**
+
+Analyze the modified files to identify the technologies/frameworks used:
+
+| File Pattern | Technology |
+|--------------|------------|
+| `android/**/*.kt` | Kotlin, Jetpack Compose, Android SDK |
+| `src/**/*.tsx`, `src/**/*.ts` | React, TypeScript |
+| `server/**/*.ts` | Node.js, Express, TypeScript |
+| `src-tauri/**/*.rs` | Rust, Tauri |
+
+**Step 2.2: Query Context7 for Best Practices**
+
+For each detected technology with significant changes:
+
+1. Use `mcp__plugin_context7_context7__resolve-library-id` to get the library ID
+2. Use `mcp__plugin_context7_context7__query-docs` with queries like:
+   - "best practices and common mistakes"
+   - "code review checklist"
+   - Specific queries based on what the code does (e.g., "Room database best practices" if using Room)
+
+**Step 2.3: Review Code Against Documentation**
+
+Compare the modified code against Context7's documentation:
+- Check for deprecated APIs or patterns
+- Verify correct usage of framework features
+- Identify potential bugs or anti-patterns
+- Suggest improvements based on official recommendations
+
+**Report findings:**
+- Group issues by severity: 🔴 Critical, 🟡 Warning, 🔵 Suggestion
+- For each issue, cite the source (Context7 documentation)
+- Ask user before making any fixes
+
+### Step 3: Generate Release Notes
 
 Based on your analysis of the actual code changes (not just file names), write release notes in French that describe:
 - New features added (user-visible functionality)
@@ -80,7 +148,7 @@ Note: Use emojis instead of markdown bold (**) because the chat clients render p
 
 Be specific about what changed. Include all significant changes - the announcement message will use the same content as the release notes.
 
-### Step 3: Show Summary and Get Confirmation
+### Step 4: Show Summary and Get Confirmation
 
 Display to the user:
 - Current version and new version (increment patch: 1.2.0 -> 1.2.1)
@@ -90,13 +158,13 @@ Display to the user:
 
 Ask for confirmation before proceeding.
 
-### Step 4: Update Version
+### Step 5: Update Version
 
 Edit `android/app/build.gradle.kts` and increment:
 - `versionCode` by 1
 - `versionName` patch version (e.g., 1.2.0 -> 1.2.1)
 
-### Step 5: Commit and Tag
+### Step 6: Commit and Tag
 
 ```bash
 git add -A
@@ -109,20 +177,20 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
 git tag "v<version>"
 ```
 
-### Step 6: Build APK
+### Step 7: Build APK
 
 ```bash
 cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
 ```
 
-### Step 7: Upload APK
+### Step 8: Upload APK
 
 Use the upload script:
 ```bash
 cd server && ./upload-apk.sh ../android/app/build/outputs/apk/debug/app-debug.apk <version> <versionCode> "<release-notes>"
 ```
 
-### Step 8: Send Announcement to Lobby
+### Step 9: Send Announcement to Lobby
 
 Use the dedicated script that handles JSON encoding properly:
 
@@ -136,7 +204,7 @@ Mettez à jour depuis les Paramètres."
 
 Ask user if they want to send the announcement before sending.
 
-### Step 9: Push to Remote
+### Step 10: Push to Remote
 
 ```bash
 git push origin main --tags

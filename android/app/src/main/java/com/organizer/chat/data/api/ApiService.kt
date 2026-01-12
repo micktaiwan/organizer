@@ -3,6 +3,8 @@ package com.organizer.chat.data.api
 import com.organizer.chat.data.model.*
 import com.organizer.chat.data.model.AppUpdateInfo
 import com.organizer.chat.data.model.ApkVersionsResponse
+import com.organizer.chat.service.SyncTrackRequest
+import com.organizer.chat.service.SyncTrackResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.http.*
@@ -191,6 +193,12 @@ interface ApiService {
 
     @GET("users/tracks/{trackId}")
     suspend fun getTrackById(@Path("trackId") trackId: String): TrackByIdResponse
+
+    @POST("users/tracks/sync")
+    suspend fun syncTrack(@Body request: SyncTrackRequest): SyncTrackResponse
+
+    @DELETE("users/tracks/{trackId}")
+    suspend fun deleteTrack(@Path("trackId") trackId: String): SuccessResponse
 }
 
 data class UsersSearchResponse(

@@ -13,6 +13,7 @@ import com.organizer.chat.data.repository.LocationRepository
 import com.organizer.chat.data.socket.SocketManager
 import com.organizer.chat.data.socket.TrackPointData
 import com.organizer.chat.service.TrackingService
+import com.organizer.chat.service.TrackSyncManager
 import com.organizer.chat.util.TokenManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +35,13 @@ data class MapUiState(
     val trackHistory: List<TrackSummary> = emptyList(),
     val isLoadingHistory: Boolean = false,
     // Currently viewing a historical track (null = live mode)
-    val viewingHistoryTrack: TrackWithUserInfo? = null
+    val viewingHistoryTrack: TrackWithUserInfo? = null,
+    // Local tracks pending sync
+    val pendingTracksCount: Int = 0,
+    val isSyncingTracks: Boolean = false,
+    // Delete track
+    val trackToDelete: TrackSummary? = null,
+    val isDeletingTrack: Boolean = false
 )
 
 class MapViewModel(
@@ -48,6 +55,7 @@ class MapViewModel(
     }
 
     private val locationRepository = LocationRepository(context)
+    private val trackSyncManager = TrackSyncManager.getInstance(context)
 
     // Helper to parse ISO date string to millis
     private fun parseIsoToMillis(iso: String?): Long? = iso?.let {
@@ -62,7 +70,25 @@ class MapViewModel(
     init {
         loadUsers()
         observeSocketEvents()
+        observePendingTracks()
         socketManager?.subscribeToLocations()
+    }
+
+    private fun observePendingTracks() {
+        viewModelScope.launch {
+            trackSyncManager.pendingTracksCount.collect { count ->
+                _uiState.update { it.copy(pendingTracksCount = count) }
+            }
+        }
+        viewModelScope.launch {
+            trackSyncManager.isSyncing.collect { syncing ->
+                _uiState.update { it.copy(isSyncingTracks = syncing) }
+            }
+        }
+    }
+
+    fun syncPendingTracks() {
+        trackSyncManager.syncPendingTracks()
     }
 
     private fun observeSocketEvents() {
@@ -214,59 +240,62 @@ class MapViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(showTrackingDialog = false) }
 
+            val expiresAtMillis = System.currentTimeMillis() + durationMinutes * 60 * 1000L
+
+            // Try to notify server (but don't block if offline)
             val result = locationRepository.setTracking(enabled = true, expiresInMinutes = durationMinutes)
             result.fold(
                 onSuccess = { response ->
                     if (response.success) {
-                        Log.d(TAG, "Tracking started, expires at: ${response.trackingExpiresAt}")
-                        val expiresAtMillis = parseIsoToMillis(response.trackingExpiresAt)
-                        _uiState.update { it.copy(
-                            isMyTrackingActive = true,
-                            myTrackingExpiresAt = expiresAtMillis
-                        ) }
-
-                        // Start the foreground service
-                        TrackingService.startTracking(context, expiresAtMillis)
+                        Log.d(TAG, "Tracking started on server, expires at: ${response.trackingExpiresAt}")
                     }
                 },
                 onFailure = { error ->
-                    Log.e(TAG, "Failed to start tracking: ${error.message}")
-                    _uiState.update { it.copy(errorMessage = "Erreur: ${error.message}") }
+                    // Not a problem if offline - we track locally
+                    Log.w(TAG, "Could not notify server (offline?): ${error.message}")
                 }
             )
+
+            // Always start local tracking
+            _uiState.update { it.copy(
+                isMyTrackingActive = true,
+                myTrackingExpiresAt = expiresAtMillis
+            ) }
+            TrackingService.startTracking(context, expiresAtMillis)
+            Log.d(TAG, "Local tracking started")
         }
     }
 
     fun stopTracking() {
         viewModelScope.launch {
+            // Try to notify server (but don't block if offline)
             val result = locationRepository.setTracking(enabled = false)
             result.fold(
                 onSuccess = { response ->
                     if (response.success) {
-                        Log.d(TAG, "Tracking stopped")
-                        _uiState.value = _uiState.value.copy(
-                            isMyTrackingActive = false,
-                            myTrackingExpiresAt = null
-                        )
-
-                        // Stop the foreground service
-                        TrackingService.stopTracking(context)
-
-                        // Remove our track from the map
-                        currentUserId?.let { userId ->
-                            val tracks = _uiState.value.tracks.toMutableMap()
-                            tracks.remove(userId)
-                            _uiState.value = _uiState.value.copy(tracks = tracks)
-                        }
+                        Log.d(TAG, "Tracking stopped on server")
                     }
                 },
                 onFailure = { error ->
-                    Log.e(TAG, "Failed to stop tracking: ${error.message}")
-                    _uiState.value = _uiState.value.copy(
-                        errorMessage = "Erreur: ${error.message}"
-                    )
+                    // Not a problem if offline - track will be synced later
+                    Log.w(TAG, "Could not notify server (offline?): ${error.message}")
                 }
             )
+
+            // Always stop local tracking
+            _uiState.value = _uiState.value.copy(
+                isMyTrackingActive = false,
+                myTrackingExpiresAt = null
+            )
+            TrackingService.stopTracking(context)
+
+            // Remove our track from the map
+            currentUserId?.let { userId ->
+                val tracks = _uiState.value.tracks.toMutableMap()
+                tracks.remove(userId)
+                _uiState.value = _uiState.value.copy(tracks = tracks)
+            }
+            Log.d(TAG, "Local tracking stopped")
         }
     }
 
@@ -351,6 +380,42 @@ class MapViewModel(
         )
         // Reload live data
         loadUsers()
+    }
+
+    fun showDeleteConfirmation(track: TrackSummary) {
+        _uiState.value = _uiState.value.copy(trackToDelete = track)
+    }
+
+    fun dismissDeleteConfirmation() {
+        _uiState.value = _uiState.value.copy(trackToDelete = null)
+    }
+
+    fun confirmDeleteTrack() {
+        val track = _uiState.value.trackToDelete ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isDeletingTrack = true)
+
+            val result = locationRepository.deleteTrack(track.id)
+            result.fold(
+                onSuccess = {
+                    Log.d(TAG, "Track ${track.id} deleted successfully")
+                    _uiState.value = _uiState.value.copy(
+                        trackToDelete = null,
+                        isDeletingTrack = false,
+                        // Remove from history list
+                        trackHistory = _uiState.value.trackHistory.filter { it.id != track.id }
+                    )
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Failed to delete track: ${error.message}")
+                    _uiState.value = _uiState.value.copy(
+                        trackToDelete = null,
+                        isDeletingTrack = false,
+                        errorMessage = error.message ?: "Erreur lors de la suppression"
+                    )
+                }
+            )
+        }
     }
 
     override fun onCleared() {
