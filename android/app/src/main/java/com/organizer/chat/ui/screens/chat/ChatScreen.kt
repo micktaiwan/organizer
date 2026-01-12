@@ -11,8 +11,9 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import com.organizer.chat.util.MessageGroupingUtils
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -307,17 +308,20 @@ fun ChatScreen(
                             }
                         }
 
-                        items(uiState.messages, key = { it.id }) { message ->
+                        itemsIndexed(uiState.messages, key = { _, msg -> msg.id }) { index, message ->
+                            val groupingFlags = MessageGroupingUtils.getGroupingFlags(uiState.messages, index)
                             MessageBubble(
                                 message = message,
                                 isMyMessage = viewModel.isMyMessage(message),
+                                isGroupedWithPrevious = groupingFlags.isGroupedWithPrevious,
+                                isLastInGroup = groupingFlags.isLastInGroup,
                                 currentUserId = uiState.currentUserId,
                                 onReact = { emoji -> viewModel.reactToMessage(message.id, emoji) },
                                 onDelete = if (viewModel.isMyMessage(message)) {
                                     { viewModel.deleteMessage(message.id) }
                                 } else null
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(if (groupingFlags.isGroupedWithPrevious) 0.dp else 4.dp))
                         }
                     }
                 }
