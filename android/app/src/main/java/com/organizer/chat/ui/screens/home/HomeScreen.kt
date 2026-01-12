@@ -14,8 +14,8 @@ import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.NoteRepository
 import com.organizer.chat.data.repository.RoomRepository
 import com.organizer.chat.service.ChatService
-import com.organizer.chat.ui.screens.location.LocationScreen
-import com.organizer.chat.ui.screens.location.LocationViewModel
+import com.organizer.chat.ui.screens.users.UsersScreen
+import com.organizer.chat.ui.screens.users.UsersViewModel
 import com.organizer.chat.ui.screens.notes.NotesScreen
 import com.organizer.chat.ui.screens.rooms.RoomsContent
 import com.organizer.chat.util.AppPreferences
@@ -47,12 +47,12 @@ fun HomeScreen(
     val selectedTab = HomeTab.entries[selectedTabIndex]
 
     // Create ViewModel at HomeScreen level so it persists across tab switches
-    val locationViewModel = remember { LocationViewModel(context) }
+    val usersViewModel = remember { UsersViewModel(context) }
 
     // Initialize socket manager when it becomes available
     LaunchedEffect(chatService?.socketManager) {
         chatService?.socketManager?.let { manager ->
-            locationViewModel.setSocketManager(manager)
+            usersViewModel.setSocketManager(manager)
         }
     }
 
@@ -124,9 +124,9 @@ fun HomeScreen(
                     )
                 }
                 HomeTab.USERS -> {
-                    LocationScreen(
+                    UsersScreen(
                         chatService = chatService,
-                        viewModel = locationViewModel,
+                        viewModel = usersViewModel,
                         onSettingsClick = onSettingsClick,
                         onMapClick = onMapClick
                     )

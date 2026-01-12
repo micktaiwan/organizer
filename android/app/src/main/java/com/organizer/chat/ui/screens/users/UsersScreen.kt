@@ -1,4 +1,4 @@
-package com.organizer.chat.ui.screens.location
+package com.organizer.chat.ui.screens.users
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -104,9 +104,9 @@ fun getStatusLabel(status: String): String = when (status) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LocationScreen(
+fun UsersScreen(
     chatService: ChatService?,
-    viewModel: LocationViewModel,
+    viewModel: UsersViewModel,
     onSettingsClick: () -> Unit,
     onMapClick: () -> Unit = {}
 ) {

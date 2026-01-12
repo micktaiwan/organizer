@@ -2,6 +2,12 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { socketService } from '../services/socket';
 import { UserStatus } from '../types';
 
+interface AppVersion {
+  versionName: string;
+  versionCode: number;
+  updatedAt?: string;
+}
+
 interface UserStatusData {
   id: string;
   username?: string;
@@ -11,6 +17,7 @@ interface UserStatusData {
   statusExpiresAt: string | null;
   isMuted: boolean;
   isOnline: boolean;
+  appVersion?: AppVersion | null;
 }
 
 interface UserStatusContextType {
@@ -100,8 +107,9 @@ export const UserStatusProvider: React.FC<UserStatusProviderProps> = ({ children
         status?: UserStatus;
         statusMessage?: string | null;
         isMuted?: boolean;
+        appVersion?: AppVersion | null;
       };
-      console.log('🟢 user:online received:', data.userId);
+      console.log('🟢 user:online received:', data.userId, data.appVersion ? `v${data.appVersion.versionName}` : '');
       setStatuses(prev => {
         const newStatuses = new Map(prev);
         const existing = newStatuses.get(data.userId);
@@ -113,6 +121,7 @@ export const UserStatusProvider: React.FC<UserStatusProviderProps> = ({ children
           statusExpiresAt: existing?.statusExpiresAt ?? null,
           isMuted: data.isMuted ?? existing?.isMuted ?? false,
           isOnline: true,
+          appVersion: data.appVersion ?? existing?.appVersion,
         });
         return newStatuses;
       });

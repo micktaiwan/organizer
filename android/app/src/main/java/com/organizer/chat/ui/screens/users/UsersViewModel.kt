@@ -1,4 +1,4 @@
-package com.organizer.chat.ui.screens.location
+package com.organizer.chat.ui.screens.users
 
 import android.content.Context
 import android.util.Log
@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-data class LocationUiState(
+data class UsersUiState(
     val users: List<UserWithLocation> = emptyList(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
@@ -34,7 +34,7 @@ data class LocationUiState(
     val historyError: String? = null
 )
 
-class LocationViewModel(
+class UsersViewModel(
     context: Context
 ) : ViewModel() {
 
@@ -44,8 +44,8 @@ class LocationViewModel(
 
     private var socketManager: SocketManager? = null
 
-    private val _uiState = MutableStateFlow(LocationUiState())
-    val uiState: StateFlow<LocationUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(UsersUiState())
+    val uiState: StateFlow<UsersUiState> = _uiState.asStateFlow()
 
     init {
         loadLocations()
@@ -68,7 +68,7 @@ class LocationViewModel(
             viewModelScope.launch {
                 manager.connectionState.collect { state ->
                     if (state == ConnectionState.Connected) {
-                        Log.d("LocationViewModel", "Socket reconnected, reloading locations")
+                        Log.d("UsersViewModel", "Socket reconnected, reloading locations")
                         loadLocations()
                     }
                 }
@@ -109,7 +109,7 @@ class LocationViewModel(
             // Observe status changes
             viewModelScope.launch {
                 manager.userStatusChanged.collect { event ->
-                    Log.d("LocationViewModel", "Status changed for ${event.userId}: ${event.status} - ${event.statusMessage}")
+                    Log.d("UsersViewModel", "Status changed for ${event.userId}: ${event.status} - ${event.statusMessage}")
                     val currentUsers = _uiState.value.users.toMutableList()
                     val existingIndex = currentUsers.indexOfFirst { it.id == event.userId }
 
@@ -127,7 +127,7 @@ class LocationViewModel(
             // Observe user online events
             viewModelScope.launch {
                 manager.userOnline.collect { event ->
-                    Log.d("LocationViewModel", "User online: ${event.userId}")
+                    Log.d("UsersViewModel", "User online: ${event.userId}")
                     val currentUsers = _uiState.value.users.toMutableList()
                     val existingIndex = currentUsers.indexOfFirst { it.id == event.userId }
 
@@ -136,7 +136,8 @@ class LocationViewModel(
                             isOnline = true,
                             status = event.status,
                             statusMessage = event.statusMessage,
-                            statusExpiresAt = event.statusExpiresAt
+                            statusExpiresAt = event.statusExpiresAt,
+                            appVersion = event.appVersion
                         )
                         _uiState.value = _uiState.value.copy(users = currentUsers)
                     } else {
@@ -149,7 +150,7 @@ class LocationViewModel(
             // Observe user offline events
             viewModelScope.launch {
                 manager.userOffline.collect { event ->
-                    Log.d("LocationViewModel", "User offline: ${event.userId}")
+                    Log.d("UsersViewModel", "User offline: ${event.userId}")
                     val currentUsers = _uiState.value.users.toMutableList()
                     val existingIndex = currentUsers.indexOfFirst { it.id == event.userId }
 
@@ -163,7 +164,7 @@ class LocationViewModel(
             // Observe tracking mode changes
             viewModelScope.launch {
                 manager.userTrackingChanged.collect { event ->
-                    Log.d("LocationViewModel", "Tracking changed for ${event.userId}: ${event.isTracking}")
+                    Log.d("UsersViewModel", "Tracking changed for ${event.userId}: ${event.isTracking}")
                     val currentUsers = _uiState.value.users.toMutableList()
                     val existingIndex = currentUsers.indexOfFirst { it.id == event.userId }
 
@@ -248,17 +249,17 @@ class LocationViewModel(
                 // 1. Obtenir la position GPS
                 val locationResult = locationRepository.getCurrentLocation()
                 if (locationResult.isFailure) {
-                    Log.e("LocationViewModel", "Failed to get location: ${locationResult.exceptionOrNull()?.message}")
+                    Log.e("UsersViewModel", "Failed to get location: ${locationResult.exceptionOrNull()?.message}")
                     _uiState.value = _uiState.value.copy(isUpdatingMyLocation = false)
                     return@launch
                 }
 
                 val location = locationResult.getOrThrow()
-                Log.d("LocationViewModel", "Got location: ${location.latitude}, ${location.longitude}")
+                Log.d("UsersViewModel", "Got location: ${location.latitude}, ${location.longitude}")
 
                 // 2. Reverse geocode
                 val address = locationRepository.reverseGeocode(location.latitude, location.longitude)
-                Log.d("LocationViewModel", "Geocoded: ${address?.street}, ${address?.city}")
+                Log.d("UsersViewModel", "Geocoded: ${address?.street}, ${address?.city}")
 
                 // 3. Envoyer au serveur
                 val updateResult = locationRepository.updateLocation(
@@ -271,14 +272,14 @@ class LocationViewModel(
                 )
 
                 if (updateResult.isSuccess) {
-                    Log.d("LocationViewModel", "Location updated on server")
+                    Log.d("UsersViewModel", "Location updated on server")
                     // Recharger la liste pour voir notre position
                     loadLocations()
                 } else {
-                    Log.e("LocationViewModel", "Failed to update location: ${updateResult.exceptionOrNull()?.message}")
+                    Log.e("UsersViewModel", "Failed to update location: ${updateResult.exceptionOrNull()?.message}")
                 }
             } catch (e: Exception) {
-                Log.e("LocationViewModel", "Error updating location", e)
+                Log.e("UsersViewModel", "Error updating location", e)
             } finally {
                 _uiState.value = _uiState.value.copy(isUpdatingMyLocation = false)
             }
@@ -308,15 +309,15 @@ class LocationViewModel(
                         myStatusMessage = user?.statusMessage ?: message,
                         isUpdatingStatus = false
                     )
-                    Log.d("LocationViewModel", "Status updated: $status - $message")
+                    Log.d("UsersViewModel", "Status updated: $status - $message")
                     // Reload to see our own status update
                     loadLocations()
                 } else {
-                    Log.e("LocationViewModel", "Failed to update status")
+                    Log.e("UsersViewModel", "Failed to update status")
                     _uiState.value = _uiState.value.copy(isUpdatingStatus = false)
                 }
             } catch (e: Exception) {
-                Log.e("LocationViewModel", "Error updating status", e)
+                Log.e("UsersViewModel", "Error updating status", e)
                 _uiState.value = _uiState.value.copy(isUpdatingStatus = false)
             }
         }

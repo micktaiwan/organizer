@@ -1,6 +1,7 @@
 package com.organizer.chat.data.socket
 
 import android.util.Log
+import com.organizer.chat.data.model.AppVersion
 import com.organizer.chat.util.TokenManager
 import io.socket.client.IO
 import io.socket.client.Socket
@@ -170,12 +171,23 @@ class SocketManager(private val tokenManager: TokenManager) {
             on("user:online") { args ->
                 try {
                     val data = args[0] as JSONObject
+                    // Parse appVersion if present
+                    val appVersion = if (!data.isNull("appVersion")) {
+                        val versionObj = data.getJSONObject("appVersion")
+                        AppVersion(
+                            versionName = versionObj.getString("versionName"),
+                            versionCode = versionObj.getInt("versionCode"),
+                            updatedAt = if (versionObj.isNull("updatedAt")) null else versionObj.optString("updatedAt")
+                        )
+                    } else null
+
                     val event = UserStatusEvent(
                         userId = data.getString("userId"),
                         status = data.optString("status", "available"),
                         statusMessage = if (data.isNull("statusMessage")) null else data.optString("statusMessage"),
                         statusExpiresAt = if (data.isNull("statusExpiresAt")) null else data.optString("statusExpiresAt"),
-                        isMuted = data.optBoolean("isMuted", false)
+                        isMuted = data.optBoolean("isMuted", false),
+                        appVersion = appVersion
                     )
                     _userOnline.tryEmit(event)
                 } catch (e: Exception) {
@@ -600,7 +612,8 @@ data class UserStatusEvent(
     val status: String,
     val statusMessage: String?,
     val statusExpiresAt: String?,
-    val isMuted: Boolean
+    val isMuted: Boolean,
+    val appVersion: AppVersion? = null
 )
 
 data class UserOfflineEvent(
