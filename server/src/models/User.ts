@@ -23,6 +23,7 @@ export interface IUser extends Document {
   peerId?: string | null; // DEPRECATED: No longer used (WebRTC via Socket.io)
   isOnline: boolean;
   isAdmin: boolean;
+  isBot: boolean;
   status: 'available' | 'busy' | 'away' | 'dnd';
   statusMessage: string | null;
   statusExpiresAt: Date | null;
@@ -75,6 +76,10 @@ const UserSchema = new Schema<IUser>(
       default: false,
     },
     isAdmin: {
+      type: Boolean,
+      default: false,
+    },
+    isBot: {
       type: Boolean,
       default: false,
     },

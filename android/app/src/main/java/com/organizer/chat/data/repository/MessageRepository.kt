@@ -1,6 +1,7 @@
 package com.organizer.chat.data.repository
 
 import com.organizer.chat.data.api.ApiClient
+import com.organizer.chat.data.api.MarkMessagesReadRequest
 import com.organizer.chat.data.model.Message
 import com.organizer.chat.data.model.ReactRequest
 import com.organizer.chat.data.model.ReactResponse
@@ -37,6 +38,16 @@ class MessageRepository {
         return try {
             val response = api.markAsRead(messageId)
             Result.success(response.message)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun markMessagesAsRead(messageIds: List<String>): Result<Boolean> {
+        return try {
+            if (messageIds.isEmpty()) return Result.success(true)
+            api.markMessagesAsRead(MarkMessagesReadRequest(messageIds))
+            Result.success(true)
         } catch (e: Exception) {
             Result.failure(e)
         }

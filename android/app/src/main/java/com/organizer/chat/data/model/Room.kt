@@ -26,7 +26,8 @@ data class UserRef(
     val id: String,
     val username: String,
     val displayName: String,
-    val isOnline: Boolean = false
+    val isOnline: Boolean = false,
+    val isBot: Boolean = false
 )
 
 data class RoomsResponse(

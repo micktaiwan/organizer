@@ -29,7 +29,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
       ],
     })
       .populate('createdBy', 'username displayName')
-      .populate('members.userId', 'username displayName isOnline')
+      .populate('members.userId', 'username displayName isOnline isBot')
       .sort({ lastMessageAt: -1, updatedAt: -1 });
 
     // Calculate unread counts for rooms where user is a member
@@ -76,7 +76,7 @@ router.get('/:roomId', async (req: AuthRequest, res: Response): Promise<void> =>
   try {
     const room = await Room.findById(req.params.roomId)
       .populate('createdBy', 'username displayName')
-      .populate('members.userId', 'username displayName isOnline lastSeen');
+      .populate('members.userId', 'username displayName isOnline isBot lastSeen');
 
     if (!room) {
       res.status(404).json({ error: 'Salon non trouvé' });
@@ -141,7 +141,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       });
 
       await room.save();
-      await room.populate('members.userId', 'username displayName isOnline');
+      await room.populate('members.userId', 'username displayName isOnline isBot');
 
       res.status(201).json({ room });
     } else {
@@ -166,7 +166,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       });
 
       await room.save();
-      await room.populate('members.userId', 'username displayName isOnline');
+      await room.populate('members.userId', 'username displayName isOnline isBot');
       await room.populate('createdBy', 'username displayName');
 
       // Emit socket event to notify all connected users
@@ -217,7 +217,7 @@ router.post('/:roomId/join', async (req: AuthRequest, res: Response): Promise<vo
       lastReadAt: null,
     });
     await room.save();
-    await room.populate('members.userId', 'username displayName isOnline');
+    await room.populate('members.userId', 'username displayName isOnline isBot');
     await room.populate('createdBy', 'username displayName');
 
     // Notify all clients about room update
@@ -252,7 +252,7 @@ router.post('/:roomId/leave', async (req: AuthRequest, res: Response): Promise<v
     // Remove member
     room.members = room.members.filter(m => m.userId.toString() !== req.userId);
     await room.save();
-    await room.populate('members.userId', 'username displayName isOnline');
+    await room.populate('members.userId', 'username displayName isOnline isBot');
     await room.populate('createdBy', 'username displayName');
 
     // Notify all clients about room update
