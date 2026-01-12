@@ -21,6 +21,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+enum class MapTileSource(val displayName: String) {
+    MAPNIK("Standard"),
+    CYCLEMAP("Cyclable"),
+    PUBLIC_TRANSPORT("Transport"),
+    WIKIMEDIA("Wikimedia")
+}
+
+data class MapSettings(
+    val tileSource: MapTileSource = MapTileSource.MAPNIK,
+    val showTracks: Boolean = true,
+    val showMarkers: Boolean = true,
+    val showLegend: Boolean = true
+)
+
 data class MapUiState(
     val currentUserId: String? = null,
     val users: List<UserWithLocation> = emptyList(),
@@ -42,7 +56,10 @@ data class MapUiState(
     val isSyncingTracks: Boolean = false,
     // Delete track
     val trackToDelete: TrackSummary? = null,
-    val isDeletingTrack: Boolean = false
+    val isDeletingTrack: Boolean = false,
+    // Map settings
+    val showMapSettings: Boolean = false,
+    val mapSettings: MapSettings = MapSettings()
 )
 
 class MapViewModel(
@@ -417,6 +434,18 @@ class MapViewModel(
                 }
             )
         }
+    }
+
+    fun showMapSettings() {
+        _uiState.value = _uiState.value.copy(showMapSettings = true)
+    }
+
+    fun dismissMapSettings() {
+        _uiState.value = _uiState.value.copy(showMapSettings = false)
+    }
+
+    fun updateMapSettings(settings: MapSettings) {
+        _uiState.value = _uiState.value.copy(mapSettings = settings)
     }
 
     override fun onCleared() {
