@@ -92,6 +92,8 @@ val ALLOWED_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "😡", "�
 fun MessageBubble(
     message: Message,
     isMyMessage: Boolean,
+    isGroupedWithPrevious: Boolean = false,
+    isLastInGroup: Boolean = true,
     currentUserId: String? = null,
     onReact: ((String) -> Unit)? = null,
     onDelete: (() -> Unit)? = null
@@ -122,42 +124,44 @@ fun MessageBubble(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+            .padding(horizontal = 8.dp, vertical = if (isGroupedWithPrevious) 0.dp else 2.dp),
         horizontalAlignment = if (isMyMessage) Alignment.End else Alignment.Start
     ) {
-        // Show sender name with status indicator for all messages
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(
-                start = if (isMyMessage) 0.dp else 8.dp,
-                end = if (isMyMessage) 8.dp else 0.dp,
-                bottom = 2.dp
-            )
-        ) {
-            // Status indicator dot
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .background(
-                        color = getStatusColor(message.senderId.status),
-                        shape = CircleShape
-                    )
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            // Sender name
-            Text(
-                text = message.senderId.displayName,
-                style = MaterialTheme.typography.labelSmall,
-                color = AccentBlue
-            )
-            // Status message if present
-            message.senderId.statusMessage?.let { statusMsg ->
-                Text(
-                    text = " · $statusMsg",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray,
-                    maxLines = 1
+        // Show sender name with status indicator only if NOT grouped with previous
+        if (!isGroupedWithPrevious) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(
+                    start = if (isMyMessage) 0.dp else 8.dp,
+                    end = if (isMyMessage) 8.dp else 0.dp,
+                    bottom = 2.dp
                 )
+            ) {
+                // Status indicator dot
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            color = getStatusColor(message.senderId.status),
+                            shape = CircleShape
+                        )
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                // Sender name
+                Text(
+                    text = message.senderId.displayName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AccentBlue
+                )
+                // Status message if present
+                message.senderId.statusMessage?.let { statusMsg ->
+                    Text(
+                        text = " · $statusMsg",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray,
+                        maxLines = 1
+                    )
+                }
             }
         }
 
@@ -203,20 +207,23 @@ fun MessageBubble(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    // Timestamp - only show if last in group
+                    if (isLastInGroup) {
+                        Spacer(modifier = Modifier.height(4.dp))
 
-                    Text(
-                        text = formatTime(message.createdAt),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MessageSecondaryColor,
-                        modifier = Modifier.align(Alignment.End)
-                    )
+                        Text(
+                            text = formatTime(message.createdAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MessageSecondaryColor,
+                            modifier = Modifier.align(Alignment.End)
+                        )
+                    }
                 }
             }
         }
 
-        // Reaction bar
-        if (message.reactions.isNotEmpty() || onReact != null) {
+        // Reaction bar - show on last message of group or if there are reactions
+        if (message.reactions.isNotEmpty() || isLastInGroup) {
             ReactionBar(
                 reactions = message.reactions,
                 currentUserId = currentUserId,

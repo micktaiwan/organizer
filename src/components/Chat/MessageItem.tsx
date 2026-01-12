@@ -32,6 +32,8 @@ const aggregateReactions = (reactions: Reaction[] | undefined): ReactionCount[] 
 
 interface MessageItemProps {
   msg: Message;
+  isGroupedWithPrevious?: boolean;
+  isLastInGroup?: boolean;
   onDelete?: (messageId: string) => void;
   onReact?: (messageId: string, emoji: string) => void;
   currentUserId?: string;
@@ -62,7 +64,14 @@ const downloadFile = async (url: string, filename: string) => {
   }
 };
 
-export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact, currentUserId }) => {
+export const MessageItem: React.FC<MessageItemProps> = ({
+  msg,
+  isGroupedWithPrevious = false,
+  isLastInGroup = true,
+  onDelete,
+  onReact,
+  currentUserId
+}) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFullscreenImage, setShowFullscreenImage] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
@@ -136,8 +145,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
           {isCallMessage && <span className="system-message-text">{msg.text || msg.content}</span>}
         </div>
         {!isCallMessage && <span className="system-message-text">{msg.text || msg.content}</span>}
-        {/* Reactions on system messages */}
-        {msg.serverMessageId && (
+        {/* Reactions on system messages - only show if there are reactions */}
+        {aggregatedReactions.length > 0 && (
           <div className="reaction-bar system-message-reactions">
             {aggregatedReactions.map((r) => (
               <button
@@ -148,28 +157,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
                 {r.emoji} {r.count}
               </button>
             ))}
-            <div className="reaction-add-container">
-              <button
-                className="reaction-add"
-                onClick={() => setShowReactionPicker(!showReactionPicker)}
-                title="Ajouter une réaction"
-              >
-                <SmilePlus size={14} />
-              </button>
-              {showReactionPicker && (
-                <div className="reaction-picker">
-                  {ALLOWED_EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      className="reaction-picker-emoji"
-                      onClick={() => handleReact(emoji)}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         )}
         <span className="system-message-time">
@@ -181,17 +168,20 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
 
   return (
     <div
-      className={`message ${msg.sender} ${msg.status === "failed" ? "failed" : ""}`}
+      className={`message ${msg.sender} ${msg.status === "failed" ? "failed" : ""} ${isGroupedWithPrevious ? "grouped" : ""}`}
     >
-      {msg.sender === "them" && (
+      {msg.sender === "them" && !isGroupedWithPrevious && (
         <Avatar
           name={msg.senderName || "User"}
           size="sm"
           className="message-avatar"
         />
       )}
+      {msg.sender === "them" && isGroupedWithPrevious && (
+        <div className="message-avatar-spacer" />
+      )}
       <div className="message-content">
-        {msg.sender === "them" && msg.senderName && (
+        {msg.sender === "them" && msg.senderName && !isGroupedWithPrevious && (
           <span className="message-sender-name">{msg.senderName}</span>
         )}
         <div className="bubble">
@@ -229,20 +219,22 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
           {msg.caption && msg.type === 'file' && <span className="file-caption">{msg.caption}</span>}
           {msg.text && <span>{msg.text}</span>}
         </div>
-        <span className="timestamp">
-          {formatMessageTimestamp(msg.timestamp)}
-          {msg.sender === "me" && msg.status === "sending" && " ..."}
-          {msg.sender === "me" && msg.status === "sent" && " ✓"}
-          {msg.sender === "me" && msg.status === "delivered" && " ✓✓"}
-          {msg.sender === "me" && msg.status === "read" && (
-            <span className="read-status">
-              {" ✓✓ Lu"}
-            </span>
-          )}
-          {msg.sender === "me" && msg.status === "failed" && " ✗"}
-        </span>
-        {/* Reaction Bar */}
-        {(aggregatedReactions.length > 0 || msg.serverMessageId) && (
+        {isLastInGroup && (
+          <span className="timestamp">
+            {formatMessageTimestamp(msg.timestamp)}
+            {msg.sender === "me" && msg.status === "sending" && " ..."}
+            {msg.sender === "me" && msg.status === "sent" && " ✓"}
+            {msg.sender === "me" && msg.status === "delivered" && " ✓✓"}
+            {msg.sender === "me" && msg.status === "read" && (
+              <span className="read-status">
+                {" ✓✓ Lu"}
+              </span>
+            )}
+            {msg.sender === "me" && msg.status === "failed" && " ✗"}
+          </span>
+        )}
+        {/* Reaction Bar - show on last message of group or if there are reactions */}
+        {(aggregatedReactions.length > 0 || (isLastInGroup && msg.serverMessageId)) && (
           <div className="reaction-bar">
             {aggregatedReactions.map((r) => (
               <button
@@ -258,7 +250,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ msg, onDelete, onReact
                 <button
                   className="reaction-add"
                   onClick={() => setShowReactionPicker(!showReactionPicker)}
-                  title="Ajouter une reaction"
+                  title="Ajouter une réaction"
                 >
                   <SmilePlus size={14} />
                 </button>

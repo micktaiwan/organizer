@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Message } from "../../types";
 import { MessageItem } from "./MessageItem";
+import { getMessageGroupingFlags } from "../../utils/messageGrouping";
 
 interface MessageListProps {
   messages: Message[];
@@ -19,15 +20,20 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isRemoteTypi
 
   return (
     <div className="messages">
-      {messages.map((msg) => (
-        <MessageItem
-          key={msg.id}
-          msg={msg}
-          onDelete={onDeleteMessage}
-          onReact={onReactMessage}
-          currentUserId={currentUserId}
-        />
-      ))}
+      {messages.map((msg, index) => {
+        const { isGroupedWithPrevious, isLastInGroup } = getMessageGroupingFlags(messages, index);
+        return (
+          <MessageItem
+            key={msg.id}
+            msg={msg}
+            isGroupedWithPrevious={isGroupedWithPrevious}
+            isLastInGroup={isLastInGroup}
+            onDelete={onDeleteMessage}
+            onReact={onReactMessage}
+            currentUserId={currentUserId}
+          />
+        );
+      })}
       {isRemoteTyping && (
         <div className="typing-indicator">
           <span></span>
