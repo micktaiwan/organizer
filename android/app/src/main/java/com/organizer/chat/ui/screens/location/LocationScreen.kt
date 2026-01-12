@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.AlertDialog
@@ -189,17 +188,6 @@ fun LocationScreen(
                 actions = {
                     IconButton(onClick = onMapClick) {
                         Icon(Icons.Default.Map, contentDescription = "Carte")
-                    }
-                    if (uiState.isRefreshing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp).padding(4.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        IconButton(onClick = { viewModel.refresh() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Rafraichir")
-                        }
                     }
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Parametres")

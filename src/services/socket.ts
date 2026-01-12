@@ -9,14 +9,20 @@ class SocketService {
 
   connect(token: string) {
     if (this.socket?.connected) {
+      console.log('Socket already connected, skipping');
       return;
     }
 
-    this.socket = io(getApiBaseUrl(), {
+    const baseUrl = getApiBaseUrl();
+    console.log('Socket connecting to:', baseUrl);
+
+    this.socket = io(baseUrl, {
       auth: { token },
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 10,
+      // Force polling first to diagnose WebSocket issues
+      transports: ['polling', 'websocket'],
     });
 
     this.socket.on('connect', () => {
@@ -27,10 +33,12 @@ class SocketService {
 
     this.socket.on('disconnect', (reason) => {
       console.log('Socket disconnected:', reason);
+      this.emit('internal:disconnected', reason);
     });
 
     this.socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error.message);
+      this.emit('internal:error', error.message);
     });
 
     // Re-emit events to registered handlers

@@ -98,6 +98,59 @@ class LocationViewModel(
                     }
                 }
             }
+
+            // Observe user online events
+            viewModelScope.launch {
+                manager.userOnline.collect { event ->
+                    Log.d("LocationViewModel", "User online: ${event.userId}")
+                    val currentUsers = _uiState.value.users.toMutableList()
+                    val existingIndex = currentUsers.indexOfFirst { it.id == event.userId }
+
+                    if (existingIndex >= 0) {
+                        currentUsers[existingIndex] = currentUsers[existingIndex].copy(
+                            isOnline = true,
+                            status = event.status,
+                            statusMessage = event.statusMessage,
+                            statusExpiresAt = event.statusExpiresAt
+                        )
+                        _uiState.value = _uiState.value.copy(users = currentUsers)
+                    } else {
+                        // New user, reload full list
+                        loadLocations()
+                    }
+                }
+            }
+
+            // Observe user offline events
+            viewModelScope.launch {
+                manager.userOffline.collect { event ->
+                    Log.d("LocationViewModel", "User offline: ${event.userId}")
+                    val currentUsers = _uiState.value.users.toMutableList()
+                    val existingIndex = currentUsers.indexOfFirst { it.id == event.userId }
+
+                    if (existingIndex >= 0) {
+                        currentUsers[existingIndex] = currentUsers[existingIndex].copy(isOnline = false)
+                        _uiState.value = _uiState.value.copy(users = currentUsers)
+                    }
+                }
+            }
+
+            // Observe tracking mode changes
+            viewModelScope.launch {
+                manager.userTrackingChanged.collect { event ->
+                    Log.d("LocationViewModel", "Tracking changed for ${event.userId}: ${event.isTracking}")
+                    val currentUsers = _uiState.value.users.toMutableList()
+                    val existingIndex = currentUsers.indexOfFirst { it.id == event.userId }
+
+                    if (existingIndex >= 0) {
+                        currentUsers[existingIndex] = currentUsers[existingIndex].copy(
+                            isTracking = event.isTracking,
+                            trackingExpiresAt = event.trackingExpiresAt
+                        )
+                        _uiState.value = _uiState.value.copy(users = currentUsers)
+                    }
+                }
+            }
         }
     }
 
