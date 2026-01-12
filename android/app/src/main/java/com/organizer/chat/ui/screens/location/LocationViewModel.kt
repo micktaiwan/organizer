@@ -9,6 +9,7 @@ import com.organizer.chat.data.api.UpdateStatusRequest
 import com.organizer.chat.data.model.LocationHistoryEntry
 import com.organizer.chat.data.model.UserWithLocation
 import com.organizer.chat.data.repository.LocationRepository
+import com.organizer.chat.data.socket.ConnectionState
 import com.organizer.chat.data.socket.SocketManager
 import com.organizer.chat.util.TokenManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,21 +35,45 @@ data class LocationUiState(
 )
 
 class LocationViewModel(
-    context: Context,
-    private val socketManager: SocketManager?
+    context: Context
 ) : ViewModel() {
 
     private val locationRepository = LocationRepository(context)
     private val tokenManager = TokenManager(context)
     private val currentUserId: String? = tokenManager.getUserIdSync()
 
+    private var socketManager: SocketManager? = null
+
     private val _uiState = MutableStateFlow(LocationUiState())
     val uiState: StateFlow<LocationUiState> = _uiState.asStateFlow()
 
     init {
         loadLocations()
+    }
+
+    /**
+     * Set the socket manager and start observing events.
+     * Called from HomeScreen when chatService becomes available.
+     */
+    fun setSocketManager(manager: SocketManager) {
+        if (socketManager != null) return  // Already initialized
+        socketManager = manager
         observeSocketEvents()
-        socketManager?.subscribeToLocations()
+        observeConnectionState()
+        manager.subscribeToLocations()
+    }
+
+    private fun observeConnectionState() {
+        socketManager?.let { manager ->
+            viewModelScope.launch {
+                manager.connectionState.collect { state ->
+                    if (state == ConnectionState.Connected) {
+                        Log.d("LocationViewModel", "Socket reconnected, reloading locations")
+                        loadLocations()
+                    }
+                }
+            }
+        }
     }
 
     private fun observeSocketEvents() {
