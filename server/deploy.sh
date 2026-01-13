@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Get script directory (works even when called from another folder)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # Configuration
 SERVER="ubuntu@51.210.150.25"
 REMOTE_PATH="/var/www/organizer"
@@ -10,7 +13,7 @@ echo "🚀 Déploiement sur $SERVER"
 # 1. Sync des fichiers vers le serveur
 echo "📦 Synchronisation des fichiers..."
 rsync -avz --exclude 'node_modules' --exclude 'dist' --exclude '.env' \
-  ./ $SERVER:$REMOTE_PATH/server/
+  "$SCRIPT_DIR/" $SERVER:$REMOTE_PATH/server/
 
 # 2. Commandes sur le serveur
 echo "🐳 Build et restart des containers..."

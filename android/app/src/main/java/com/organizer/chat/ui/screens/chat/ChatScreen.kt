@@ -49,9 +49,12 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import com.organizer.chat.data.repository.MessageRepository
 import com.organizer.chat.data.repository.RoomRepository
+import com.organizer.chat.data.socket.ConnectionState
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.ui.components.ConnectionStatusIcon
 import com.organizer.chat.ui.components.MessageBubble
+import com.organizer.chat.ui.components.OfflineBanner
 import com.organizer.chat.util.DocumentInfo
 import com.organizer.chat.util.DocumentPicker
 import com.organizer.chat.util.TokenManager
@@ -76,6 +79,15 @@ fun ChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    // Connection state - use current state as initial to avoid flicker
+    val initialConnectionState = remember {
+        if (chatService?.socketManager?.isConnected() == true) ConnectionState.Connected
+        else ConnectionState.Disconnected
+    }
+    val connectionState by chatService?.socketManager?.connectionState
+        ?.collectAsState(initial = initialConnectionState)
+        ?: remember { mutableStateOf(initialConnectionState) }
 
     // Permission handling
     var hasAudioPermission by remember {
@@ -160,33 +172,46 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(roomName)
-                        if (uiState.typingUsers.isNotEmpty()) {
-                            Text(
-                                text = "En train d'ecrire...",
-                                style = MaterialTheme.typography.bodySmall
+            Column {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(roomName)
+                            if (uiState.typingUsers.isNotEmpty()) {
+                                Text(
+                                    text = "En train d'ecrire...",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Retour"
                             )
                         }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Retour"
+                    },
+                    actions = {
+                        ConnectionStatusIcon(
+                            connectionState = connectionState,
+                            modifier = Modifier.padding(end = 8.dp)
                         )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                windowInsets = WindowInsets.statusBars
-            )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    windowInsets = WindowInsets.statusBars
+                )
+                OfflineBanner(
+                    connectionState = connectionState,
+                    onRetry = { chatService?.reconnectIfNeeded() }
+                )
+            }
         },
         bottomBar = {
             ChatInputBar(
