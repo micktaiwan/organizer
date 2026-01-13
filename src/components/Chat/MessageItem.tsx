@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
-import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji } from "../../types";
+import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji, UserStatus } from "../../types";
 import { formatMessageTimestamp } from "../../utils/dateFormat";
 import { getApiBaseUrl } from "../../services/api";
 
@@ -37,6 +37,9 @@ interface MessageItemProps {
   onDelete?: (messageId: string) => void;
   onReact?: (messageId: string, emoji: string) => void;
   currentUserId?: string;
+  senderStatus?: UserStatus;
+  senderIsOnline?: boolean;
+  senderStatusMessage?: string | null;
 }
 
 // Helper to format file size
@@ -70,7 +73,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   isLastInGroup = true,
   onDelete,
   onReact,
-  currentUserId
+  currentUserId,
+  senderStatus = 'available',
+  senderIsOnline = false,
+  senderStatusMessage = null,
 }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFullscreenImage, setShowFullscreenImage] = useState(false);
@@ -181,8 +187,17 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         <div className="message-avatar-spacer" />
       )}
       <div className="message-content">
-        {msg.sender === "them" && msg.senderName && !isGroupedWithPrevious && (
-          <span className="message-sender-name">{msg.senderName}</span>
+        {msg.senderName && !isGroupedWithPrevious && (
+          <span className="message-sender-name">
+            <span className={`status-dot ${senderIsOnline ? 'online' : 'offline'}`} />
+            {msg.senderName}
+            <span className={`sender-status-label ${senderStatus}`}>
+              {{ available: 'Disponible', busy: 'Occupé', away: 'Absent', dnd: 'Ne pas déranger' }[senderStatus] || 'Disponible'}
+            </span>
+            {senderStatusMessage && (
+              <span className="sender-status-message">{senderStatusMessage}</span>
+            )}
+          </span>
         )}
         <div className="bubble">
           {msg.image && (
