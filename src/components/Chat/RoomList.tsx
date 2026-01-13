@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Globe, Lock, Plus, Trash2, X, AlertTriangle, LogOut } from 'lucide-react';
+import { Globe, Lock, Plus, Trash2, X, AlertTriangle, LogOut, User } from 'lucide-react';
 import { Room } from '../../services/api';
+import { useUserStatus } from '../../contexts/UserStatusContext';
 
 interface RoomListProps {
   rooms: Room[];
@@ -70,6 +71,27 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [roomToDelete, setRoomToDelete] = useState<Room | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLeaving, setIsLeaving] = useState<string | null>(null);
+  const { getStatus } = useUserStatus();
+
+  // Get the other user's info for private rooms
+  const getPrivateRoomInfo = (room: Room) => {
+    if (room.type !== 'private' || !currentUserId) return null;
+    const otherMember = room.members.find(m => {
+      const memberId = typeof m.userId === 'string' ? m.userId : (m.userId as any)?._id || (m.userId as any)?.id;
+      return memberId !== currentUserId;
+    });
+    if (!otherMember) return null;
+    const otherUser = typeof otherMember.userId === 'object' ? otherMember.userId : null;
+    const otherUserId = typeof otherMember.userId === 'string'
+      ? otherMember.userId
+      : (otherMember.userId as any)?._id || (otherMember.userId as any)?.id;
+    const statusData = getStatus(otherUserId);
+    return {
+      displayName: otherUser?.displayName || room.name,
+      isOnline: statusData?.isOnline ?? false,
+      status: statusData?.status || 'available',
+    };
+  };
 
   const handleDeleteClick = (e: React.MouseEvent, room: Room) => {
     e.stopPropagation();
@@ -161,7 +183,14 @@ export const RoomList: React.FC<RoomListProps> = ({
           )}
         </div>
         <div className="room-list-items">
-          {rooms.map(room => (
+          {rooms.map(room => {
+            const privateInfo = getPrivateRoomInfo(room);
+            const displayName = privateInfo?.displayName || room.name;
+            const subtitle = room.type === 'private'
+              ? 'Conversation privée'
+              : `${room.members.length} membre${room.members.length !== 1 ? 's' : ''}`;
+
+            return (
             <div
               key={room._id}
               className={`room-item ${currentRoomId === room._id ? 'active' : ''}`}
@@ -169,12 +198,16 @@ export const RoomList: React.FC<RoomListProps> = ({
             >
               <div className="room-info">
                 <div className="room-name">
-                  {room.isLobby && <Globe size={14} style={{ marginRight: '0.5rem', display: 'inline' }} />}
-                  {room.type === 'private' && <Lock size={14} style={{ marginRight: '0.5rem', display: 'inline' }} />}
-                  {room.name}
+                  {room.isLobby && <Globe size={14} />}
+                  {room.type === 'public' && <Lock size={14} />}
+                  {room.type === 'private' && <User size={14} />}
+                  <span>{displayName}</span>
+                  {privateInfo?.isOnline && (
+                    <span className="status-dot online" title="En ligne" />
+                  )}
                 </div>
                 <div className="room-members">
-                  {room.members.length} membre{room.members.length !== 1 ? 's' : ''}
+                  {subtitle}
                 </div>
               </div>
               {canLeaveRoom(room) && (
@@ -197,7 +230,8 @@ export const RoomList: React.FC<RoomListProps> = ({
                 </button>
               )}
             </div>
-          ))}
+          );
+          })}
         </div>
       </aside>
 

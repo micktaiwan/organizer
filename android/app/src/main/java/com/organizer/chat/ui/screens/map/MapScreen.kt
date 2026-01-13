@@ -361,7 +361,10 @@ private fun OsmMapView(
                 map.setTileSource(getTileSource(mapSettings.tileSource))
             }
             // === Update polylines ===
-            val currentTrackIds = if (mapSettings.showTracks) tracks.keys.toSet() else emptySet()
+            val currentTrackIds = buildSet {
+                if (mapSettings.showTracks) addAll(tracks.keys)
+                historyTrackId?.let { add(it) } // Always show history track if viewing one
+            }
             val existingTrackIds = polylinesMap.keys.toSet()
 
             // Remove polylines for tracks that no longer exist or if tracks are hidden
