@@ -31,15 +31,14 @@ const aggregateReactions = (reactions: Reaction[] | undefined): ReactionCount[] 
 };
 
 interface MessageItemProps {
-  msg: Message;
-  isGroupedWithPrevious?: boolean;
-  isLastInGroup?: boolean;
+  messages: Message[];
   onDelete?: (messageId: string) => void;
   onReact?: (messageId: string, emoji: string) => void;
   currentUserId?: string;
   senderStatus?: UserStatus;
   senderIsOnline?: boolean;
   senderStatusMessage?: string | null;
+  roomMemberCount?: number;
 }
 
 // Helper to format file size
@@ -68,62 +67,67 @@ const downloadFile = async (url: string, filename: string) => {
 };
 
 export const MessageItem: React.FC<MessageItemProps> = ({
-  msg,
-  isGroupedWithPrevious = false,
-  isLastInGroup = true,
+  messages,
   onDelete,
   onReact,
   currentUserId,
   senderStatus = 'available',
   senderIsOnline = false,
   senderStatusMessage = null,
+  roomMemberCount = 2,
 }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFullscreenImage, setShowFullscreenImage] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | undefined>(undefined);
+
+  // First and last message of the group
+  if (!messages || messages.length === 0) {
+    return null;
+  }
+  const firstMsg = messages[0];
+  const lastMsg = messages[messages.length - 1];
 
   // Build full URL (handle relative URLs from server)
   const getImageUrl = (imageUrl: string | undefined): string | undefined => {
     if (!imageUrl) return undefined;
-    // If it's a data URL (base64), return as-is
     if (imageUrl.startsWith('data:')) return imageUrl;
-    // If it's a relative URL from server, prefix with API base URL
     if (imageUrl.startsWith('/')) return `${getApiBaseUrl()}${imageUrl}`;
-    // Otherwise, return as-is (full URL)
     return imageUrl;
   };
 
   const handleDelete = async () => {
-    if (!onDelete || !msg.serverMessageId) return;
+    if (!onDelete || !lastMsg.serverMessageId) return;
     setIsDeleting(true);
     try {
-      await onDelete(msg.serverMessageId);
+      await onDelete(lastMsg.serverMessageId);
     } catch (error) {
       console.error("Failed to delete message:", error);
+    } finally {
       setIsDeleting(false);
     }
   };
 
   const handleReact = (emoji: string) => {
-    if (!onReact || !msg.serverMessageId) return;
-    onReact(msg.serverMessageId, emoji);
+    if (!onReact || !lastMsg.serverMessageId) return;
+    onReact(lastMsg.serverMessageId, emoji);
     setShowReactionPicker(false);
   };
 
-  const handleDownloadImage = async (e: React.MouseEvent) => {
+  const handleDownloadImage = async (e: React.MouseEvent, imageUrl: string | undefined) => {
     e.stopPropagation();
-    if (!msg.image) return;
+    if (!imageUrl) return;
     setIsDownloading(true);
-    const imageUrl = getImageUrl(msg.image);
-    if (imageUrl) {
+    const url = getImageUrl(imageUrl);
+    if (url) {
       const filename = `organizer_${Date.now()}.jpg`;
-      await downloadFile(imageUrl, filename);
+      await downloadFile(url, filename);
     }
     setIsDownloading(false);
   };
 
-  const handleDownloadFile = async () => {
+  const handleDownloadFile = async (msg: Message) => {
     if (!msg.fileUrl) return;
     setIsDownloading(true);
     const fileUrl = getImageUrl(msg.fileUrl);
@@ -133,10 +137,36 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     setIsDownloading(false);
   };
 
-  const aggregatedReactions = aggregateReactions(msg.reactions);
+  const aggregatedReactions = aggregateReactions(lastMsg.reactions);
+
+  // Get the "best" status across all messages in the group (excluding 'read' - we calculate that separately)
+  // Hierarchy: sent > sending > failed
+  const getGroupStatus = () => {
+    // Check for failed or sending states first
+    for (const msg of messages) {
+      if (msg.status === 'failed') return 'failed';
+      if (msg.status === 'sending') return 'sending';
+    }
+    return 'sent';
+  };
+
+  // Calculate if ALL other members have read the last message (like Android does)
+  const isAllRead = (() => {
+    if (firstMsg.sender !== 'me') return false;
+    const readByCount = lastMsg.readBy?.length || 0;
+    // All other members must have read (roomMemberCount - 1 = other members)
+    if (roomMemberCount > 1) {
+      return readByCount >= roomMemberCount - 1;
+    }
+    // Fallback for unknown member count: any read = considered read
+    return readByCount > 0;
+  })();
+
+  const groupStatus = firstMsg.sender === 'me' ? getGroupStatus() : null;
 
   // System messages (calls or announcements)
-  if (msg.isSystemMessage || msg.type === 'system') {
+  if (firstMsg.isSystemMessage || firstMsg.type === 'system') {
+    const msg = firstMsg;
     const isCallMessage = msg.systemMessageType?.includes('call');
 
     return (
@@ -151,7 +181,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           {isCallMessage && <span className="system-message-text">{msg.text || msg.content}</span>}
         </div>
         {!isCallMessage && <span className="system-message-text">{msg.text || msg.content}</span>}
-        {/* Reactions on system messages - only show if there are reactions */}
         {aggregatedReactions.length > 0 && (
           <div className="reaction-bar system-message-reactions">
             {aggregatedReactions.map((r) => (
@@ -172,25 +201,25 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     );
   }
 
+  // Check if any message has failed status
+  const hasFailed = messages.some(m => m.status === "failed");
+
   return (
     <div
-      className={`message ${msg.sender} ${msg.status === "failed" ? "failed" : ""} ${isGroupedWithPrevious ? "grouped" : ""}`}
+      className={`message ${firstMsg.sender} ${hasFailed ? "failed" : ""}`}
     >
-      {msg.sender === "them" && !isGroupedWithPrevious && (
+      {firstMsg.sender === "them" && (
         <Avatar
-          name={msg.senderName || "User"}
+          name={firstMsg.senderName || "User"}
           size="sm"
           className="message-avatar"
         />
       )}
-      {msg.sender === "them" && isGroupedWithPrevious && (
-        <div className="message-avatar-spacer" />
-      )}
       <div className="message-content">
-        {msg.senderName && !isGroupedWithPrevious && (
+        {firstMsg.senderName && (
           <span className="message-sender-name">
             <span className={`status-dot ${senderIsOnline ? 'online' : 'offline'}`} />
-            {msg.senderName}
+            {firstMsg.senderName}
             <span className={`sender-status-label ${senderStatus}`}>
               {{ available: 'Disponible', busy: 'Occupé', away: 'Absent', dnd: 'Ne pas déranger' }[senderStatus] || 'Disponible'}
             </span>
@@ -200,115 +229,120 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           </span>
         )}
         <div className="bubble">
-          {msg.image && (
-            <div className="image-with-caption">
-              <img
-                src={getImageUrl(msg.image)}
-                alt="Image"
-                className="message-image"
-                onClick={() => setShowFullscreenImage(true)}
-                style={{ cursor: 'pointer' }}
-              />
-              {msg.caption && <span className="image-caption">{msg.caption}</span>}
-            </div>
-          )}
-          {msg.audio && (
-            <div className="audio-message">
-              <audio controls src={getImageUrl(msg.audio)} className="audio-player" />
-            </div>
-          )}
-          {msg.type === 'file' && msg.fileUrl && (
-            <div className="file-message" onClick={handleDownloadFile} style={{ cursor: 'pointer' }}>
-              <div className="file-icon">
-                <FileText size={24} />
-              </div>
-              <div className="file-info">
-                <span className="file-name">{msg.fileName || 'Fichier'}</span>
-                {msg.fileSize && <span className="file-size">{formatFileSize(msg.fileSize)}</span>}
-              </div>
-              <button className="file-download" disabled={isDownloading}>
-                {isDownloading ? '...' : <Download size={18} />}
-              </button>
-            </div>
-          )}
-          {msg.caption && msg.type === 'file' && <span className="file-caption">{msg.caption}</span>}
-          {msg.text && <span>{msg.text}</span>}
-        </div>
-        {isLastInGroup && (
-          <span className="timestamp">
-            {formatMessageTimestamp(msg.timestamp)}
-            {msg.sender === "me" && msg.status === "sending" && " ..."}
-            {msg.sender === "me" && msg.status === "sent" && " ✓"}
-            {msg.sender === "me" && msg.status === "delivered" && " ✓✓"}
-            {msg.sender === "me" && msg.status === "read" && (
-              <span className="read-status">
-                {" ✓✓ Lu"}
-              </span>
-            )}
-            {msg.sender === "me" && msg.status === "failed" && " ✗"}
-          </span>
-        )}
-        {/* Reaction Bar - show on last message of group or if there are reactions */}
-        {(aggregatedReactions.length > 0 || (isLastInGroup && msg.serverMessageId)) && (
-          <div className="reaction-bar">
-            {aggregatedReactions.map((r) => (
-              <button
-                key={r.emoji}
-                className={`reaction-chip ${r.userIds.includes(currentUserId || '') ? 'active' : ''}`}
-                onClick={() => handleReact(r.emoji)}
-              >
-                {r.emoji} {r.count}
-              </button>
-            ))}
-            {msg.serverMessageId && (
-              <div className="reaction-add-container">
-                <button
-                  className="reaction-add"
-                  onClick={() => setShowReactionPicker(!showReactionPicker)}
-                  title="Ajouter une réaction"
-                >
-                  <SmilePlus size={14} />
-                </button>
-                {showReactionPicker && (
-                  <div className="reaction-picker">
-                    {ALLOWED_EMOJIS.map((emoji) => (
-                      <button
-                        key={emoji}
-                        className="reaction-picker-emoji"
-                        onClick={() => handleReact(emoji)}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
+          {messages.map((msg, idx) => (
+            <React.Fragment key={msg.id}>
+              {msg.image && (
+                <div className="image-with-caption">
+                  <img
+                    src={getImageUrl(msg.image)}
+                    alt="Image"
+                    className="message-image"
+                    onClick={() => {
+                      setFullscreenImageUrl(msg.image);
+                      setShowFullscreenImage(true);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  {msg.caption && <span className="image-caption">{msg.caption}</span>}
+                </div>
+              )}
+              {msg.audio && (
+                <div className="audio-message">
+                  <audio controls src={getImageUrl(msg.audio)} className="audio-player" />
+                </div>
+              )}
+              {msg.type === 'file' && msg.fileUrl && (
+                <div className="file-message" onClick={() => handleDownloadFile(msg)} style={{ cursor: 'pointer' }}>
+                  <div className="file-icon">
+                    <FileText size={24} />
                   </div>
-                )}
-              </div>
+                  <div className="file-info">
+                    <span className="file-name">{msg.fileName || 'Fichier'}</span>
+                    {msg.fileSize && <span className="file-size">{formatFileSize(msg.fileSize)}</span>}
+                  </div>
+                  <button className="file-download" disabled={isDownloading}>
+                    {isDownloading ? '...' : <Download size={18} />}
+                  </button>
+                </div>
+              )}
+              {msg.caption && msg.type === 'file' && <span className="file-caption">{msg.caption}</span>}
+              {msg.text && (
+                <>
+                  <span>{msg.text}</span>
+                  {idx < messages.length - 1 && <br />}
+                </>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+        {/* Message footer: timestamp + reactions + delete on ONE line */}
+        <div className="message-footer">
+          <span className="timestamp">
+            {formatMessageTimestamp(lastMsg.timestamp)}
+            {groupStatus === "sending" && " ..."}
+            {groupStatus === "sent" && !isAllRead && " ✓✓"}
+            {isAllRead && (
+              <span className="read-status"> ✓✓ Lu</span>
             )}
-          </div>
-        )}
+            {groupStatus === "failed" && " ✗"}
+          </span>
+          {aggregatedReactions.map((r) => (
+            <button
+              key={r.emoji}
+              className={`reaction-chip ${r.userIds.includes(currentUserId || '') ? 'active' : ''}`}
+              onClick={() => handleReact(r.emoji)}
+            >
+              {r.emoji} {r.count}
+            </button>
+          ))}
+          {lastMsg.serverMessageId && (
+            <div className="reaction-add-container">
+              <button
+                className="reaction-add"
+                onClick={() => setShowReactionPicker(!showReactionPicker)}
+                title="Ajouter une réaction"
+              >
+                <SmilePlus size={14} />
+              </button>
+              {showReactionPicker && (
+                <div className="reaction-picker">
+                  {ALLOWED_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      className="reaction-picker-emoji"
+                      onClick={() => handleReact(emoji)}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {lastMsg.sender === "me" && lastMsg.serverMessageId && !isDeleting && (
+            <button
+              className="message-delete-btn"
+              onClick={handleDelete}
+              title="Supprimer le message"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+          {isDeleting && (
+            <span className="message-deleting">...</span>
+          )}
+        </div>
       </div>
-      {msg.sender === "me" && msg.serverMessageId && !isDeleting && (
-        <button
-          className="message-delete-btn"
-          onClick={handleDelete}
-          title="Supprimer le message"
-        >
-          <Trash2 size={14} />
-        </button>
-      )}
-      {isDeleting && (
-        <span className="message-deleting">...</span>
-      )}
-      {showFullscreenImage && msg.image && (
+      {showFullscreenImage && fullscreenImageUrl && (
         <div className="image-fullscreen-overlay" onClick={() => setShowFullscreenImage(false)}>
-          <button className="image-fullscreen-download" onClick={handleDownloadImage} title="Telecharger">
+          <button className="image-fullscreen-download" onClick={(e) => handleDownloadImage(e, fullscreenImageUrl)} title="Telecharger">
             {isDownloading ? '...' : <Download size={24} />}
           </button>
           <button className="image-fullscreen-close" onClick={() => setShowFullscreenImage(false)}>
             <X size={24} />
           </button>
           <img
-            src={getImageUrl(msg.image)}
+            src={getImageUrl(fullscreenImageUrl)}
             alt="Image fullscreen"
             className="image-fullscreen"
             onClick={(e) => e.stopPropagation()}

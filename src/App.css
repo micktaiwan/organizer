@@ -523,17 +523,6 @@ button.copied {
   gap: 0.5rem;
 }
 
-/* Grouped messages - bulles collées */
-.message.grouped {
-  margin-top: 0;
-}
-
-/* Avatar spacer for alignment when avatar hidden */
-.message-avatar-spacer {
-  width: 32px;
-  flex-shrink: 0;
-}
-
 .bubble {
   padding: 0.75rem 1rem;
   border-radius: 12px;
@@ -564,7 +553,17 @@ button.copied {
 .timestamp {
   font-size: 0.7rem;
   color: #999;
-  margin-top: 0.25rem;
+  white-space: nowrap;
+}
+
+/* Message footer - combines timestamp, reactions, delete on one line */
+.message-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 
 /* Typing indicator */
@@ -3110,12 +3109,8 @@ button.copied {
 }
 
 .message-delete-btn {
-  position: absolute;
-  left: -32px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -3126,6 +3121,8 @@ button.copied {
   align-items: center;
   justify-content: center;
   transition: background 0.2s;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .message-delete-btn:hover {
@@ -3133,12 +3130,9 @@ button.copied {
 }
 
 .message-deleting {
-  position: absolute;
-  left: -32px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #999;
+  margin-left: auto;
 }
 
 @media (prefers-color-scheme: dark) {

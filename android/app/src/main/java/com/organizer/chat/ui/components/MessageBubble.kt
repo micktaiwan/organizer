@@ -95,21 +95,24 @@ val ALLOWED_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "😡", "�
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
-    message: Message,
+    messages: List<Message>,
     isMyMessage: Boolean,
-    isGroupedWithPrevious: Boolean = false,
-    isLastInGroup: Boolean = true,
     currentUserId: String? = null,
     roomMemberCount: Int = 0,
     onReact: ((String) -> Unit)? = null,
-    onDelete: (() -> Unit)? = null
+    onDelete: ((String) -> Unit)? = null
 ) {
+    if (messages.isEmpty()) return
+
+    val firstMsg = messages.first()
+    val lastMsg = messages.last()
+
     // System messages get special rendering
-    if (message.type == "system") {
+    if (firstMsg.type == "system") {
         SystemMessageContent(
-            content = message.content,
-            createdAt = message.createdAt,
-            reactions = message.reactions,
+            content = firstMsg.content,
+            createdAt = firstMsg.createdAt,
+            reactions = firstMsg.reactions,
             currentUserId = currentUserId,
             onReact = onReact
         )
@@ -127,54 +130,58 @@ fun MessageBubble(
 
     val bubbleColor = if (isMyMessage) MessageSent else MessageReceived
 
+    // Callback for long press - will be passed to content components
+    val onLongPress: (() -> Unit)? = if (isMyMessage && onDelete != null) {
+        { showDeleteDialog = true }
+    } else null
+
+    // Get the "best" status across all messages in the group
+    val groupStatus = if (isMyMessage) {
+        val statusOrder = listOf("failed", "sending", "sent", "delivered", "read")
+        messages.maxByOrNull { statusOrder.indexOf(it.status) }?.status ?: lastMsg.status
+    } else null
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = if (isGroupedWithPrevious) 0.dp else 2.dp),
+            .padding(horizontal = 8.dp, vertical = 2.dp),
         horizontalAlignment = if (isMyMessage) Alignment.End else Alignment.Start
     ) {
-        // Show sender name with status indicator only if NOT grouped with previous
-        if (!isGroupedWithPrevious) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(
-                    start = if (isMyMessage) 0.dp else 8.dp,
-                    end = if (isMyMessage) 8.dp else 0.dp,
-                    bottom = 2.dp
-                )
-            ) {
-                // Status indicator dot
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(
-                            color = getStatusColor(message.senderId.status),
-                            shape = CircleShape
-                        )
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                // Sender name
-                Text(
-                    text = message.senderId.displayName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AccentBlue
-                )
-                // Status message if present
-                message.senderId.statusMessage?.let { statusMsg ->
-                    Text(
-                        text = " · $statusMsg",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray,
-                        maxLines = 1
+        // Sender name with status indicator
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(
+                start = if (isMyMessage) 0.dp else 8.dp,
+                end = if (isMyMessage) 8.dp else 0.dp,
+                bottom = 2.dp
+            )
+        ) {
+            // Status indicator dot
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(
+                        color = getStatusColor(firstMsg.senderId.status),
+                        shape = CircleShape
                     )
-                }
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            // Sender name
+            Text(
+                text = firstMsg.senderId.displayName,
+                style = MaterialTheme.typography.labelSmall,
+                color = AccentBlue
+            )
+            // Status message if present
+            firstMsg.senderId.statusMessage?.let { statusMsg ->
+                Text(
+                    text = " · $statusMsg",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    maxLines = 1
+                )
             }
         }
-
-        // Callback for long press - will be passed to content components
-        val onLongPress: (() -> Unit)? = if (isMyMessage && onDelete != null) {
-            { showDeleteDialog = true }
-        } else null
 
         Box {
             Surface(
@@ -186,72 +193,75 @@ fun MessageBubble(
                 Column(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
-                    // Content based on message type
-                    // Each component handles its own tap AND long press via combinedClickable
-                    when (message.type) {
-                        "audio" -> AudioMessageContent(
-                            base64Content = message.content,
-                            messageId = message.id,
-                            onLongPress = onLongPress
-                        )
-                        "image" -> ImageMessageContent(
-                            imageUrl = message.content,
-                            caption = message.caption,
-                            onLongPress = onLongPress
-                        )
-                        "file" -> FileMessageContent(
-                            fileUrl = message.content,
-                            fileName = message.fileName,
-                            fileSize = message.fileSize,
-                            mimeType = message.mimeType,
-                            caption = message.caption,
-                            onLongPress = onLongPress
-                        )
-                        else -> TextMessageContent(
-                            content = message.content,
-                            onLongPress = onLongPress
-                        )
+                    // Render all messages in the group
+                    messages.forEachIndexed { index, message ->
+                        when (message.type) {
+                            "audio" -> AudioMessageContent(
+                                base64Content = message.content,
+                                messageId = message.id,
+                                onLongPress = onLongPress
+                            )
+                            "image" -> ImageMessageContent(
+                                imageUrl = message.content,
+                                caption = message.caption,
+                                onLongPress = onLongPress
+                            )
+                            "file" -> FileMessageContent(
+                                fileUrl = message.content,
+                                fileName = message.fileName,
+                                fileSize = message.fileSize,
+                                mimeType = message.mimeType,
+                                caption = message.caption,
+                                onLongPress = onLongPress
+                            )
+                            else -> {
+                                TextMessageContent(
+                                    content = message.content,
+                                    onLongPress = onLongPress
+                                )
+                                // Add line break between text messages (not after the last one)
+                                if (index < messages.size - 1 && messages[index + 1].type == "text") {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                }
+                            }
+                        }
                     }
 
-                    // Timestamp and read receipt - only show if last in group
-                    if (isLastInGroup) {
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Row(
-                            modifier = Modifier.align(Alignment.End),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = formatTime(message.createdAt),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MessageSecondaryColor
+                    // Timestamp and read receipt
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.align(Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = formatTime(lastMsg.createdAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MessageSecondaryColor
+                        )
+                        // Show read receipt only for own messages
+                        if (isMyMessage && groupStatus != null) {
+                            ReadReceiptForStatus(
+                                status = groupStatus,
+                                readBy = lastMsg.readBy,
+                                roomMemberCount = roomMemberCount
                             )
-                            // Show read receipt only for own messages
-                            if (isMyMessage) {
-                                ReadReceipt(
-                                    message = message,
-                                    roomMemberCount = roomMemberCount
-                                )
-                            }
                         }
                     }
                 }
             }
         }
 
-        // Reaction bar - show on last message of group or if there are reactions
-        if (message.reactions.isNotEmpty() || isLastInGroup) {
-            ReactionBar(
-                reactions = message.reactions,
-                currentUserId = currentUserId,
-                onReact = { emoji ->
-                    onReact?.invoke(emoji)
-                },
-                onShowPicker = { showReactionPicker = true },
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
+        // Reaction bar - always show for last message
+        ReactionBar(
+            reactions = lastMsg.reactions,
+            currentUserId = currentUserId,
+            onReact = { emoji ->
+                onReact?.invoke(emoji)
+            },
+            onShowPicker = { showReactionPicker = true },
+            modifier = Modifier.padding(top = 4.dp)
+        )
     }
 
     // Reaction picker dialog
@@ -265,7 +275,7 @@ fun MessageBubble(
         )
     }
 
-    // Delete confirmation dialog
+    // Delete confirmation dialog - deletes the LAST message in the group
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -275,7 +285,7 @@ fun MessageBubble(
                 TextButton(
                     onClick = {
                         showDeleteDialog = false
-                        onDelete?.invoke()
+                        onDelete?.invoke(lastMsg.id)
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -932,31 +942,30 @@ private fun FullscreenImageDialog(
 }
 
 @Composable
-private fun ReadReceipt(
-    message: Message,
+private fun ReadReceiptForStatus(
+    status: String,
+    readBy: List<String>,
     roomMemberCount: Int
 ) {
     // Calculate if all other members have read
-    // For a message to be "fully read", readBy should contain all members except sender
-    // roomMemberCount includes the sender, so we need (roomMemberCount - 1) readers
     val isAllRead = if (roomMemberCount > 1) {
-        message.readBy.size >= roomMemberCount - 1
+        readBy.size >= roomMemberCount - 1
     } else {
-        // Fallback for unknown member count: any read = green
-        message.readBy.isNotEmpty()
+        readBy.isNotEmpty()
     }
 
+    // Use group status for icon selection
     val icon = when {
-        message.status == "sending" -> Icons.Default.Done  // Single checkmark for pending
-        isAllRead -> Icons.Default.CheckCircle  // Filled circle with check for read
-        else -> Icons.Default.DoneAll  // Double checkmark for sent
+        status == "sending" -> Icons.Default.Done
+        status == "read" || isAllRead -> Icons.Default.CheckCircle
+        else -> Icons.Default.DoneAll
     }
 
-    val tint = if (isAllRead) OnlineGreen else OfflineGray
+    val tint = if (status == "read" || isAllRead) OnlineGreen else OfflineGray
 
     Icon(
         imageVector = icon,
-        contentDescription = if (isAllRead) "Lu" else "Envoyé",
+        contentDescription = if (status == "read" || isAllRead) "Lu" else "Envoyé",
         modifier = Modifier.size(14.dp),
         tint = tint
     )

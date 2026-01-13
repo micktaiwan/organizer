@@ -82,7 +82,6 @@ class ChatViewModel(
         loadRoomInfo()
         loadMessages()
         observeServiceMessages()
-        observeMessageReadEvents()
         observeTypingState()
         observeConnectionState()
         joinRoom()
@@ -109,6 +108,7 @@ class ChatViewModel(
         chatService?.socketManager?.let { socketManager ->
             viewModelScope.launch {
                 var wasConnected = socketManager.isConnected()
+                var readEventsObserverStarted = false
                 socketManager.connectionState.collect { state ->
                     when (state) {
                         is ConnectionState.Connected -> {
@@ -116,6 +116,11 @@ class ChatViewModel(
                                 Log.d(TAG, "Socket reconnected, reloading messages and rejoining room")
                                 loadMessages()
                                 joinRoom()
+                            }
+                            // Start observing read events once socket is connected
+                            if (!readEventsObserverStarted) {
+                                observeMessageReadEvents()
+                                readEventsObserverStarted = true
                             }
                             wasConnected = true
                         }
@@ -172,13 +177,10 @@ class ChatViewModel(
         viewModelScope.launch {
             roomRepository.getRoom(roomId).fold(
                 onSuccess = { room ->
-                    // Only count human members (exclude bots)
-                    val humanMemberCount = room.members.count { !it.userId.isBot }
-                    Log.d(TAG, "Room ${room.name}: ${room.members.size} members, $humanMemberCount humans")
-                    room.members.forEach { member ->
-                        Log.d(TAG, "  - ${member.userId.username}: isBot=${member.userId.isBot}")
-                    }
-                    _uiState.value = _uiState.value.copy(roomMemberCount = humanMemberCount)
+                    // Count all members (including bots) - consistent with Desktop
+                    val memberCount = room.members.size
+                    Log.d(TAG, "Room ${room.name}: $memberCount members")
+                    _uiState.value = _uiState.value.copy(roomMemberCount = memberCount)
                 },
                 onFailure = { error ->
                     Log.e(TAG, "Failed to load room info: ${error.message}")
