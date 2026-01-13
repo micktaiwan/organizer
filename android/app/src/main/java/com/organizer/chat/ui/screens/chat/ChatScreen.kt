@@ -11,8 +11,10 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.remember
 import com.organizer.chat.util.MessageGroupingUtils
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.shape.CircleShape
@@ -303,6 +305,11 @@ fun ChatScreen(
                 }
 
                 else -> {
+                    // Group consecutive messages from same sender (outside LazyColumn)
+                    val messageGroups = remember(uiState.messages, uiState.currentUserId) {
+                        MessageGroupingUtils.groupConsecutiveMessages(uiState.messages, uiState.currentUserId)
+                    }
+
                     LazyColumn(
                         state = listState,
                         modifier = Modifier
@@ -333,21 +340,22 @@ fun ChatScreen(
                             }
                         }
 
-                        itemsIndexed(uiState.messages, key = { _, msg -> msg.id }) { index, message ->
-                            val groupingFlags = MessageGroupingUtils.getGroupingFlags(uiState.messages, index)
+                        items(
+                            items = messageGroups,
+                            key = { group -> group.messages.first().id }
+                        ) { group ->
+                            val lastMsg = group.messages.last()
                             MessageBubble(
-                                message = message,
-                                isMyMessage = viewModel.isMyMessage(message),
-                                isGroupedWithPrevious = groupingFlags.isGroupedWithPrevious,
-                                isLastInGroup = groupingFlags.isLastInGroup,
+                                messages = group.messages,
+                                isMyMessage = group.isMyMessage,
                                 currentUserId = uiState.currentUserId,
                                 roomMemberCount = uiState.roomMemberCount,
-                                onReact = { emoji -> viewModel.reactToMessage(message.id, emoji) },
-                                onDelete = if (viewModel.isMyMessage(message)) {
-                                    { viewModel.deleteMessage(message.id) }
+                                onReact = { emoji -> viewModel.reactToMessage(lastMsg.id, emoji) },
+                                onDelete = if (group.isMyMessage) {
+                                    { messageId -> viewModel.deleteMessage(messageId) }
                                 } else null
                             )
-                            Spacer(modifier = Modifier.height(if (groupingFlags.isGroupedWithPrevious) 0.dp else 4.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                         }
                     }
                 }

@@ -9,20 +9,27 @@ data class MessageGroupingFlags(
     val isLastInGroup: Boolean
 )
 
+data class MessageGroup(
+    val messages: List<Message>,
+    val senderId: String,
+    val senderName: String,
+    val isMyMessage: Boolean
+)
+
 object MessageGroupingUtils {
     private const val ONE_MINUTE_MS = 60 * 1000L
 
     /**
-     * Calcule les flags de groupement pour un message donné.
-     * Utilisé pour afficher les messages consécutifs du même utilisateur
-     * en "bulles collées" (sans répéter avatar/nom, timestamp sur le dernier).
+     * Calculate grouping flags for a given message.
+     * Used to display consecutive messages from the same user
+     * as "attached bubbles" (without repeating avatar/name, timestamp on last).
      */
     fun getGroupingFlags(messages: List<Message>, index: Int): MessageGroupingFlags {
         val msg = messages[index]
         val prev = messages.getOrNull(index - 1)
         val next = messages.getOrNull(index + 1)
 
-        // System messages jamais groupés
+        // System messages are never grouped
         if (msg.type == "system") {
             return MessageGroupingFlags(
                 isGroupedWithPrevious = false,
@@ -34,14 +41,14 @@ object MessageGroupingUtils {
         val prevTime = prev?.let { parseIsoDate(it.createdAt) }
         val nextTime = next?.let { parseIsoDate(it.createdAt) }
 
-        // Vérifie si groupé avec le message précédent
+        // Check if grouped with previous message
         val isGroupedWithPrevious = prev != null
             && prev.type != "system"
             && prev.senderId.id == msg.senderId.id
             && prevTime != null && msgTime != null
             && (msgTime - prevTime) < ONE_MINUTE_MS
 
-        // Vérifie si dernier du groupe
+        // Check if last message in group
         val isLastInGroup = next == null
             || next.type == "system"
             || next.senderId.id != msg.senderId.id
@@ -67,5 +74,103 @@ object MessageGroupingUtils {
                 null
             }
         }
+    }
+
+    /**
+     * Check if a message contains media (image, audio, file).
+     * Messages with media break the group.
+     */
+    private fun hasMedia(msg: Message): Boolean {
+        return msg.type == "image" || msg.type == "audio" || msg.type == "file"
+    }
+
+    /**
+     * Group consecutive messages from the same sender (< 1 min) into a single bubble.
+     * System messages and messages with media break the group.
+     */
+    fun groupConsecutiveMessages(messages: List<Message>, currentUserId: String?): List<MessageGroup> {
+        val groups = mutableListOf<MessageGroup>()
+        var currentGroup: MutableList<Message>? = null
+        var currentSenderId: String? = null
+
+        for (msg in messages) {
+            // System messages are never grouped
+            if (msg.type == "system") {
+                // Flush current group
+                currentGroup?.let { grp ->
+                    if (grp.isNotEmpty()) {
+                        val first = grp.first()
+                        groups.add(MessageGroup(
+                            messages = grp.toList(),
+                            senderId = first.senderId.id,
+                            senderName = first.senderId.displayName,
+                            isMyMessage = first.senderId.id == currentUserId
+                        ))
+                    }
+                }
+                currentGroup = null
+                currentSenderId = null
+                // Add system message as its own group
+                groups.add(MessageGroup(
+                    messages = listOf(msg),
+                    senderId = msg.senderId.id,
+                    senderName = msg.senderId.displayName,
+                    isMyMessage = false
+                ))
+                continue
+            }
+
+            val lastMsgInGroup = currentGroup?.lastOrNull()
+            val lastMsgTime = lastMsgInGroup?.let { parseIsoDate(it.createdAt) }
+            val msgTime = parseIsoDate(msg.createdAt)
+
+            // Conditions to group:
+            // - Same sender
+            // - < 1 minute since last message in group
+            // - Current message has no media
+            // - Last message in group has no media
+            val shouldGroup = currentGroup != null &&
+                lastMsgInGroup != null &&
+                currentSenderId == msg.senderId.id &&
+                lastMsgTime != null && msgTime != null &&
+                (msgTime - lastMsgTime) < ONE_MINUTE_MS &&
+                !hasMedia(msg) &&
+                !hasMedia(lastMsgInGroup)
+
+            if (shouldGroup) {
+                currentGroup?.add(msg)
+            } else {
+                // Flush current group
+                currentGroup?.let { grp ->
+                    if (grp.isNotEmpty()) {
+                        val first = grp.first()
+                        groups.add(MessageGroup(
+                            messages = grp.toList(),
+                            senderId = first.senderId.id,
+                            senderName = first.senderId.displayName,
+                            isMyMessage = first.senderId.id == currentUserId
+                        ))
+                    }
+                }
+                // Start new group
+                currentGroup = mutableListOf(msg)
+                currentSenderId = msg.senderId.id
+            }
+        }
+
+        // Flush final group
+        currentGroup?.let { grp ->
+            if (grp.isNotEmpty()) {
+                val first = grp.first()
+                groups.add(MessageGroup(
+                    messages = grp.toList(),
+                    senderId = first.senderId.id,
+                    senderName = first.senderId.displayName,
+                    isMyMessage = first.senderId.id == currentUserId
+                ))
+            }
+        }
+
+        return groups
     }
 }

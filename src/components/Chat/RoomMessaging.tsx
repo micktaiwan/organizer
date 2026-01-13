@@ -96,6 +96,7 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
         onDeleteMessage={onDeleteMessage}
         onReactMessage={onReactMessage}
         currentUserId={currentUserId}
+        roomMemberCount={currentRoom.members.length}
       />
 
       <MessageInput

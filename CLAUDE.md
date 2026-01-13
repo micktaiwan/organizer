@@ -19,6 +19,9 @@ Working directory may be a subfolder. Use absolute paths for scripts:
 # SSH server
 ssh ubuntu@51.210.150.25 "docker logs organizer-api --tail 50"
 
+# MongoDB (container name: organizer-mongodb)
+ssh ubuntu@51.210.150.25 "docker exec organizer-mongodb mongosh organizer --quiet --eval '<query>'"
+
 # Build Android
 JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
 
@@ -30,6 +33,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 /Users/mickaelfm/projects/perso/organizer/server/deploy.sh
 /Users/mickaelfm/projects/perso/organizer/server/upload-apk.sh <apk> <version> <versionCode> "notes"
 /Users/mickaelfm/projects/perso/organizer/server/send-announcement.sh "message"
+/Users/mickaelfm/projects/perso/organizer/server/send-bot-message.sh <room-name> "message"
 ```
 
 ## Android UI - CRITICAL

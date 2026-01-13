@@ -198,6 +198,29 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     return () => unsubReacted();
   }, [currentRoomId]);
 
+  // Listen for message read status updates in current room
+  useEffect(() => {
+    if (!currentRoomId || !userId) return;
+
+    const unsubMessageRead = socketService.on('message:read', (data: any) => {
+      if (data.roomId === currentRoomId) {
+        setMessages(prev => prev.map(m => {
+          if (data.messageIds.includes(m.serverMessageId || m.id) &&
+              !m.readBy?.includes(data.from)) {
+            return {
+              ...m,
+              readBy: [...(m.readBy || []), data.from],
+              // Don't force status to 'read' - let UI calculate based on readBy vs memberCount
+            };
+          }
+          return m;
+        }));
+      }
+    });
+
+    return () => unsubMessageRead();
+  }, [currentRoomId, userId]);
+
   // Note: user:status-changed is now handled by UserStatusContext
 
   // Listen for room events (created, updated)
