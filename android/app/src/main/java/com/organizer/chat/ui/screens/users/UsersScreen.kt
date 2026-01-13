@@ -71,7 +71,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.organizer.chat.data.model.LocationHistoryEntry
 import com.organizer.chat.data.model.UserWithLocation
+import com.organizer.chat.data.socket.ConnectionState
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.ui.components.ConnectionStatusIcon
+import com.organizer.chat.ui.components.OfflineBanner
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.worker.LocationUpdateWorker
 import java.text.SimpleDateFormat
@@ -113,6 +116,15 @@ fun UsersScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     var showStatusDialog by remember { mutableStateOf(false) }
+
+    // Connection state - use current state as initial to avoid flicker
+    val initialConnectionState = remember {
+        if (chatService?.socketManager?.isConnected() == true) ConnectionState.Connected
+        else ConnectionState.Disconnected
+    }
+    val connectionState by chatService?.socketManager?.connectionState
+        ?.collectAsState(initial = initialConnectionState)
+        ?: remember { mutableStateOf(initialConnectionState) }
 
     // Permission state
     var hasLocationPermission by remember {
@@ -183,22 +195,32 @@ fun UsersScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Users") },
-                actions = {
-                    IconButton(onClick = onMapClick) {
-                        Icon(Icons.Default.Map, contentDescription = "Carte")
-                    }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Parametres")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+            Column {
+                TopAppBar(
+                    title = { Text("Users") },
+                    actions = {
+                        ConnectionStatusIcon(
+                            connectionState = connectionState,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                        IconButton(onClick = onMapClick) {
+                            Icon(Icons.Default.Map, contentDescription = "Carte")
+                        }
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Default.Settings, contentDescription = "Parametres")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 )
-            )
+                OfflineBanner(
+                    connectionState = connectionState,
+                    onRetry = { chatService?.reconnectIfNeeded() }
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(

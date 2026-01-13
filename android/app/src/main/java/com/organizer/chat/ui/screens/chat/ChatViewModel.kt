@@ -11,6 +11,7 @@ import com.organizer.chat.data.model.Message
 import com.organizer.chat.data.model.MessageSender
 import com.organizer.chat.data.model.Reaction
 import com.organizer.chat.data.repository.MessageRepository
+import com.organizer.chat.data.socket.ConnectionState
 import com.organizer.chat.data.repository.RoomRepository
 import java.time.Instant
 import com.organizer.chat.service.ChatService
@@ -83,6 +84,7 @@ class ChatViewModel(
         observeServiceMessages()
         observeMessageReadEvents()
         observeTypingState()
+        observeConnectionState()
         joinRoom()
         markRoomAsRead()
     }
@@ -100,6 +102,30 @@ class ChatViewModel(
                         }
                     }
                 }
+        }
+    }
+
+    private fun observeConnectionState() {
+        chatService?.socketManager?.let { socketManager ->
+            viewModelScope.launch {
+                var wasConnected = socketManager.isConnected()
+                socketManager.connectionState.collect { state ->
+                    when (state) {
+                        is ConnectionState.Connected -> {
+                            if (!wasConnected) {
+                                Log.d(TAG, "Socket reconnected, reloading messages and rejoining room")
+                                loadMessages()
+                                joinRoom()
+                            }
+                            wasConnected = true
+                        }
+                        is ConnectionState.Disconnected,
+                        is ConnectionState.Error -> {
+                            wasConnected = false
+                        }
+                    }
+                }
+            }
         }
     }
 

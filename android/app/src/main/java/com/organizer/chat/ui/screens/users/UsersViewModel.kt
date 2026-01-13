@@ -194,8 +194,19 @@ class UsersViewModel(
                     val currentUser = currentUserId?.let { id ->
                         users.find { it.id == id }
                     }
+
+                    // Fix: Current user is always online if socket is connected
+                    val isSocketConnected = socketManager?.isConnected() == true
+                    val adjustedUsers = if (isSocketConnected && currentUserId != null) {
+                        users.map { user ->
+                            if (user.id == currentUserId) user.copy(isOnline = true) else user
+                        }
+                    } else {
+                        users
+                    }
+
                     _uiState.value = _uiState.value.copy(
-                        users = users,
+                        users = adjustedUsers,
                         isLoading = false,
                         myStatus = currentUser?.status ?: _uiState.value.myStatus,
                         myStatusMessage = currentUser?.statusMessage ?: _uiState.value.myStatusMessage,
@@ -218,8 +229,18 @@ class UsersViewModel(
             val result = locationRepository.getUsersWithLocations()
             result.fold(
                 onSuccess = { users ->
+                    // Fix: Current user is always online if socket is connected
+                    val isSocketConnected = socketManager?.isConnected() == true
+                    val adjustedUsers = if (isSocketConnected && currentUserId != null) {
+                        users.map { user ->
+                            if (user.id == currentUserId) user.copy(isOnline = true) else user
+                        }
+                    } else {
+                        users
+                    }
+
                     _uiState.value = _uiState.value.copy(
-                        users = users,
+                        users = adjustedUsers,
                         isRefreshing = false
                     )
                 },
