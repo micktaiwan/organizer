@@ -56,6 +56,9 @@ import com.organizer.chat.util.DocumentInfo
 import com.organizer.chat.util.DocumentPicker
 import com.organizer.chat.util.TokenManager
 import com.organizer.chat.util.rememberImagePickerLaunchers
+import com.organizer.chat.util.SharedContentManager
+import com.organizer.chat.data.model.SharedContent
+import android.util.Log
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -143,8 +146,31 @@ fun ChatScreen(
     LaunchedEffect(chatService, roomId) {
         chatService?.roomDeleted?.collect { event ->
             if (event.roomId == roomId) {
-                android.util.Log.d("ChatScreen", "Room deleted, navigating back: ${event.roomName}")
+                Log.d("ChatScreen", "Room deleted, navigating back: ${event.roomName}")
                 onBackClick()
+            }
+        }
+    }
+
+    // Handle shared content from other apps
+    LaunchedEffect(roomId) {
+        SharedContentManager.getPendingContent(roomId)?.let { content ->
+            Log.d("ChatScreen", "Processing shared content for room $roomId")
+            when (content) {
+                is SharedContent.Text -> {
+                    // Set text in the text field
+                    viewModel.textFieldState.setTextAndPlaceCursorAtEnd(content.text)
+                }
+                is SharedContent.SingleImage -> {
+                    // Select the image
+                    viewModel.selectImage(content.uri)
+                }
+                is SharedContent.MultipleImages -> {
+                    // Select the first image (TODO: handle multiple images)
+                    content.uris.firstOrNull()?.let { uri ->
+                        viewModel.selectImage(uri)
+                    }
+                }
             }
         }
     }

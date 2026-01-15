@@ -32,6 +32,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.organizer.chat.data.model.AppUpdateInfo
 import com.organizer.chat.data.model.DownloadStatus
+import com.organizer.chat.data.model.SharedContent
+import com.organizer.chat.data.model.Room
 import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.MessageRepository
 import com.organizer.chat.data.repository.NoteRepository
@@ -39,11 +41,13 @@ import com.organizer.chat.data.repository.RoomRepository
 import com.organizer.chat.data.repository.UpdateRepository
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.components.UpdateProgressDialog
+import com.organizer.chat.ui.components.ShareHandlerDialog
 import com.organizer.chat.ui.navigation.NavGraph
 import com.organizer.chat.ui.navigation.Routes
 import com.organizer.chat.ui.theme.OrganizerChatTheme
 import com.organizer.chat.util.AppPreferences
 import com.organizer.chat.util.UpdateManager
+import com.organizer.chat.util.SharedContentManager
 import com.organizer.chat.worker.LocationUpdateWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -75,6 +79,10 @@ class MainActivity : ComponentActivity() {
 
     // Store update info to show in dialog
     private var updateInfo = mutableStateOf<AppUpdateInfo?>(null)
+
+    // Store shared content from other apps
+    private var sharedContent = mutableStateOf<SharedContent?>(null)
+    private var availableRooms = mutableStateOf<List<Room>>(emptyList())
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -124,6 +132,9 @@ class MainActivity : ComponentActivity() {
         // Check if launched from notification with roomId
         handleNotificationIntent(intent)
 
+        // Check if launched from share intent
+        handleShareIntent(intent)
+
         // Start and bind to ChatService if logged in
         if (isLoggedIn) {
             startChatService()
@@ -141,6 +152,8 @@ class MainActivity : ComponentActivity() {
                 val pendingRoom by pendingRoomId
                 val pendingName by pendingRoomName
                 val currentUpdateInfo by updateInfo
+                val currentSharedContent by sharedContent
+                val rooms by availableRooms
 
                 // Observer for download state (auto-update progress)
                 val downloadState by updateManager.downloadState.collectAsState()
@@ -201,6 +214,29 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Show share dialog if shared content is received
+                currentSharedContent?.let { content ->
+                    ShareHandlerDialog(
+                        sharedContent = content,
+                        rooms = rooms,
+                        onRoomSelected = { room ->
+                            Log.d(TAG, "Room selected for sharing: ${room.name}")
+                            // Store the shared content to be picked up by ChatScreen
+                            SharedContentManager.setPendingContent(content, room.id)
+                            // Navigate to the room
+                            navController.navigate(Routes.chat(room.id, room.name)) {
+                                launchSingleTop = true
+                            }
+                            sharedContent.value = null
+                            availableRooms.value = emptyList()
+                        },
+                        onDismiss = {
+                            sharedContent.value = null
+                            availableRooms.value = emptyList()
+                        }
+                    )
+                }
+
                 NavGraph(
                     navController = navController,
                     startDestination = startDestination,
@@ -228,6 +264,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         Log.d(TAG, "onNewIntent called")
         handleNotificationIntent(intent)
+        handleShareIntent(intent)
 
         // If we have a nav controller and pending room, navigate immediately
         pendingRoomId.value?.let { roomId ->
@@ -256,6 +293,52 @@ class MainActivity : ComponentActivity() {
             Log.d(TAG, "Received roomId from notification: $roomId")
             pendingRoomId.value = roomId
             pendingRoomName.value = intent.getStringExtra("roomName") ?: "Chat"
+        }
+    }
+
+    private fun handleShareIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND || intent?.action == Intent.ACTION_SEND_MULTIPLE) {
+            Log.d(TAG, "Received share intent: ${intent.action}, type: ${intent.type}")
+
+            when {
+                intent.type?.startsWith("text/") == true -> {
+                    intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
+                        Log.d(TAG, "Shared text: $text")
+                        sharedContent.value = SharedContent.Text(text)
+                        loadRoomsForSharing()
+                    }
+                }
+                intent.type?.startsWith("image/") == true -> {
+                    if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
+                        intent.getParcelableArrayListExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.let { uris ->
+                            Log.d(TAG, "Shared ${uris.size} images")
+                            sharedContent.value = SharedContent.MultipleImages(uris)
+                            loadRoomsForSharing()
+                        }
+                    } else {
+                        intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.let { uri ->
+                            Log.d(TAG, "Shared single image: $uri")
+                            sharedContent.value = SharedContent.SingleImage(uri)
+                            loadRoomsForSharing()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun loadRoomsForSharing() {
+        lifecycleScope.launch {
+            roomRepository.getRooms().fold(
+                onSuccess = { rooms ->
+                    Log.d(TAG, "Loaded ${rooms.size} rooms for sharing")
+                    availableRooms.value = rooms
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Failed to load rooms for sharing: ${error.message}")
+                    availableRooms.value = emptyList()
+                }
+            )
         }
     }
 
