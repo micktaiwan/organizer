@@ -8,6 +8,8 @@ import { connectDB } from './config/db.js';
 import { setupSocket } from './socket/index.js';
 import { authRoutes, usersRoutes, contactsRoutes, messagesRoutes, roomsRoutes, adminRoutes, apkRoutes, notesRoutes, labelsRoutes } from './routes/index.js';
 import uploadRoutes from './routes/upload.js';
+import mcpRoutes from './mcp/index.js';
+import mcpAdminRoutes from './routes/mcp-admin.js';
 import { Room, User } from './models/index.js';
 
 const app = express();
@@ -38,6 +40,8 @@ app.use('/apk', apkRoutes);
 app.use('/upload', uploadRoutes);
 app.use('/notes', notesRoutes);
 app.use('/labels', labelsRoutes);
+app.use('/mcp', mcpRoutes);
+app.use('/mcp-admin', mcpAdminRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
