@@ -1,8 +1,24 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Manager, RunEvent, WindowEvent, Wry,
 };
+use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_store::StoreExt;
+
+// Settings keys for persistent storage
+const SETTINGS_AUTOSTART: &str = "settings_autostart";
+const SETTINGS_MINIMIZE_TO_TRAY: &str = "settings_minimize_to_tray";
+
+// State to hold references to tray menu items and settings state
+struct TrayMenuState {
+    autostart: CheckMenuItem<Wry>,
+    minimize_to_tray: CheckMenuItem<Wry>,
+    autostart_enabled: AtomicBool,
+    minimize_enabled: AtomicBool,
+}
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -11,18 +27,84 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(|app| {
-            // Create tray menu
+            // Load saved settings from store
+            let (autostart_enabled, minimize_to_tray_enabled) = {
+                let store = app.store("settings.json")?;
+                let autostart = store
+                    .get(SETTINGS_AUTOSTART)
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let minimize = store
+                    .get(SETTINGS_MINIMIZE_TO_TRAY)
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                (autostart, minimize)
+            };
+
+            // Sync autostart state with system on startup
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let autostart_manager = app.autolaunch();
+                if autostart_enabled {
+                    let _ = autostart_manager.enable();
+                } else {
+                    let _ = autostart_manager.disable();
+                }
+            }
+
+            // Create tray menu items
             let show = MenuItem::with_id(app, "show", "Show Organizer", true, None::<&str>)?;
+            let separator1 = tauri::menu::PredefinedMenuItem::separator(app)?;
+            let autostart_item = CheckMenuItem::with_id(
+                app,
+                "autostart",
+                "Start with System",
+                true,
+                autostart_enabled,
+                None::<&str>,
+            )?;
+            let minimize_item = CheckMenuItem::with_id(
+                app,
+                "minimize_to_tray",
+                "Minimize to Tray on Close",
+                true,
+                minimize_to_tray_enabled,
+                None::<&str>,
+            )?;
+            let separator2 = tauri::menu::PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
+
+            // Store references to check menu items and state for later access
+            app.manage(Arc::new(TrayMenuState {
+                autostart: autostart_item.clone(),
+                minimize_to_tray: minimize_item.clone(),
+                autostart_enabled: AtomicBool::new(autostart_enabled),
+                minimize_enabled: AtomicBool::new(minimize_to_tray_enabled),
+            }));
+
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &show,
+                    &separator1,
+                    &autostart_item,
+                    &minimize_item,
+                    &separator2,
+                    &quit,
+                ],
+            )?;
 
             // Create tray icon
             let _tray = TrayIconBuilder::new()
@@ -34,6 +116,51 @@ pub fn run() {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
+                        }
+                    }
+                    "autostart" => {
+                        if let Some(state) = app.try_state::<Arc<TrayMenuState>>() {
+                            // Toggle state
+                            let current = state.autostart_enabled.load(Ordering::SeqCst);
+                            let new_state = !current;
+                            state.autostart_enabled.store(new_state, Ordering::SeqCst);
+
+                            // Update checkbox visual
+                            let _ = state.autostart.set_checked(new_state);
+
+                            // Enable/disable system autostart
+                            {
+                                use tauri_plugin_autostart::ManagerExt;
+                                let autostart_manager = app.autolaunch();
+                                if new_state {
+                                    let _ = autostart_manager.enable();
+                                } else {
+                                    let _ = autostart_manager.disable();
+                                }
+                            }
+
+                            // Save to store
+                            if let Ok(store) = app.store("settings.json") {
+                                let _ = store.set(SETTINGS_AUTOSTART.to_string(), serde_json::json!(new_state));
+                                let _ = store.save();
+                            }
+                        }
+                    }
+                    "minimize_to_tray" => {
+                        if let Some(state) = app.try_state::<Arc<TrayMenuState>>() {
+                            // Toggle state
+                            let current = state.minimize_enabled.load(Ordering::SeqCst);
+                            let new_state = !current;
+                            state.minimize_enabled.store(new_state, Ordering::SeqCst);
+
+                            // Update checkbox visual
+                            let _ = state.minimize_to_tray.set_checked(new_state);
+
+                            // Save to store
+                            if let Ok(store) = app.store("settings.json") {
+                                let _ = store.set(SETTINGS_MINIMIZE_TO_TRAY.to_string(), serde_json::json!(new_state));
+                                let _ = store.save();
+                            }
                         }
                     }
                     "quit" => {
@@ -59,7 +186,41 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let app = window.app_handle();
+
+                // Check if minimize to tray is enabled from in-memory state
+                let minimize_enabled = app
+                    .try_state::<Arc<TrayMenuState>>()
+                    .map(|state| state.minimize_enabled.load(Ordering::SeqCst))
+                    .unwrap_or(false);
+
+                if minimize_enabled {
+                    // Hide window instead of closing
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
+                // If not enabled, allow normal close behavior (app exits)
+            }
+        })
         .invoke_handler(tauri::generate_handler![greet])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let RunEvent::ExitRequested { api, code, .. } = event {
+            // Only prevent exit if this is a user-initiated close (not explicit quit)
+            if code.is_none() {
+                let minimize_enabled = app_handle
+                    .try_state::<Arc<TrayMenuState>>()
+                    .map(|state| state.minimize_enabled.load(Ordering::SeqCst))
+                    .unwrap_or(false);
+
+                if minimize_enabled {
+                    api.prevent_exit();
+                }
+            }
+        }
+    });
 }
