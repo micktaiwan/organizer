@@ -1189,24 +1189,24 @@ button.copied {
 
 /* Voice recording UI */
 .voice-btn {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: 50%;
-  background: #34c759;
-  font-size: 1.1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  transition: opacity 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  color: #666;
 }
 
 .voice-btn:hover:not(:disabled) {
-  background: #2db84d;
+  opacity: 0.7;
 }
 
 .voice-btn:disabled {
-  background: #ccc;
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .recording-ui {
