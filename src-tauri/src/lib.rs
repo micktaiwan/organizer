@@ -297,21 +297,31 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                let app = window.app_handle();
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    let app = window.app_handle();
 
-                // Check if minimize to tray is enabled from in-memory state
-                let minimize_enabled = app
-                    .try_state::<Arc<TrayMenuState>>()
-                    .map(|state| state.minimize_enabled.load(Ordering::SeqCst))
-                    .unwrap_or(false);
+                    // Check if minimize to tray is enabled from in-memory state
+                    let minimize_enabled = app
+                        .try_state::<Arc<TrayMenuState>>()
+                        .map(|state| state.minimize_enabled.load(Ordering::SeqCst))
+                        .unwrap_or(false);
 
-                if minimize_enabled {
-                    // Hide window instead of closing
-                    let _ = window.hide();
-                    api.prevent_close();
+                    if minimize_enabled {
+                        // Hide window instead of closing
+                        let _ = window.hide();
+                        api.prevent_close();
+                    }
+                    // If not enabled, allow normal close behavior (app exits)
                 }
-                // If not enabled, allow normal close behavior (app exits)
+                WindowEvent::Focused(focused) => {
+                    if *focused {
+                        // Clear badge when window gets focus
+                        let app = window.app_handle();
+                        clear_tray_badge(&app);
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![greet, set_tray_badge])
