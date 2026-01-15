@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { Image, Paperclip, FileText, X } from "lucide-react";
+import { Image, Paperclip, FileText, Mic, X } from "lucide-react";
 import { formatDuration } from "../../utils/audio";
 
 interface PendingFile {
@@ -124,7 +124,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               disabled={!canSend}
               title="Enregistrer un message vocal"
             >
-              🎤
+              <Mic size={20} />
             </button>
             <input
               ref={inputRef}
