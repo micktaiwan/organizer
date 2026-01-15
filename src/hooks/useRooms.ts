@@ -1,8 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Room, Message as ServerMessage, getApiBaseUrl } from '../services/api';
 import { Message, Reaction } from '../types';
 import { api } from '../services/api';
 import { socketService } from '../services/socket';
+
+// Helper to update tray badge
+const setTrayBadge = async (hasBadge: boolean) => {
+  try {
+    await invoke('set_tray_badge', { hasBadge });
+  } catch (error) {
+    console.error('Failed to set tray badge:', error);
+  }
+};
 
 interface UseRoomsOptions {
   userId: string | undefined;
@@ -19,6 +30,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+
+  // Track unread messages in other rooms for tray badge
+  const hasUnreadRef = useRef(false);
 
   // Reload data when API server changes (even if userId stays the same)
   useEffect(() => {
@@ -167,6 +181,44 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
     return () => unsubNewMessage();
   }, [currentRoomId]);
+
+  // Listen for unread updates to show tray badge
+  useEffect(() => {
+    if (!userId) return;
+
+    const handleUnreadUpdate = (data: unknown) => {
+      const { unreadCount } = data as { roomId: string; unreadCount: number };
+      console.log('unread:updated', data);
+
+      // Show badge if any unread messages
+      if (unreadCount > 0) {
+        hasUnreadRef.current = true;
+        setTrayBadge(true);
+      }
+    };
+
+    const unsubUnread = socketService.on('unread:updated', handleUnreadUpdate);
+
+    // Clear badge when window gets focus
+    const handleFocus = () => {
+      if (hasUnreadRef.current) {
+        hasUnreadRef.current = false;
+        setTrayBadge(false);
+      }
+    };
+
+    // Listen for window focus
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        handleFocus();
+      }
+    });
+
+    return () => {
+      unsubUnread();
+      unlisten.then(fn => fn());
+    };
+  }, [userId]);
 
   // Listen for deleted messages in current room
   useEffect(() => {
@@ -532,6 +584,11 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Select a room
   const selectRoom = useCallback((roomId: string) => {
     setCurrentRoomId(roomId);
+    // Clear badge when user selects a room (they're actively looking at the app)
+    if (hasUnreadRef.current) {
+      hasUnreadRef.current = false;
+      setTrayBadge(false);
+    }
   }, []);
 
   // Create a new public room

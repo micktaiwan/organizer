@@ -77,6 +77,8 @@ class SocketService {
       'room:created',
       'room:updated',
       'room:deleted',
+      // Unread count updates
+      'unread:updated',
     ];
 
     events.forEach((event) => {
