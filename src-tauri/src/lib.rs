@@ -75,6 +75,19 @@ fn set_tray_badge(app: AppHandle, has_badge: bool) -> Result<(), String> {
     Ok(())
 }
 
+fn clear_tray_badge(app: &AppHandle) {
+    if let Some(icon_state) = app.try_state::<Arc<TrayIconState>>() {
+        if let Some(tray) = app.tray_by_id("main") {
+            let original = Image::new_owned(
+                icon_state.original_icon.clone(),
+                icon_state.width,
+                icon_state.height,
+            );
+            let _ = tray.set_icon(Some(original));
+        }
+    }
+}
+
 fn create_badge_icon(original: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
     // Clone the original RGBA data
     let mut pixels = original.to_vec();
@@ -210,6 +223,8 @@ pub fn run() {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
+                        // Clear badge when showing window
+                        clear_tray_badge(app);
                     }
                     "autostart" => {
                         if let Some(state) = app.try_state::<Arc<TrayMenuState>>() {
@@ -273,6 +288,8 @@ pub fn run() {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
+                        // Clear badge when clicking tray icon
+                        clear_tray_badge(&app);
                     }
                 })
                 .build(app)?;
