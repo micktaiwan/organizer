@@ -186,12 +186,13 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   useEffect(() => {
     if (!userId) return;
 
-    const handleUnreadUpdate = (data: unknown) => {
+    const handleUnreadUpdate = async (data: unknown) => {
       const { unreadCount } = data as { roomId: string; unreadCount: number };
       console.log('unread:updated', data);
 
-      // Show badge if any unread messages
-      if (unreadCount > 0) {
+      // Only show badge if window is not focused
+      const isFocused = await getCurrentWindow().isFocused();
+      if (unreadCount > 0 && !isFocused) {
         hasUnreadRef.current = true;
         setTrayBadge(true);
       }
