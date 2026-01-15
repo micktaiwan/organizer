@@ -338,17 +338,20 @@ class ApiService {
   }
 
   // Messages
-  async sendMessage(roomId: string, type: string, content: string, imageBlob?: Blob | null): Promise<{ message: Message }> {
-    // If we have an image blob, upload via multipart first
+  async sendMessage(roomId: string, type: string, text?: string, audio?: string, imageBlob?: Blob | null, caption?: string): Promise<{ message: Message }> {
+    // Images always use multipart upload
     if (type === 'image' && imageBlob) {
       const formData = new FormData();
       formData.append('roomId', roomId);
       formData.append('image', imageBlob, 'image.jpg');
-
+      if (caption) {
+        formData.append('caption', caption);
+      }
       return this.uploadRequest<{ message: Message }>('/upload/image', formData);
     }
 
-    // Otherwise, use JSON (for text, audio, or clipboard paste Base64 images)
+    // Text and audio use JSON
+    const content = audio || text || '';
     return this.request<{ message: Message }>('/messages', {
       method: 'POST',
       body: JSON.stringify({ roomId, type, content }),

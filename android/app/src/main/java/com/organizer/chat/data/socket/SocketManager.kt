@@ -604,7 +604,8 @@ data class NewMessageEvent(
     val content: String = "",
     val type: String = "text",
     val audioUrl: String? = null,
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    val caption: String? = null
 )
 
 data class UserStatusEvent(

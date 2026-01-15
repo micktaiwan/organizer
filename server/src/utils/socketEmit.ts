@@ -12,6 +12,7 @@ interface MessageEmitData {
     senderId: any;
     content: string;
     type: string;
+    caption?: string;
   };
 }
 
@@ -36,6 +37,7 @@ export async function emitNewMessage({ io, socket, roomId, userId, message }: Me
     type: message.type,
     audioUrl: message.type === 'audio' ? message.content : null,
     imageUrl: message.type === 'image' ? message.content : null,
+    caption: message.caption || null,
   };
 
   // Use socket.to() to exclude sender, or io.to() to include all
