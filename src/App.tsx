@@ -356,12 +356,6 @@ function App() {
       const filePath = await open({
         multiple: false,
         directory: false,
-        filters: [
-          {
-            name: 'All Files',
-            extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'zip', 'rar', '7z', 'mp4', 'mov', 'mp3', 'wav']
-          }
-        ]
       });
 
       if (!filePath) return; // User cancelled

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { Paperclip, FileText, X } from "lucide-react";
+import { Image, Paperclip, FileText, X } from "lucide-react";
 import { formatDuration } from "../../utils/audio";
 
 interface PendingFile {
@@ -106,7 +106,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               disabled={!canSend || !!pendingFile}
               title="Joindre une image"
             >
-              <Paperclip size={20} />
+              <Image size={20} />
             </button>
             <button
               type="button"
@@ -115,7 +115,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               disabled={!canSend || !!pendingImage}
               title="Joindre un fichier"
             >
-              <FileText size={20} />
+              <Paperclip size={20} />
             </button>
             <button
               type="button"
