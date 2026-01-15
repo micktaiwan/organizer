@@ -1,9 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tauri::{
+    image::Image,
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, RunEvent, WindowEvent, Wry,
+    AppHandle, Manager, RunEvent, WindowEvent, Wry,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_store::StoreExt;
@@ -11,6 +12,10 @@ use tauri_plugin_store::StoreExt;
 // Settings keys for persistent storage
 const SETTINGS_AUTOSTART: &str = "settings_autostart";
 const SETTINGS_MINIMIZE_TO_TRAY: &str = "settings_minimize_to_tray";
+
+// Badge radius and color
+const BADGE_RADIUS: u32 = 6;
+const BADGE_COLOR: [u8; 4] = [255, 59, 48, 255]; // Red color (RGBA)
 
 // State to hold references to tray menu items and settings state
 struct TrayMenuState {
@@ -20,9 +25,84 @@ struct TrayMenuState {
     minimize_enabled: AtomicBool,
 }
 
+// Store original icon for badge overlay
+struct TrayIconState {
+    original_icon: Vec<u8>,
+    width: u32,
+    height: u32,
+}
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+#[tauri::command]
+fn set_tray_badge(app: AppHandle, has_badge: bool) -> Result<(), String> {
+    let icon_state = app
+        .try_state::<Arc<TrayIconState>>()
+        .ok_or("Icon state not found")?;
+
+    let tray = app
+        .tray_by_id("main")
+        .ok_or("Tray not found")?;
+
+    if has_badge {
+        // Create icon with badge
+        let icon_with_badge = create_badge_icon(
+            &icon_state.original_icon,
+            icon_state.width,
+            icon_state.height,
+        )
+        .map_err(|e| e.to_string())?;
+
+        let new_icon = Image::new_owned(
+            icon_with_badge,
+            icon_state.width,
+            icon_state.height,
+        );
+        tray.set_icon(Some(new_icon)).map_err(|e| e.to_string())?;
+    } else {
+        // Restore original icon
+        let original = Image::new_owned(
+            icon_state.original_icon.clone(),
+            icon_state.width,
+            icon_state.height,
+        );
+        tray.set_icon(Some(original)).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn create_badge_icon(original: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
+    // Clone the original RGBA data
+    let mut pixels = original.to_vec();
+
+    // Calculate badge position (top-right corner)
+    let badge_center_x = width - BADGE_RADIUS - 2;
+    let badge_center_y = BADGE_RADIUS + 2;
+
+    // Draw filled circle for badge
+    for y in 0..height {
+        for x in 0..width {
+            let dx = x as i32 - badge_center_x as i32;
+            let dy = y as i32 - badge_center_y as i32;
+            let distance_sq = dx * dx + dy * dy;
+
+            if distance_sq <= (BADGE_RADIUS * BADGE_RADIUS) as i32 {
+                let idx = ((y * width + x) * 4) as usize;
+                if idx + 3 < pixels.len() {
+                    pixels[idx] = BADGE_COLOR[0];     // R
+                    pixels[idx + 1] = BADGE_COLOR[1]; // G
+                    pixels[idx + 2] = BADGE_COLOR[2]; // B
+                    pixels[idx + 3] = BADGE_COLOR[3]; // A
+                }
+            }
+        }
+    }
+
+    Ok(pixels)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -63,6 +143,19 @@ pub fn run() {
                     let _ = autostart_manager.disable();
                 }
             }
+
+            // Get original icon data for badge overlay
+            let icon = app.default_window_icon().unwrap().clone();
+            let icon_rgba = icon.rgba().to_vec();
+            let icon_width = icon.width();
+            let icon_height = icon.height();
+
+            // Store original icon state
+            app.manage(Arc::new(TrayIconState {
+                original_icon: icon_rgba.clone(),
+                width: icon_width,
+                height: icon_height,
+            }));
 
             // Create tray menu items
             let show = MenuItem::with_id(app, "show", "Show Organizer", true, None::<&str>)?;
@@ -106,9 +199,9 @@ pub fn run() {
                 ],
             )?;
 
-            // Create tray icon
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+            // Create tray icon with ID "main"
+            let _tray = TrayIconBuilder::with_id("main")
+                .icon(icon)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -204,7 +297,7 @@ pub fn run() {
                 // If not enabled, allow normal close behavior (app exits)
             }
         })
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, set_tray_badge])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
