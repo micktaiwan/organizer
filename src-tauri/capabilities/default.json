@@ -13,6 +13,9 @@
     "notification:allow-request-permission",
     "notification:allow-notify",
     "store:default",
-    "clipboard-manager:allow-write-text"
+    "clipboard-manager:allow-write-text",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
   ]
 }
