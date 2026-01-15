@@ -260,7 +260,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
+    const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
       for (const item of items) {
@@ -268,9 +268,20 @@ function App() {
           e.preventDefault();
           const file = item.getAsFile();
           if (!file) continue;
-          const reader = new FileReader();
-          reader.onload = (event) => setPendingImage(event.target?.result as string);
-          reader.readAsDataURL(file);
+
+          setIsCompressing(true);
+          try {
+            // Compress image like file picker
+            const { compressedFile } = await compressImage(file);
+            const dataUrl = await blobToDataUrl(compressedFile);
+
+            setPendingImage(dataUrl);
+            setPendingImageBlob(compressedFile);
+          } catch (error) {
+            console.error('Clipboard image compression error:', error);
+          } finally {
+            setIsCompressing(false);
+          }
           break;
         }
       }

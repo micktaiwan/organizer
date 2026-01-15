@@ -298,6 +298,7 @@ class ChatViewModel(
                             ),
                             type = messageType,
                             content = event.content,
+                            caption = event.caption,
                             status = "sent",
                             readBy = emptyList(),
                             reactions = emptyList(),

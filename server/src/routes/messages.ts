@@ -12,7 +12,7 @@ router.use(authMiddleware);
 
 const sendMessageSchema = z.object({
   roomId: z.string(),
-  type: z.enum(['text', 'image', 'audio', 'system']).default('text'),
+  type: z.enum(['text', 'audio', 'system']).default('text'),
   content: z.string().min(1),
 });
 

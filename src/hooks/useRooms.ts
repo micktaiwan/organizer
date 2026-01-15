@@ -394,18 +394,19 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
   // Send message to current room
   const sendMessage = useCallback(async (text?: string, image?: string, audio?: string, imageBlob?: Blob | null) => {
-    if (!currentRoomId || (!text?.trim() && !image && !audio)) return;
+    if (!currentRoomId || (!text?.trim() && !imageBlob && !audio)) return;
 
     const messageId = crypto.randomUUID();
-    const content = text || image || audio || '';
-    const type = audio ? 'audio' : image ? 'image' : 'text';
+    const type = audio ? 'audio' : imageBlob ? 'image' : 'text';
+    const caption = imageBlob ? text : undefined;
 
     // Add optimistic message
     const optimisticMessage: Message = {
       id: messageId,
-      text,
+      text: type === 'text' ? text : undefined,
       image, // Show preview (Data URL)
       audio,
+      caption,
       sender: 'me',
       senderName: username,
       timestamp: new Date(),
@@ -414,11 +415,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     setMessages(prev => [...prev, optimisticMessage]);
 
     try {
-      const response = await api.sendMessage(currentRoomId, type, content, imageBlob);
-
-      // Update message with server response
-      // If uploaded via multipart, backend returns image URL in content
-      const finalImage = imageBlob && type === 'image' ? response.message.content : image;
+      const response = await api.sendMessage(currentRoomId, type, text, audio, imageBlob, caption);
 
       setMessages(prev => prev.map(m =>
         m.id === messageId
@@ -426,7 +423,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
               ...m,
               serverMessageId: response.message._id,
               status: 'sent',
-              image: finalImage // Update with server URL if multipart
+              image: type === 'image' ? response.message.content : image
             }
           : m
       ));

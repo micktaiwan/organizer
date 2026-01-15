@@ -8,6 +8,11 @@ import { listMessagesHandler, listMessagesDefinition } from './list-messages.js'
 import { searchUsersHandler, searchUsersDefinition } from './search-users.js';
 import { getUnreadHandler, getUnreadDefinition } from './get-unread.js';
 import { sendMessageHandler, sendMessageDefinition } from './send-message.js';
+import { listNotesHandler, listNotesDefinition } from './list-notes.js';
+import { getNoteHandler, getNoteDefinition } from './get-note.js';
+import { createNoteHandler, createNoteDefinition } from './create-note.js';
+import { updateNoteHandler, updateNoteDefinition } from './update-note.js';
+import { sendBotMessageHandler, sendBotMessageDefinition } from './send-bot-message.js';
 
 type ToolHandler = (
   args: Record<string, unknown>,
@@ -22,6 +27,11 @@ const handlers: Record<string, ToolHandler> = {
   search_users: searchUsersHandler,
   get_unread: getUnreadHandler,
   send_message: sendMessageHandler,
+  list_notes: listNotesHandler,
+  get_note: getNoteHandler,
+  create_note: createNoteHandler,
+  update_note: updateNoteHandler,
+  send_bot_message: sendBotMessageHandler,
 };
 
 const definitions: Record<string, McpToolDefinition> = {
@@ -30,9 +40,14 @@ const definitions: Record<string, McpToolDefinition> = {
   search_users: searchUsersDefinition,
   get_unread: getUnreadDefinition,
   send_message: sendMessageDefinition,
+  list_notes: listNotesDefinition,
+  get_note: getNoteDefinition,
+  create_note: createNoteDefinition,
+  update_note: updateNoteDefinition,
+  send_bot_message: sendBotMessageDefinition,
 };
 
-const WRITE_TOOLS = ['send_message'];
+const WRITE_TOOLS = ['send_message', 'create_note', 'update_note', 'send_bot_message'];
 
 export function getToolDefinitions(token: IMcpToken): McpToolDefinition[] {
   const allowedTools = token.allowedTools.includes('*')

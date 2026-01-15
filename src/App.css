@@ -3354,6 +3354,15 @@ button.copied {
 
 /* ===== NOTES STYLES ===== */
 
+/* Notes Tab Content (parent container for all notes views) */
+.notes-tab-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Notes Container */
 .notes-container {
   display: flex;
@@ -3820,7 +3829,8 @@ button.copied {
 .note-editor {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   color: #f5f5f5;
   position: relative;
 }
@@ -3948,7 +3958,7 @@ button.copied {
   outline: none;
   resize: none;
   line-height: 1.6;
-  min-height: 200px;
+  min-height: 0;
 }
 
 .note-editor-content::placeholder {
