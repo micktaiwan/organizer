@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as readline from 'readline';
 import * as path from 'path';
 import { getAnthropicApiKey } from '../config/agent.js';
+import type { Expression } from './types.js';
 
 const getWorkerPath = () => path.join(process.cwd(), 'dist', 'agent', 'worker.mjs');
 
@@ -9,7 +10,7 @@ interface WorkerMessage {
   type: 'ready' | 'text' | 'done' | 'error' | 'session' | 'pong' | 'reset_done';
   text?: string;
   response?: string;
-  expression?: string;
+  expression?: Expression;
   message?: string;
   requestId?: string;
   sessionId?: string;
@@ -19,14 +20,14 @@ interface WorkerMessage {
 
 export interface AgentResponse {
   response: string;
-  expression: string;
+  expression: Expression;
 }
 
 interface PendingRequest {
   resolve: (result: AgentResponse) => void;
   reject: (error: Error) => void;
   response: string;
-  expression: string;
+  expression: Expression;
   timeout: NodeJS.Timeout;
 }
 
