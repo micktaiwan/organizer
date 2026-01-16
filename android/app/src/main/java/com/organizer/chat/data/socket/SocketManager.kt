@@ -540,13 +540,6 @@ class SocketManager(private val tokenManager: TokenManager) {
         socket?.emit("typing:stop", JSONObject().put("roomId", roomId))
     }
 
-    fun notifyMessagesRead(roomId: String, messageIds: List<String>) {
-        socket?.emit("message:read", JSONObject().apply {
-            put("roomId", roomId)
-            put("messageIds", org.json.JSONArray(messageIds))
-        })
-    }
-
     fun notifyReaction(roomId: String, messageId: String, emoji: String, action: String) {
         socket?.emit("message:react", JSONObject().apply {
             put("roomId", roomId)

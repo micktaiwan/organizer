@@ -148,6 +148,16 @@ router.patch('/:id/read', async (req: AuthRequest, res: Response): Promise<void>
     if (!message.readBy.some(id => id.toString() === req.userId)) {
       message.readBy.push(req.userId as any);
       await message.save();
+
+      // Broadcast read status to room via socket
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`room:${message.roomId}`).emit('message:read', {
+          from: req.userId,
+          roomId: message.roomId.toString(),
+          messageIds: [message._id.toString()],
+        });
+      }
     }
 
     res.json({ message });
@@ -222,7 +232,7 @@ router.post('/:id/react', async (req: AuthRequest, res: Response): Promise<void>
 // POST /messages/read-bulk - Mark multiple messages as read
 router.post('/read-bulk', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { messageIds } = req.body;
+    const { messageIds, roomId } = req.body;
 
     if (!Array.isArray(messageIds)) {
       res.status(400).json({ error: 'messageIds doit être un tableau' });
@@ -238,6 +248,18 @@ router.post('/read-bulk', async (req: AuthRequest, res: Response): Promise<void>
         $addToSet: { readBy: req.userId },
       }
     );
+
+    // Broadcast read status to room via socket
+    if (roomId) {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomId}`).emit('message:read', {
+          from: req.userId,
+          roomId,
+          messageIds,
+        });
+      }
+    }
 
     res.json({ success: true });
   } catch (error) {

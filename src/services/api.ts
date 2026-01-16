@@ -20,6 +20,7 @@ interface User {
   email: string;
   isOnline?: boolean;
   isAdmin?: boolean;
+  isBot?: boolean;
   lastSeen?: string;
   peerId?: string | null;
   status?: 'available' | 'busy' | 'away' | 'dnd';
@@ -382,10 +383,10 @@ class ApiService {
     });
   }
 
-  async markMessagesAsRead(messageIds: string[]): Promise<{ success: boolean }> {
+  async markMessagesAsRead(messageIds: string[], roomId?: string): Promise<{ success: boolean }> {
     return this.request<{ success: boolean }>('/messages/read-bulk', {
       method: 'POST',
-      body: JSON.stringify({ messageIds }),
+      body: JSON.stringify({ messageIds, roomId }),
     });
   }
 

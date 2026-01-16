@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { Room } from '../../services/api';
 import { Message } from '../../types';
 import { MessageList } from './MessageList';
@@ -116,6 +116,20 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
     setInputMessage(e.target.value);
   };
 
+  // Get IDs of human (non-bot) members for read status calculation
+  const humanMemberIds = useMemo(() => {
+    if (!currentRoom) return [];
+    return currentRoom.members
+      .filter(m => {
+        const user = typeof m.userId === 'object' ? m.userId : null;
+        return user && !user.isBot;
+      })
+      .map(m => {
+        const user = m.userId as any;
+        return user._id || user.id;
+      });
+  }, [currentRoom]);
+
   return (
     <div className="room-messaging">
       <MessageList
@@ -124,7 +138,7 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
         onDeleteMessage={onDeleteMessage}
         onReactMessage={onReactMessage}
         currentUserId={currentUserId}
-        roomMemberCount={currentRoom.members.length}
+        humanMemberIds={humanMemberIds}
       />
 
       <MessageInput

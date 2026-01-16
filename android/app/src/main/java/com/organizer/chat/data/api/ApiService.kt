@@ -243,5 +243,6 @@ data class StatusUser(
 )
 
 data class MarkMessagesReadRequest(
-    val messageIds: List<String>
+    val messageIds: List<String>,
+    val roomId: String? = null
 )

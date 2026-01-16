@@ -344,7 +344,7 @@ fun ChatScreen(
                                 messages = group.messages,
                                 isMyMessage = group.isMyMessage,
                                 currentUserId = uiState.currentUserId,
-                                roomMemberCount = uiState.roomMemberCount,
+                                humanMemberIds = uiState.humanMemberIds,
                                 onReact = { emoji -> viewModel.reactToMessage(lastMsg.id, emoji) },
                                 onDelete = if (group.isMyMessage) {
                                     { messageId -> viewModel.deleteMessage(messageId) }

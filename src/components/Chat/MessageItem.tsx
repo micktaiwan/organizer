@@ -39,7 +39,7 @@ interface MessageItemProps {
   senderStatus?: UserStatus;
   senderIsOnline?: boolean;
   senderStatusMessage?: string | null;
-  roomMemberCount?: number;
+  humanMemberIds?: string[]; // IDs of human (non-bot) members
 }
 
 // Helper to format file size
@@ -120,7 +120,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   senderStatus = 'available',
   senderIsOnline = false,
   senderStatusMessage = null,
-  roomMemberCount = 2,
+  humanMemberIds = [],
 }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFullscreenImage, setShowFullscreenImage] = useState(false);
@@ -196,16 +196,19 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     return 'sent';
   };
 
-  // Calculate if ALL other members have read the last message (like Android does)
+  // Calculate if ALL other human members have read the last message
   const isAllRead = (() => {
     if (firstMsg.sender !== 'me') return false;
-    const readByCount = lastMsg.readBy?.length || 0;
-    // All other members must have read (roomMemberCount - 1 = other members)
-    if (roomMemberCount > 1) {
-      return readByCount >= roomMemberCount - 1;
-    }
-    // Fallback for unknown member count: any read = considered read
-    return readByCount > 0;
+    if (!currentUserId || humanMemberIds.length === 0) return false;
+
+    const readBy = lastMsg.readBy || [];
+    // Get other human members (excluding the sender)
+    const otherHumanMembers = humanMemberIds.filter(id => id !== currentUserId);
+
+    if (otherHumanMembers.length === 0) return false;
+
+    // Check if ALL other human members have read the message
+    return otherHumanMembers.every(memberId => readBy.includes(memberId));
   })();
 
   const groupStatus = firstMsg.sender === 'me' ? getGroupStatus() : null;

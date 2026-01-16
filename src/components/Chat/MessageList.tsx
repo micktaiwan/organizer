@@ -10,10 +10,10 @@ interface MessageListProps {
   onDeleteMessage?: (messageId: string) => void;
   onReactMessage?: (messageId: string, emoji: string) => void;
   currentUserId?: string;
-  roomMemberCount?: number;
+  humanMemberIds?: string[]; // IDs of human (non-bot) members
 }
 
-export const MessageList: React.FC<MessageListProps> = ({ messages, isRemoteTyping, onDeleteMessage, onReactMessage, currentUserId, roomMemberCount }) => {
+export const MessageList: React.FC<MessageListProps> = ({ messages, isRemoteTyping, onDeleteMessage, onReactMessage, currentUserId, humanMemberIds }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { getStatus } = useUserStatus();
 
@@ -42,7 +42,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isRemoteTypi
             senderStatus={senderStatusData?.status}
             senderIsOnline={senderStatusData?.isOnline}
             senderStatusMessage={senderStatusData?.statusMessage}
-            roomMemberCount={roomMemberCount}
+            humanMemberIds={humanMemberIds}
           />
         );
       })}

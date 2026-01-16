@@ -125,10 +125,6 @@ class SocketService {
     this.socket?.emit('message:notify', { roomId, messageId });
   }
 
-  notifyRead(roomId: string, messageIds: string[]) {
-    this.socket?.emit('message:read', { roomId, messageIds });
-  }
-
   notifyDelete(roomId: string, messageId: string) {
     this.socket?.emit('message:delete', { roomId, messageId });
   }
