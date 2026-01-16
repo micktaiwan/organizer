@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -438,6 +440,20 @@ fun UserLocationCard(
                                     shape = RoundedCornerShape(4.dp)
                                 )
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    // Last client icon
+                    user.lastClient?.let { client ->
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = when (client) {
+                                "desktop" -> Icons.Default.Computer
+                                else -> Icons.Default.PhoneAndroid
+                            },
+                            contentDescription = client,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     }
                 }
