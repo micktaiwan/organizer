@@ -151,18 +151,14 @@ class SocketManager(private val tokenManager: TokenManager) {
             on("message:new") { args ->
                 try {
                     val data = args[0] as JSONObject
+                    // Lightweight payload: only notification data, full message fetched via API
                     val event = NewMessageEvent(
                         from = data.getString("from"),
                         fromName = data.optString("fromName", "Utilisateur"),
                         roomName = data.optString("roomName", "Chat"),
                         roomId = data.getString("roomId"),
                         messageId = data.getString("messageId"),
-                        content = data.optString("content", ""),
-                        type = data.optString("type", "text"),
-                        audioUrl = if (data.isNull("audioUrl")) null else data.optString("audioUrl"),
-                        imageUrl = if (data.isNull("imageUrl")) null else data.optString("imageUrl"),
-                        caption = if (data.isNull("caption")) null else data.optString("caption"),
-                        clientSource = if (data.isNull("clientSource")) null else data.optString("clientSource")
+                        preview = data.optString("preview", "Nouveau message")
                     )
                     _newMessage.tryEmit(event)
                 } catch (e: Exception) {
@@ -597,18 +593,14 @@ sealed class ConnectionState {
     data class Error(val message: String) : ConnectionState()
 }
 
+// Lightweight event: only notification data, full message fetched via API
 data class NewMessageEvent(
     val from: String,
     val fromName: String = "Utilisateur",
     val roomName: String = "Chat",
     val roomId: String,
     val messageId: String,
-    val content: String = "",
-    val type: String = "text",
-    val audioUrl: String? = null,
-    val imageUrl: String? = null,
-    val caption: String? = null,
-    val clientSource: String? = null
+    val preview: String = "Nouveau message"
 )
 
 data class UserStatusEvent(

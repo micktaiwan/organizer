@@ -24,6 +24,15 @@ class MessageRepository {
         }
     }
 
+    suspend fun getMessage(messageId: String): Result<Message> {
+        return try {
+            val response = api.getMessage(messageId)
+            Result.success(response.message)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun sendMessage(roomId: String, content: String, type: String = "text"): Result<Message> {
         return try {
             val request = SendMessageRequest(roomId = roomId, content = content, type = type)

@@ -125,6 +125,9 @@ function App() {
     createRoom,
     deleteRoom,
     leaveRoom,
+    typingUsers,
+    notifyTypingStart,
+    notifyTypingStop,
   } = useRooms({ userId: user?.id, username });
 
   const addCallSystemMessage = (type: "missed-call" | "rejected-call" | "ended-call") => {
@@ -535,6 +538,9 @@ function App() {
             cancelRecording={cancelRecording}
             onSelectImageFile={handleSelectImageFile}
             onSelectFile={handleSelectFile}
+            typingUsers={typingUsers}
+            onTypingStart={notifyTypingStart}
+            onTypingStop={notifyTypingStop}
           />
         </div>
       </div>

@@ -5,6 +5,11 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -176,17 +181,7 @@ fun ChatScreen(
         topBar = {
             Column {
                 TopAppBar(
-                    title = {
-                        Column {
-                            Text(roomName)
-                            if (uiState.typingUsers.isNotEmpty()) {
-                                Text(
-                                    text = "En train d'ecrire...",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                    },
+                    title = { Text(roomName) },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
                             Icon(
@@ -357,8 +352,53 @@ fun ChatScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                         }
+
+                        // Typing indicator at the bottom of messages (always reserve space)
+                        item(key = "typing_indicator") {
+                            TypingIndicator(isVisible = uiState.typingUsers.isNotEmpty())
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TypingIndicator(isVisible: Boolean) {
+    // Keep animations alive outside conditional to avoid recreation
+    val infiniteTransition = rememberInfiniteTransition(label = "typing")
+    val alphas = (0..2).map { index ->
+        infiniteTransition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(600, delayMillis = index * 200),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "alpha$index"
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .padding(start = 16.dp),
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (isVisible) {
+            alphas.forEach { alpha ->
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 2.dp)
+                        .size(8.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha.value),
+                            shape = CircleShape
+                        )
+                )
             }
         }
     }

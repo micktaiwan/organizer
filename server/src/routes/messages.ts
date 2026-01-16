@@ -94,6 +94,40 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
+// GET /messages/:id - Get a single message by ID
+router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const message = await Message.findById(req.params.id)
+      .populate('senderId', 'username displayName status statusMessage')
+      .populate('reactions.userId', 'username displayName');
+
+    if (!message) {
+      res.status(404).json({ error: 'Message non trouvé' });
+      return;
+    }
+
+    // Verify user has access to this message's room
+    const room = await Room.findById(message.roomId);
+    if (!room) {
+      res.status(404).json({ error: 'Salon non trouvé' });
+      return;
+    }
+
+    const isMember = room.members.some(m => m.userId.toString() === req.userId);
+    const isPublic = room.type === 'public' || room.type === 'lobby';
+
+    if (!isMember && !isPublic) {
+      res.status(403).json({ error: 'Accès non autorisé' });
+      return;
+    }
+
+    res.json({ message });
+  } catch (error) {
+    console.error('Get message error:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // PATCH /messages/:id/read - Mark message as read
 router.patch('/:id/read', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
