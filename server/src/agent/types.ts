@@ -1,8 +1,10 @@
+export type Expression = 'neutral' | 'happy' | 'laughing' | 'surprised' | 'sad' | 'sleepy' | 'curious';
+
 export interface AskRequest {
   question: string;
 }
 
 export interface AskResponse {
   response: string;
-  mood?: 'happy' | 'curious' | 'sleepy' | 'excited';
+  expression: Expression;
 }
