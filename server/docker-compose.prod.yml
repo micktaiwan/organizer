@@ -14,6 +14,7 @@ services:
     volumes:
       - uploads_data:/app/public/uploads
       - apk_data:/app/public/apk
+      - ./agent-config.json:/app/agent-config.json:ro
     depends_on:
       mongodb:
         condition: service_started

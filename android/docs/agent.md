@@ -26,8 +26,9 @@ app/src/main/java/com/organizer/chat/ui/screens/tamagotchi/
     └── AccelerometerSensor.kt   # Legacy
 ```
 
-## Statut Phase 0
+## Statut
 
-✅ **Terminée** — MVP graphique sans LLM
+- ✅ **Phase 0** — MVP graphique sans LLM
+- ✅ **Phase 2** — Premier dialogue (TextField + Claude Agent SDK)
 
 Voir `/server/agent/docs/agent.md` pour la roadmap complète.

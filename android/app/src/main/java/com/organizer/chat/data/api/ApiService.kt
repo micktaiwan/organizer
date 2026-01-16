@@ -3,6 +3,8 @@ package com.organizer.chat.data.api
 import com.organizer.chat.data.model.*
 import com.organizer.chat.data.model.AppUpdateInfo
 import com.organizer.chat.data.model.ApkVersionsResponse
+import com.organizer.chat.data.model.AskAgentRequest
+import com.organizer.chat.data.model.AskAgentResponse
 import com.organizer.chat.service.SyncTrackRequest
 import com.organizer.chat.service.SyncTrackResponse
 import com.organizer.chat.service.UpdateTrackRequest
@@ -206,6 +208,10 @@ interface ApiService {
 
     @DELETE("users/tracks/{trackId}")
     suspend fun deleteTrack(@Path("trackId") trackId: String): SuccessResponse
+
+    // Agent
+    @POST("agent/ask")
+    suspend fun askAgent(@Body request: AskAgentRequest): AskAgentResponse
 }
 
 data class UsersSearchResponse(
