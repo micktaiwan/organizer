@@ -13,6 +13,11 @@ interface AuthenticatedSocket extends Socket {
   clientType?: 'desktop' | 'android';
 }
 
+// Track typing timeouts: `${userId}:${roomId}` -> timeout handle
+// Module-level singleton state (intentional - shared across all connections)
+const typingTimeouts = new Map<string, NodeJS.Timeout>();
+const TYPING_TIMEOUT_MS = 3000;
+
 export function setupSocket(httpServer: HttpServer): Server {
   const io = new Server(httpServer, {
     cors: {
@@ -161,12 +166,34 @@ export function setupSocket(httpServer: HttpServer): Server {
       });
     });
 
-    // MODIFIED: Typing indicators dans les rooms
+    // Typing indicators with auto-timeout after 3s of inactivity
     socket.on('typing:start', (data: { roomId: string }) => {
+      const key = `${userId}:${data.roomId}`;
+
+      // Clear existing timeout if any
+      const existing = typingTimeouts.get(key);
+      if (existing) clearTimeout(existing);
+
+      // Emit to others in room
       socket.to(`room:${data.roomId}`).emit('typing:start', { from: userId, roomId: data.roomId });
+
+      // Auto-stop after timeout (user stopped typing but didn't clear input)
+      typingTimeouts.set(key, setTimeout(() => {
+        socket.to(`room:${data.roomId}`).emit('typing:stop', { from: userId, roomId: data.roomId });
+        typingTimeouts.delete(key);
+      }, TYPING_TIMEOUT_MS));
     });
 
     socket.on('typing:stop', (data: { roomId: string }) => {
+      const key = `${userId}:${data.roomId}`;
+
+      // Clear timeout
+      const existing = typingTimeouts.get(key);
+      if (existing) {
+        clearTimeout(existing);
+        typingTimeouts.delete(key);
+      }
+
       socket.to(`room:${data.roomId}`).emit('typing:stop', { from: userId, roomId: data.roomId });
     });
 
@@ -346,6 +373,14 @@ export function setupSocket(httpServer: HttpServer): Server {
       userRooms.forEach(room => {
         socket.to(`room:${room._id}`).emit('user:offline', { userId, roomId: room._id });
       });
+
+      // Clean up typing timeouts for this user
+      for (const [key, timeout] of typingTimeouts.entries()) {
+        if (key.startsWith(`${userId}:`)) {
+          clearTimeout(timeout);
+          typingTimeouts.delete(key);
+        }
+      }
     });
   });
 

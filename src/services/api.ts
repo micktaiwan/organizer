@@ -338,6 +338,10 @@ class ApiService {
     return this.request<{ messages: Message[] }>(url);
   }
 
+  async getMessage(messageId: string): Promise<{ message: Message }> {
+    return this.request<{ message: Message }>(`/messages/${messageId}`);
+  }
+
   // Messages
   async sendMessage(roomId: string, type: string, text?: string, audio?: string, imageBlob?: Blob | null, caption?: string): Promise<{ message: Message }> {
     // Images always use multipart upload

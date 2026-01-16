@@ -10,10 +10,8 @@ interface MessageEmitData {
   message: {
     _id: any;
     senderId: any;
-    content: string;
-    type: string;
-    caption?: string;
-    clientSource?: 'desktop' | 'android' | 'api';
+    type?: string;
+    content?: string;
   };
 }
 
@@ -28,18 +26,31 @@ export async function emitNewMessage({ io, socket, roomId, userId, message }: Me
   const sender = message.senderId as any;
   const room = await Room.findById(roomId);
 
+  // Generate preview for notifications
+  let preview: string;
+  switch (message.type) {
+    case 'audio':
+      preview = '🎤 Message audio';
+      break;
+    case 'image':
+      preview = '🖼️ Image';
+      break;
+    case 'file':
+      preview = '📎 Fichier';
+      break;
+    default:
+      preview = message.content?.substring(0, 100) || 'Nouveau message';
+  }
+
+  // Lightweight payload: clients should fetch full message via API
+  // Only include data needed for notifications
   const payload = {
     from: userId,
     fromName: sender?.displayName || sender?.username || 'Utilisateur',
     roomName: room?.name || 'Chat',
     roomId: roomId,
     messageId: message._id.toString(),
-    content: message.content || '',
-    type: message.type,
-    audioUrl: message.type === 'audio' ? message.content : null,
-    imageUrl: message.type === 'image' ? message.content : null,
-    caption: message.caption || null,
-    clientSource: message.clientSource || null,
+    preview,
   };
 
   // Use socket.to() to exclude sender, or io.to() to include all

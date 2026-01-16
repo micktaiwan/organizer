@@ -190,12 +190,8 @@ class ChatService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Prepare message preview based on type
-        val messagePreview = when {
-            event.audioUrl != null -> "\uD83C\uDFA4 Message audio"
-            event.imageUrl != null -> "\uD83D\uDDBC\uFE0F Image"
-            else -> event.content
-        }
+        // Use preview from socket payload for notification
+        val messagePreview = event.preview
 
         val notification = NotificationCompat.Builder(this, CHANNEL_MESSAGES)
             .setContentTitle("${event.roomName} - ${event.fromName}")

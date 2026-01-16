@@ -32,6 +32,11 @@ ssh $SERVER << 'EOF'
 
   # Status
   sudo docker compose -f docker-compose.prod.yml ps
+
+  # Cleanup: remove old images and build cache
+  echo "🧹 Nettoyage Docker..."
+  sudo docker image prune -f
+  sudo docker builder prune -f
 EOF
 
 echo "✅ Déploiement terminé!"

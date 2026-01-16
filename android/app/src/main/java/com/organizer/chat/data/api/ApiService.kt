@@ -51,6 +51,9 @@ interface ApiService {
     suspend fun createRoom(@Body request: CreateRoomRequest): RoomResponse
 
     // Messages
+    @GET("messages/{messageId}")
+    suspend fun getMessage(@Path("messageId") messageId: String): MessageResponse
+
     @POST("messages")
     suspend fun sendMessage(@Body request: SendMessageRequest): MessageResponse
 

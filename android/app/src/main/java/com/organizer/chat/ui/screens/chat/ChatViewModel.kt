@@ -8,7 +8,6 @@ import androidx.compose.foundation.text.input.clearText
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.organizer.chat.data.model.Message
-import com.organizer.chat.data.model.MessageSender
 import com.organizer.chat.data.model.Reaction
 import com.organizer.chat.data.repository.MessageRepository
 import com.organizer.chat.data.socket.ConnectionState
@@ -26,7 +25,6 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
@@ -90,11 +88,11 @@ class ChatViewModel(
 
     private fun observeTypingState() {
         viewModelScope.launch {
-            snapshotFlow { textFieldState.text.isNotEmpty() }
-                .distinctUntilChanged()
-                .collect { isTyping ->
+            // Emit typing:start on every text change (server handles timeout/debounce)
+            snapshotFlow { textFieldState.text.toString() }
+                .collect { text ->
                     chatService?.socketManager?.let { socketManager ->
-                        if (isTyping) {
+                        if (text.isNotEmpty()) {
                             socketManager.notifyTypingStart(roomId)
                         } else {
                             socketManager.notifyTypingStop(roomId)
@@ -279,47 +277,29 @@ class ChatViewModel(
                 service.messages.collect { event ->
                     Log.d(TAG, "Received message event: roomId=${event.roomId}, current=$roomId")
                     if (event.roomId == roomId) {
-                        // Use type from event, fallback to detection from URLs
-                        val messageType = event.type.ifEmpty {
-                            when {
-                                !event.audioUrl.isNullOrEmpty() -> "audio"
-                                !event.imageUrl.isNullOrEmpty() -> "image"
-                                else -> "text"
+                        // Fetch full message from API (uniformized pattern with Desktop)
+                        messageRepository.getMessage(event.messageId).fold(
+                            onSuccess = { message ->
+                                if (addMessageIfNotExists(message)) {
+                                    Log.d(TAG, "Added new message from API: ${event.messageId}")
+                                    // Mark as read immediately since we're viewing the room
+                                    if (message.senderId.id != _uiState.value.currentUserId) {
+                                        markUnreadMessagesAsRead(listOf(message))
+                                    }
+                                }
+                            },
+                            onFailure = { error ->
+                                Log.e(TAG, "Failed to fetch message ${event.messageId}: ${error.message}")
                             }
-                        }
-
-                        val newMessage = Message(
-                            id = event.messageId,
-                            roomId = event.roomId,
-                            senderId = MessageSender(
-                                id = event.from,
-                                username = event.fromName,
-                                displayName = event.fromName
-                            ),
-                            type = messageType,
-                            content = event.content,
-                            caption = event.caption,
-                            status = "sent",
-                            readBy = emptyList(),
-                            reactions = emptyList(),
-                            clientSource = event.clientSource,
-                            createdAt = Instant.now().toString()
                         )
-
-                        if (addMessageIfNotExists(newMessage)) {
-                            Log.d(TAG, "Added new message from socket: ${event.messageId}")
-                            // Mark as read immediately since we're viewing the room
-                            if (event.from != _uiState.value.currentUserId) {
-                                markUnreadMessagesAsRead(listOf(newMessage))
-                            }
-                        }
                     }
                 }
             }
 
             viewModelScope.launch {
                 service.socketManager.typingStart.collect { event ->
-                    if (event.roomId == roomId && event.from != _uiState.value.currentUserId) {
+                    // Don't filter out currentUserId - useful for testing with same account across platforms
+                    if (event.roomId == roomId) {
                         _uiState.value = _uiState.value.copy(
                             typingUsers = _uiState.value.typingUsers + event.from
                         )

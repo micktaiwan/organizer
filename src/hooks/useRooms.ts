@@ -20,6 +20,70 @@ interface UseRoomsOptions {
   username: string;
 }
 
+// Helper to convert server message to client message
+const convertServerMessage = (msg: ServerMessage, currentUserId: string | undefined): Message => {
+  let actualSenderId: string;
+  let senderName: string | undefined;
+
+  if (typeof msg.senderId === 'string') {
+    actualSenderId = msg.senderId;
+  } else {
+    actualSenderId = (msg.senderId as any)._id || (msg.senderId as any).id || '';
+    senderName = (msg.senderId as any).displayName;
+  }
+
+  const isSender = actualSenderId === currentUserId;
+
+  let text: string | undefined;
+  let image: string | undefined;
+  let audio: string | undefined;
+  let fileUrl: string | undefined;
+  let fileName: string | undefined;
+  let fileSize: number | undefined;
+  let mimeType: string | undefined;
+
+  if (msg.type === 'image') {
+    image = msg.content;
+  } else if (msg.type === 'audio') {
+    audio = msg.content;
+  } else if (msg.type === 'file') {
+    fileUrl = msg.content;
+    fileName = msg.fileName;
+    fileSize = msg.fileSize;
+    mimeType = msg.mimeType;
+  } else {
+    text = msg.content;
+  }
+
+  const reactions: Reaction[] | undefined = msg.reactions?.map((r: any) => ({
+    userId: typeof r.userId === 'string' ? r.userId : r.userId._id || r.userId.id,
+    emoji: r.emoji,
+    createdAt: new Date(r.createdAt),
+  }));
+
+  return {
+    id: msg._id,
+    serverMessageId: msg._id,
+    text,
+    image,
+    caption: msg.caption,
+    audio,
+    fileUrl,
+    fileName,
+    fileSize,
+    mimeType,
+    sender: isSender ? 'me' : 'them',
+    senderName,
+    senderId: actualSenderId,
+    timestamp: new Date(msg.createdAt),
+    status: msg.status as 'sent' | 'delivered' | 'read',
+    readBy: msg.readBy,
+    reactions,
+    type: msg.type,
+    clientSource: msg.clientSource,
+  };
+};
+
 export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Rooms state
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -30,6 +94,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+
+  // Typing indicator state
+  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
 
   // Track unread messages in other rooms for tray badge
   const hasUnreadRef = useRef(false);
@@ -87,71 +154,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
         // Load message history
         const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
-        const convertedMessages = serverMessages.map((msg: ServerMessage): Message => {
-          let actualSenderId: string;
-          let senderName: string | undefined;
-
-          if (typeof msg.senderId === 'string') {
-            actualSenderId = msg.senderId;
-          } else {
-            // senderId is an object with _id (MongoDB) or id
-            actualSenderId = (msg.senderId as any)._id || (msg.senderId as any).id || '';
-            senderName = (msg.senderId as any).displayName;
-          }
-
-          const isSender = actualSenderId === userId;
-
-          // Map content based on message type
-          let text: string | undefined;
-          let image: string | undefined;
-          let audio: string | undefined;
-          let fileUrl: string | undefined;
-          let fileName: string | undefined;
-          let fileSize: number | undefined;
-          let mimeType: string | undefined;
-
-          if (msg.type === 'image') {
-            image = msg.content;
-          } else if (msg.type === 'audio') {
-            audio = msg.content;
-          } else if (msg.type === 'file') {
-            fileUrl = msg.content;
-            fileName = msg.fileName;
-            fileSize = msg.fileSize;
-            mimeType = msg.mimeType;
-          } else {
-            text = msg.content;
-          }
-
-          // Convert reactions
-          const reactions: Reaction[] | undefined = msg.reactions?.map((r: any) => ({
-            userId: typeof r.userId === 'string' ? r.userId : r.userId._id || r.userId.id,
-            emoji: r.emoji,
-            createdAt: new Date(r.createdAt),
-          }));
-
-          return {
-            id: msg._id,
-            serverMessageId: msg._id,
-            text,
-            image,
-            caption: msg.caption,
-            audio,
-            fileUrl,
-            fileName,
-            fileSize,
-            mimeType,
-            sender: isSender ? 'me' : 'them',
-            senderName,
-            senderId: actualSenderId,
-            timestamp: new Date(msg.createdAt),
-            status: msg.status as 'sent' | 'delivered' | 'read',
-            readBy: msg.readBy,
-            reactions,
-            type: msg.type,
-            clientSource: msg.clientSource,
-          };
-        });
+        const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
         setMessages(convertedMessages);
       } catch (error) {
         console.error('Failed to load room:', error);
@@ -171,16 +174,65 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
   // Listen for new messages in current room
   useEffect(() => {
-    if (!currentRoomId) return;
+    if (!currentRoomId || !userId) return;
 
-    const unsubNewMessage = socketService.on('message:new', (data: any) => {
-      if (data.roomId === currentRoomId) {
-        // New message in current room - reload message history
-        loadMessages();
+    const unsubNewMessage = socketService.on('message:new', async (data: any) => {
+      if (data.roomId === currentRoomId && data.messageId) {
+        // Retry logic for transient failures
+        const maxRetries = 3;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const { message: serverMsg } = await api.getMessage(data.messageId);
+            const converted = convertServerMessage(serverMsg, userId);
+            setMessages(current => {
+              // Check if message already exists (avoid duplicates from optimistic updates)
+              if (current.some(m => m.serverMessageId === data.messageId || m.id === data.messageId)) {
+                return current;
+              }
+              return [...current, converted];
+            });
+            break; // Success, exit retry loop
+          } catch (err) {
+            if (attempt === maxRetries) {
+              console.error(`Failed to fetch new message after ${maxRetries} attempts:`, err);
+            } else {
+              // Wait before retrying (exponential backoff: 500ms, 1000ms)
+              await new Promise(resolve => setTimeout(resolve, attempt * 500));
+            }
+          }
+        }
       }
     });
 
     return () => unsubNewMessage();
+  }, [currentRoomId, userId]);
+
+  // Listen for typing indicators in current room
+  useEffect(() => {
+    if (!currentRoomId || !userId) return;
+
+    const unsubTypingStart = socketService.on('typing:start', (data: any) => {
+      if (data.roomId === currentRoomId) {
+        setTypingUsers(prev => new Set(prev).add(data.from));
+      }
+    });
+
+    const unsubTypingStop = socketService.on('typing:stop', (data: any) => {
+      if (data.roomId === currentRoomId) {
+        setTypingUsers(prev => {
+          const next = new Set(prev);
+          next.delete(data.from);
+          return next;
+        });
+      }
+    });
+
+    // Clear typing users when changing rooms
+    return () => {
+      unsubTypingStart();
+      unsubTypingStop();
+      setTypingUsers(new Set());
+    };
   }, [currentRoomId]);
 
   // Listen for unread updates to show tray badge
@@ -323,71 +375,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     if (!currentRoomId) return;
     try {
       const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
-      const convertedMessages = serverMessages.map((msg: ServerMessage): Message => {
-        let actualSenderId: string;
-        let senderName: string | undefined;
-
-        if (typeof msg.senderId === 'string') {
-          actualSenderId = msg.senderId;
-        } else {
-          // senderId is an object with _id (MongoDB) or id
-          actualSenderId = (msg.senderId as any)._id || (msg.senderId as any).id || '';
-          senderName = (msg.senderId as any).displayName;
-        }
-
-        const isSender = actualSenderId === userId;
-
-        // Map content based on message type
-        let text: string | undefined;
-        let image: string | undefined;
-        let audio: string | undefined;
-        let fileUrl: string | undefined;
-        let fileName: string | undefined;
-        let fileSize: number | undefined;
-        let mimeType: string | undefined;
-
-        if (msg.type === 'image') {
-          image = msg.content;
-        } else if (msg.type === 'audio') {
-          audio = msg.content;
-        } else if (msg.type === 'file') {
-          fileUrl = msg.content;
-          fileName = msg.fileName;
-          fileSize = msg.fileSize;
-          mimeType = msg.mimeType;
-        } else {
-          text = msg.content;
-        }
-
-        // Convert reactions
-        const reactions: Reaction[] | undefined = msg.reactions?.map((r: any) => ({
-          userId: typeof r.userId === 'string' ? r.userId : r.userId._id || r.userId.id,
-          emoji: r.emoji,
-          createdAt: new Date(r.createdAt),
-        }));
-
-        return {
-          id: msg._id,
-          serverMessageId: msg._id,
-          text,
-          image,
-          caption: msg.caption,
-          audio,
-          fileUrl,
-          fileName,
-          fileSize,
-          mimeType,
-          sender: isSender ? 'me' : 'them',
-          senderName,
-          senderId: actualSenderId,
-          timestamp: new Date(msg.createdAt),
-          status: msg.status as 'sent' | 'delivered' | 'read',
-          readBy: msg.readBy,
-          reactions,
-          type: msg.type,
-          clientSource: msg.clientSource,
-        };
-      });
+      const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
       setMessages(convertedMessages);
     } catch (error) {
       console.error('Failed to load messages:', error);
@@ -625,6 +613,20 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     }
   }, [currentRoomId]);
 
+  // Notify typing start
+  const notifyTypingStart = useCallback(() => {
+    if (currentRoomId) {
+      socketService.startTyping(currentRoomId);
+    }
+  }, [currentRoomId]);
+
+  // Notify typing stop
+  const notifyTypingStop = useCallback(() => {
+    if (currentRoomId) {
+      socketService.stopTyping(currentRoomId);
+    }
+  }, [currentRoomId]);
+
   return {
     // Rooms
     rooms,
@@ -642,6 +644,11 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     deleteMessage,
     reactToMessage,
     loadMessages,
+
+    // Typing indicators
+    typingUsers,
+    notifyTypingStart,
+    notifyTypingStop,
 
     // Room management
     selectRoom,

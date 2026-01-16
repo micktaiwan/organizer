@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Room } from '../../services/api';
 import { Message } from '../../types';
 import { MessageList } from './MessageList';
@@ -31,6 +31,9 @@ interface RoomMessagingProps {
   cancelRecording: () => void;
   onSelectImageFile: () => void;
   onSelectFile: () => void;
+  typingUsers?: Set<string>;
+  onTypingStart?: () => void;
+  onTypingStop?: () => void;
 }
 
 export const RoomMessaging: React.FC<RoomMessagingProps> = ({
@@ -54,7 +57,32 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   cancelRecording,
   onSelectImageFile,
   onSelectFile,
+  typingUsers,
+  onTypingStart,
+  onTypingStop,
 }) => {
+  // Use refs to avoid re-triggering effects when callbacks change reference
+  const onTypingStartRef = useRef(onTypingStart);
+  const onTypingStopRef = useRef(onTypingStop);
+  onTypingStartRef.current = onTypingStart;
+  onTypingStopRef.current = onTypingStop;
+
+  // Emit typing:start on every input change (server handles timeout/debounce)
+  useEffect(() => {
+    if (inputMessage.trim().length > 0) {
+      onTypingStartRef.current?.();
+    } else {
+      onTypingStopRef.current?.();
+    }
+  }, [inputMessage]);
+
+  // Stop typing when component unmounts or room changes
+  useEffect(() => {
+    return () => {
+      onTypingStopRef.current?.();
+    };
+  }, [currentRoom?._id]);
+
   if (!currentRoom) {
     return (
       <div className="room-messaging-empty">
@@ -92,7 +120,7 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
     <div className="room-messaging">
       <MessageList
         messages={messages}
-        isRemoteTyping={false}
+        isRemoteTyping={(typingUsers?.size ?? 0) > 0}
         onDeleteMessage={onDeleteMessage}
         onReactMessage={onReactMessage}
         currentUserId={currentUserId}
