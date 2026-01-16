@@ -196,6 +196,29 @@ Android (TextField) → POST /agent/ask → AgentService
 
 ---
 
+## Backlog (non urgent)
+
+- [ ] **Réponses au tap dynamiques** : Actuellement, quand on clique sur le Tamagotchi, il affiche un texte aléatoire parmi une liste statique. L'idée serait de stocker ces phrases dans MongoDB et que l'agent les alimente lui-même quand il découvre quelque chose d'intéressant dans les conversations (ex: "Ah tiens, vous avez parlé de vacances en Grèce !", "J'ai vu que le build Android marchait enfin !").
+
+- [ ] **Face mimic via caméra** : Activer la caméra frontale pour observer le visage de l'utilisateur et faire réagir/mimiquer le pet en temps réel.
+  - **Techno** : ML Kit Face Detection (Google) + CameraX
+  - **Données exploitables** :
+    - `smilingProbability` (0.0-1.0) → Pet content quand user sourit
+    - `leftEyeOpenProbability` / `rightEyeOpenProbability` → Pet cligne/dort si yeux fermés
+    - `headEulerAngleY/Z` → Pet penche la tête comme le user
+  - **Mapping possible** :
+    | Expression User | Réaction Pet |
+    |-----------------|--------------|
+    | Sourire (>0.7) | Pet heureux, saute |
+    | Yeux fermés | Pet s'endort aussi |
+    | Clin d'œil | Pet fait un clin d'œil |
+    | Tête penchée | Pet penche la tête |
+    | Pas de visage | Pet triste/lonely |
+  - **Dépendances** : `com.google.mlkit:face-detection:16.1.6`, `androidx.camera:camera-*:1.3.1`
+  - **Considérations** : On-device (privacy OK), ~30 FPS, throttle UI updates à 100ms
+
+---
+
 ## Notes
 
 - Ce projet mélange ludique (Tamagotchi visuel) et utilitaire (assistant IA)

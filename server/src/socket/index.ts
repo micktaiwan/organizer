@@ -10,6 +10,7 @@ interface AuthenticatedSocket extends Socket {
   username?: string;
   appVersionName?: string;
   appVersionCode?: string;
+  clientType?: 'desktop' | 'android';
 }
 
 export function setupSocket(httpServer: HttpServer): Server {
@@ -42,6 +43,13 @@ export function setupSocket(httpServer: HttpServer): Server {
       socket.appVersionName = socket.handshake.auth.appVersionName;
       socket.appVersionCode = socket.handshake.auth.appVersionCode;
 
+      // Detect client type: desktop sends clientType, Android sends appVersionCode
+      if (socket.handshake.auth.clientType === 'desktop') {
+        socket.clientType = 'desktop';
+      } else if (socket.appVersionCode) {
+        socket.clientType = 'android';
+      }
+
       next();
     } catch (error) {
       next(new Error('Token invalide'));
@@ -66,6 +74,12 @@ export function setupSocket(httpServer: HttpServer): Server {
         updatedAt: new Date(),
       };
       console.log(`User ${socket.username} app version: ${socket.appVersionName} (${socket.appVersionCode})`);
+    }
+
+    // Update lastClient if detected
+    if (socket.clientType) {
+      updateData.lastClient = socket.clientType;
+      console.log(`User ${socket.username} client type: ${socket.clientType}`);
     }
 
     // Mettre à jour le statut online et récupérer le user avec ses infos de statut
@@ -93,6 +107,7 @@ export function setupSocket(httpServer: HttpServer): Server {
       statusExpiresAt: user?.statusExpiresAt,
       isMuted: user?.isMuted,
       appVersion: user?.appVersion,
+      lastClient: user?.lastClient,
     };
 
     // Notifier les autres utilisateurs du statut online
@@ -109,7 +124,7 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     const usersInSameRooms = await User.find({
       _id: { $in: uniqueUserIds }
-    }).select('_id username displayName status statusMessage statusExpiresAt isMuted isOnline appVersion');
+    }).select('_id username displayName status statusMessage statusExpiresAt isMuted isOnline appVersion lastClient');
 
     socket.emit('users:init', {
       users: usersInSameRooms.map(u => ({
@@ -122,6 +137,7 @@ export function setupSocket(httpServer: HttpServer): Server {
         isMuted: u.isMuted,
         isOnline: u.isOnline,
         appVersion: u.appVersion,
+        lastClient: u.lastClient,
       }))
     });
 

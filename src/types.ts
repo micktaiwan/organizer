@@ -1,4 +1,5 @@
 export type ReactionEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '😡' | '✅' | '⚠️' | '🙏' | '🎉' | '👋' | '😘';
+export type ClientSource = 'desktop' | 'android' | 'api';
 
 export const ALLOWED_EMOJIS: ReactionEmoji[] = ['👍', '❤️', '😂', '😮', '😢', '😡', '✅', '⚠️', '🙏', '🎉', '👋', '😘'];
 
@@ -28,6 +29,7 @@ export interface Message {
   status?: "sending" | "sent" | "delivered" | "read" | "failed";
   readBy?: string[]; // Array of user IDs who read the message
   reactions?: Reaction[]; // Array of reactions on the message
+  clientSource?: ClientSource; // Source client: desktop, android, or api
   isSystemMessage?: boolean;
   systemMessageType?: "missed-call" | "rejected-call" | "ended-call";
 }

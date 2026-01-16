@@ -160,7 +160,9 @@ class SocketManager(private val tokenManager: TokenManager) {
                         content = data.optString("content", ""),
                         type = data.optString("type", "text"),
                         audioUrl = if (data.isNull("audioUrl")) null else data.optString("audioUrl"),
-                        imageUrl = if (data.isNull("imageUrl")) null else data.optString("imageUrl")
+                        imageUrl = if (data.isNull("imageUrl")) null else data.optString("imageUrl"),
+                        caption = if (data.isNull("caption")) null else data.optString("caption"),
+                        clientSource = if (data.isNull("clientSource")) null else data.optString("clientSource")
                     )
                     _newMessage.tryEmit(event)
                 } catch (e: Exception) {
@@ -605,7 +607,8 @@ data class NewMessageEvent(
     val type: String = "text",
     val audioUrl: String? = null,
     val imageUrl: String? = null,
-    val caption: String? = null
+    val caption: String? = null,
+    val clientSource: String? = null
 )
 
 data class UserStatusEvent(

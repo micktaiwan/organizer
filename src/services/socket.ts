@@ -17,7 +17,7 @@ class SocketService {
     console.log('Socket connecting to:', baseUrl);
 
     this.socket = io(baseUrl, {
-      auth: { token },
+      auth: { token, clientType: 'desktop' },
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 10,

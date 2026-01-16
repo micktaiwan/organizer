@@ -149,6 +149,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
             readBy: msg.readBy,
             reactions,
             type: msg.type,
+            clientSource: msg.clientSource,
           };
         });
         setMessages(convertedMessages);
@@ -384,6 +385,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
           readBy: msg.readBy,
           reactions,
           type: msg.type,
+          clientSource: msg.clientSource,
         };
       });
       setMessages(convertedMessages);
@@ -411,6 +413,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       senderName: username,
       timestamp: new Date(),
       status: 'sending',
+      clientSource: 'desktop',
     };
     setMessages(prev => [...prev, optimisticMessage]);
 
@@ -423,7 +426,8 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
               ...m,
               serverMessageId: response.message._id,
               status: 'sent',
-              image: type === 'image' ? response.message.content : image
+              image: type === 'image' ? response.message.content : image,
+              clientSource: response.message.clientSource,
             }
           : m
       ));
@@ -456,6 +460,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       senderName: username,
       timestamp: new Date(),
       status: 'sending',
+      clientSource: 'desktop',
     };
     setMessages(prev => [...prev, optimisticMessage]);
 
@@ -470,6 +475,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
               serverMessageId: response.message._id,
               fileUrl: response.message.content,
               status: 'sent',
+              clientSource: response.message.clientSource,
             }
           : m
       ));
