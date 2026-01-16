@@ -53,4 +53,14 @@ object TamagotchiConfig {
     val blinkIntervalMax: Long = 5000L
     val blinkDurationMs: Long = 150L
     val touchResetDelayMs: Long = 400L
+
+    // Accelerometer
+    val tiltSensitivity: Float = 15f  // Multiplier for tilt offset
+    val maxTiltOffset: Dp = 120.dp    // Max distance pet can move from center
+    val shakeScaleMax: Float = 1.4f   // Scale when shaking
+
+    // Gyroscope
+    val rotationSensitivity: Float = 9f    // Multiplier for X rotation angle
+    val maxRotationAngle: Float = 180f     // No limit - pet always stays upright
+    val gyroEyeSensitivity: Float = 8f     // Multiplier for eye tracking from Z rotation (rad/s)
 }

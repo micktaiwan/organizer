@@ -174,11 +174,20 @@ data class TamagotchiAnimatedState(
     val touchScale: Float,
     val mouthOpenness: Float,
     val eyeOpenness: Float,
-    val pupilOffset: Offset
+    val pupilOffset: Offset,
+    val tiltOffset: Offset = Offset.Zero,
+    val isShaking: Boolean = false,
+    val bodyRotation: Float = 0f,      // Rotation angle in degrees (from Y tilt)
+    val gyroPupilOffset: Offset = Offset.Zero  // Eye tracking from Z rotation
 )
 
 @Composable
-fun rememberTamagotchiAnimatedState(): TamagotchiAnimatedState {
+fun rememberTamagotchiAnimatedState(
+    roll: Float = 0f,      // Tilt left/right in degrees (-180 to +180)
+    pitch: Float = 0f,     // Tilt forward/back in degrees (-90 to +90)
+    gyroZ: Float = 0f,     // Gyroscope Z rotation speed (rad/s) for eye tracking
+    isShaking: Boolean = false
+): TamagotchiAnimatedState {
     val state = remember { TamagotchiState() }
 
     // Breathing animation
@@ -193,9 +202,13 @@ fun rememberTamagotchiAnimatedState(): TamagotchiAnimatedState {
         label = "breathingScale"
     )
 
-    // Touch scale animation
+    // Touch scale animation (also triggered by shake)
     val touchScale by animateFloatAsState(
-        targetValue = if (state.isTouched) TamagotchiConfig.touchScaleMax else 1f,
+        targetValue = when {
+            isShaking -> TamagotchiConfig.shakeScaleMax
+            state.isTouched -> TamagotchiConfig.touchScaleMax
+            else -> 1f
+        },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
@@ -203,9 +216,9 @@ fun rememberTamagotchiAnimatedState(): TamagotchiAnimatedState {
         label = "touchScale"
     )
 
-    // Mouth animation
+    // Mouth animation (also open when shaking)
     val mouthOpenness by animateFloatAsState(
-        targetValue = if (state.isTouched) 1f else 0f,
+        targetValue = if (state.isTouched || isShaking) 1f else 0f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
@@ -232,6 +245,59 @@ fun rememberTamagotchiAnimatedState(): TamagotchiAnimatedState {
         label = "pupilY"
     )
 
+    // Tilt offset animation (from rotation vector)
+    // roll = tilt left/right, pitch = tilt forward/back
+    val maxOffset = TamagotchiConfig.maxTiltOffset.value
+    val sensitivity = TamagotchiConfig.tiltSensitivity
+
+    // Roll: positive = tilted right, so pet slides right (same direction)
+    val targetTiltX = (roll * sensitivity / 9f).coerceIn(-maxOffset, maxOffset)
+    // Pitch: positive = tilted back (screen up), negative = tilted forward
+    val targetTiltY = (-pitch * sensitivity / 4f).coerceIn(-maxOffset, maxOffset)  // More sensitive
+
+    val animatedTiltX by animateFloatAsState(
+        targetValue = targetTiltX,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "tiltX"
+    )
+    val animatedTiltY by animateFloatAsState(
+        targetValue = targetTiltY,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "tiltY"
+    )
+
+    // Body rotation from roll (already in degrees)
+    // Pet head stays upright by rotating opposite to phone tilt
+    val targetRotation = -roll  // Direct angle in degrees
+
+    val animatedBodyRotation by animateFloatAsState(
+        targetValue = targetRotation,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "bodyRotation"
+    )
+
+    // Eye tracking from gyroscope Z (rotation speed around vertical axis)
+    // When showing phone to someone, eyes follow the movement
+    val gyroEyeSensitivity = TamagotchiConfig.gyroEyeSensitivity
+    val maxPupilOffset = TamagotchiConfig.pupilMaxOffset
+    // gyroZ is in rad/s, multiply by sensitivity
+    val targetGyroEyeX = (gyroZ * gyroEyeSensitivity).coerceIn(-maxPupilOffset, maxPupilOffset)
+
+    val animatedGyroEyeX by animateFloatAsState(
+        targetValue = targetGyroEyeX,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "gyroEyeX"
+    )
+
     // Random blink effect
     LaunchedEffect(Unit) {
         while (true) {
@@ -256,6 +322,10 @@ fun rememberTamagotchiAnimatedState(): TamagotchiAnimatedState {
         touchScale = touchScale,
         mouthOpenness = mouthOpenness,
         eyeOpenness = eyeOpenness,
-        pupilOffset = Offset(pupilOffsetX, pupilOffsetY)
+        pupilOffset = Offset(pupilOffsetX, pupilOffsetY),
+        tiltOffset = Offset(animatedTiltX, animatedTiltY),
+        isShaking = isShaking,
+        bodyRotation = animatedBodyRotation,
+        gyroPupilOffset = Offset(animatedGyroEyeX, 0f)
     )
 }
