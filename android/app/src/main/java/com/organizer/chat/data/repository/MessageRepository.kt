@@ -52,10 +52,10 @@ class MessageRepository {
         }
     }
 
-    suspend fun markMessagesAsRead(messageIds: List<String>): Result<Boolean> {
+    suspend fun markMessagesAsRead(messageIds: List<String>, roomId: String? = null): Result<Boolean> {
         return try {
             if (messageIds.isEmpty()) return Result.success(true)
-            api.markMessagesAsRead(MarkMessagesReadRequest(messageIds))
+            api.markMessagesAsRead(MarkMessagesReadRequest(messageIds, roomId))
             Result.success(true)
         } catch (e: Exception) {
             Result.failure(e)

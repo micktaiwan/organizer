@@ -101,6 +101,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Track unread messages in other rooms for tray badge
   const hasUnreadRef = useRef(false);
 
+  // Track message IDs already marked as read to prevent duplicate requests
+  const markedAsReadRef = useRef<Set<string>>(new Set());
+
   // Reload data when API server changes (even if userId stays the same)
   useEffect(() => {
     setCurrentRoomId(null);
@@ -304,19 +307,19 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     return () => unsubReacted();
   }, [currentRoomId]);
 
-  // Listen for message read status updates in current room
+  // Listen for message read status updates in current room (from OTHER users only)
   useEffect(() => {
     if (!currentRoomId || !userId) return;
 
     const unsubMessageRead = socketService.on('message:read', (data: any) => {
-      if (data.roomId === currentRoomId) {
+      // Skip self-broadcasts (local state already updated in markAsRead)
+      if (data.roomId === currentRoomId && data.from !== userId) {
         setMessages(prev => prev.map(m => {
           if (data.messageIds.includes(m.serverMessageId || m.id) &&
               !m.readBy?.includes(data.from)) {
             return {
               ...m,
               readBy: [...(m.readBy || []), data.from],
-              // Don't force status to 'read' - let UI calculate based on readBy vs memberCount
             };
           }
           return m;
@@ -483,19 +486,40 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     if (!currentRoomId || messageIds.length === 0) return;
 
     try {
-      await api.markMessagesAsRead(messageIds);
-      socketService.notifyRead(currentRoomId, messageIds);
+      // Server will broadcast socket event to other clients
+      await api.markMessagesAsRead(messageIds, currentRoomId);
 
-      // Update local messages
+      // Update local messages with current user in readBy
       setMessages(prev => prev.map(m =>
         messageIds.includes(m.serverMessageId || m.id)
-          ? { ...m, status: 'read' }
+          ? { ...m, readBy: [...(m.readBy || []), userId || ''] }
           : m
       ));
     } catch (error) {
       console.error('Failed to mark messages as read:', error);
     }
-  }, [currentRoomId]);
+  }, [currentRoomId, userId]);
+
+  // Auto-mark messages as read when viewing a room
+  useEffect(() => {
+    if (!currentRoomId || !userId || messages.length === 0) return;
+
+    // Find unread messages from other users (excluding already-requested IDs)
+    const unreadMessageIds = messages
+      .filter(m =>
+        m.sender === 'them' &&
+        m.serverMessageId &&
+        !m.readBy?.includes(userId) &&
+        !markedAsReadRef.current.has(m.serverMessageId)
+      )
+      .map(m => m.serverMessageId as string);
+
+    if (unreadMessageIds.length > 0) {
+      // Track these IDs immediately to prevent duplicate requests
+      unreadMessageIds.forEach(id => markedAsReadRef.current.add(id));
+      markAsRead(unreadMessageIds);
+    }
+  }, [currentRoomId, userId, messages, markAsRead]);
 
   // Delete a message
   const deleteMessage = useCallback(async (messageId: string) => {
@@ -576,6 +600,8 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Select a room
   const selectRoom = useCallback((roomId: string) => {
     setCurrentRoomId(roomId);
+    // Clear tracked read IDs when switching rooms
+    markedAsReadRef.current.clear();
     // Clear badge when user selects a room (they're actively looking at the app)
     if (hasUnreadRef.current) {
       hasUnreadRef.current = false;

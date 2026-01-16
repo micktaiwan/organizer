@@ -39,6 +39,7 @@ export interface RoomMember {
   username: string;
   displayName: string;
   isOnline: boolean;
+  isBot?: boolean;
   status?: UserStatus;
   statusMessage?: string | null;
   isMuted?: boolean;

@@ -101,7 +101,7 @@ fun MessageBubble(
     messages: List<Message>,
     isMyMessage: Boolean,
     currentUserId: String? = null,
-    roomMemberCount: Int = 0,
+    humanMemberIds: List<String> = emptyList(),
     onReact: ((String) -> Unit)? = null,
     onDelete: ((String) -> Unit)? = null
 ) {
@@ -247,7 +247,8 @@ fun MessageBubble(
                             ReadReceiptForStatus(
                                 status = groupStatus,
                                 readBy = lastMsg.readBy,
-                                roomMemberCount = roomMemberCount
+                                humanMemberIds = humanMemberIds,
+                                currentUserId = currentUserId
                             )
                         }
                         // Client source icon
@@ -961,13 +962,15 @@ private fun FullscreenImageDialog(
 private fun ReadReceiptForStatus(
     status: String,
     readBy: List<String>,
-    roomMemberCount: Int
+    humanMemberIds: List<String>,
+    currentUserId: String?
 ) {
-    // Calculate if all other members have read
-    val isAllRead = if (roomMemberCount > 1) {
-        readBy.size >= roomMemberCount - 1
+    // Calculate if ALL other human members have read the message
+    val isAllRead = if (currentUserId != null && humanMemberIds.isNotEmpty()) {
+        val otherHumanMembers = humanMemberIds.filter { it != currentUserId }
+        otherHumanMembers.isNotEmpty() && otherHumanMembers.all { readBy.contains(it) }
     } else {
-        readBy.isNotEmpty()
+        false
     }
 
     // Use group status for icon selection
