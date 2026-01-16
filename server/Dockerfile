@@ -22,6 +22,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Install su-exec for entrypoint user switching
+RUN apk add --no-cache su-exec
+
 # Install Claude Code CLI (required by claude-agent-sdk)
 RUN npm install -g @anthropic-ai/claude-code
 
@@ -35,10 +38,15 @@ RUN npm ci --omit=dev --legacy-peer-deps
 # Copier seulement le build
 COPY --from=builder /app/dist ./dist
 
-# Set ownership and switch to non-root user
-RUN chown -R appuser:appgroup /app
-USER appuser
+# Create upload directories and set ownership
+RUN mkdir -p /app/public/uploads /app/public/apk && \
+    chown -R appuser:appgroup /app
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3001
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]
