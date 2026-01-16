@@ -16,11 +16,23 @@ import com.organizer.chat.ui.screens.tamagotchi.components.ThoughtBubble
 import com.organizer.chat.ui.screens.tamagotchi.components.drawCreature
 import com.organizer.chat.ui.screens.tamagotchi.components.getRandomThought
 import com.organizer.chat.ui.screens.tamagotchi.gestures.tamagotchiGestures
+import com.organizer.chat.ui.screens.tamagotchi.sensors.rememberGyroscopeState
+import com.organizer.chat.ui.screens.tamagotchi.sensors.rememberRotationVectorState
 import com.organizer.chat.ui.theme.Charcoal
 
 @Composable
 fun TamagotchiScreen() {
-    val animState = rememberTamagotchiAnimatedState()
+    // Fused rotation sensor for stable orientation
+    val rotationState = rememberRotationVectorState()
+    // Gyroscope for eye tracking (measures rotation speed)
+    val gyroState = rememberGyroscopeState()
+
+    val animState = rememberTamagotchiAnimatedState(
+        roll = rotationState.roll,
+        pitch = rotationState.pitch,
+        gyroZ = gyroState.rotationZ,  // Use gyro for eyes, not azimuth
+        isShaking = rotationState.isShaking
+    )
     var canvasCenter by remember { mutableStateOf(Offset.Zero) }
 
     // State for tap-triggered thoughts

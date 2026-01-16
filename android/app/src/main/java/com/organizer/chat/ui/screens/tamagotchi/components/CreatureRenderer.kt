@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 import com.organizer.chat.ui.screens.tamagotchi.TamagotchiAnimatedState
 import com.organizer.chat.ui.screens.tamagotchi.TamagotchiConfig
@@ -13,13 +14,20 @@ import kotlin.math.min
  * Main entry point for drawing the creature
  */
 fun DrawScope.drawCreature(animState: TamagotchiAnimatedState) {
-    val center = Offset(size.width / 2, size.height / 2)
+    // Apply tilt offset from accelerometer
+    val center = Offset(
+        size.width / 2 + animState.tiltOffset.x,
+        size.height / 2 + animState.tiltOffset.y
+    )
     val scale = animState.breathingScale * animState.touchScale
 
-    drawBody(center, scale)
-    drawEyes(center, scale, animState)
-    drawMouth(center, scale, animState.mouthOpenness)
-    drawBlush(center, scale, animState.mouthOpenness)
+    // Apply body rotation from Y tilt
+    rotate(degrees = animState.bodyRotation, pivot = center) {
+        drawBody(center, scale)
+        drawEyes(center, scale, animState)
+        drawMouth(center, scale, animState.mouthOpenness)
+        drawBlush(center, scale, animState.mouthOpenness)
+    }
     drawFingerCursor(animState.state.fingerPosition)
 }
 
@@ -116,7 +124,15 @@ private fun DrawScope.drawPupils(
     animState: TamagotchiAnimatedState
 ) {
     val pupilAlpha = min(1f, animState.eyeOpenness)
-    val pupilOffset = animState.pupilOffset
+    // Combine touch-based pupil offset with gyro-based offset
+    // Touch takes priority when finger is on screen
+    val touchOffset = animState.pupilOffset
+    val gyroOffset = animState.gyroPupilOffset
+    val pupilOffset = if (animState.state.fingerPosition != null) {
+        touchOffset
+    } else {
+        Offset(touchOffset.x + gyroOffset.x, touchOffset.y + gyroOffset.y)
+    }
     val shineRadius = TamagotchiConfig.eyeShineRadius.toPx() * animState.touchScale
     val shineOffset = TamagotchiConfig.eyeShineOffset.toPx()
 
