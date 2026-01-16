@@ -44,7 +44,7 @@ router.get('/search', async (req: AuthRequest, res: Response): Promise<void> => 
 router.get('/locations', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const users = await User.find({ 'location.lat': { $exists: true } })
-      .select('username displayName isOnline location appVersion status statusMessage statusExpiresAt isTracking trackingExpiresAt currentTrackId')
+      .select('username displayName isOnline location appVersion lastClient status statusMessage statusExpiresAt isTracking trackingExpiresAt currentTrackId')
       .sort({ 'location.updatedAt': -1 });
 
     const now = new Date();

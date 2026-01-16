@@ -25,6 +25,7 @@ data class UserWithLocation(
     val isOnline: Boolean,
     val location: UserLocation?,
     val appVersion: AppVersion?,
+    val lastClient: String? = null,  // "desktop" or "android"
     val status: String = "available",
     val statusMessage: String? = null,
     val statusExpiresAt: String? = null,
