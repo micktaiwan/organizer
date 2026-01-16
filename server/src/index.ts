@@ -10,6 +10,7 @@ import { authRoutes, usersRoutes, contactsRoutes, messagesRoutes, roomsRoutes, a
 import uploadRoutes from './routes/upload.js';
 import mcpRoutes from './mcp/index.js';
 import mcpAdminRoutes from './routes/mcp-admin.js';
+import agentRoutes from './routes/agent.js';
 import { Room, User } from './models/index.js';
 
 const app = express();
@@ -42,6 +43,7 @@ app.use('/notes', notesRoutes);
 app.use('/labels', labelsRoutes);
 app.use('/mcp', mcpRoutes);
 app.use('/mcp-admin', mcpAdminRoutes);
+app.use('/agent', agentRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {

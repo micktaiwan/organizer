@@ -3,6 +3,11 @@ package com.organizer.chat.ui.screens.tamagotchi.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.organizer.chat.ui.theme.CharcoalDark
 import kotlinx.coroutines.delay
+import kotlin.math.sin
 
 /**
  * TEMPORARY: Static list of thoughts for MVP testing.
@@ -66,11 +72,14 @@ fun ThoughtBubble(
     modifier: Modifier = Modifier,
     forcedThought: String? = null,
     thoughtKey: Int = 0,
-    onThoughtShown: () -> Unit = {}
+    isThinking: Boolean = false,
+    onThoughtShown: () -> Unit = {},
+    onThoughtDismissed: () -> Unit = {}
 ) {
     var currentThought by remember { mutableStateOf<String?>(null) }
     var isVisible by remember { mutableStateOf(false) }
     var lastProcessedKey by remember { mutableStateOf(-1) }
+    var isShowingForcedThought by remember { mutableStateOf(false) }
     val textMeasurer = rememberTextMeasurer()
 
     val textStyle = TextStyle(
@@ -80,9 +89,21 @@ fun ThoughtBubble(
         textAlign = TextAlign.Center
     )
 
+    // Animation for thinking dots
+    val infiniteTransition = rememberInfiniteTransition(label = "thinking")
+    val thinkingProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "thinkingDots"
+    )
+
     // Animation scale for bubble appearance
     val bubbleScale by animateFloatAsState(
-        targetValue = if (isVisible) 1f else 0f,
+        targetValue = if (isVisible || isThinking) 1f else 0f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
@@ -90,10 +111,24 @@ fun ThoughtBubble(
         label = "bubbleScale"
     )
 
-    // Handle forced thought (from tap) - only process new keys
-    LaunchedEffect(thoughtKey) {
-        if (forcedThought != null && thoughtKey != lastProcessedKey) {
+    // Handle thinking state changes
+    LaunchedEffect(isThinking) {
+        if (isThinking) {
+            // Starting to think - clear any existing thought
+            isShowingForcedThought = true // Block random thoughts
+            currentThought = null
+            isVisible = false
+        }
+        // Note: when isThinking becomes false, we wait for thoughtKey to change
+    }
+
+    // Handle forced thought (from tap or API response)
+    // Use both thoughtKey AND isThinking as keys to catch the transition
+    LaunchedEffect(thoughtKey, isThinking) {
+        // Show thought when: we have a thought, it's new, and we're not thinking
+        if (forcedThought != null && thoughtKey != lastProcessedKey && !isThinking) {
             lastProcessedKey = thoughtKey
+            isShowingForcedThought = true // Block random thoughts
             currentThought = forcedThought
             isVisible = true
             onThoughtShown()
@@ -101,6 +136,8 @@ fun ThoughtBubble(
             isVisible = false
             delay(400) // Wait for exit animation
             currentThought = null
+            isShowingForcedThought = false // Allow random thoughts again
+            onThoughtDismissed() // Reset expression after bubble disappears
         }
     }
 
@@ -109,14 +146,19 @@ fun ThoughtBubble(
         while (true) {
             delay((ThoughtBubbleConfig.intervalMinMs..ThoughtBubbleConfig.intervalMaxMs).random())
 
-            // Don't interrupt an existing thought
-            if (currentThought == null && !isVisible) {
+            // Don't interrupt forced thoughts, existing thoughts, or thinking state
+            if (!isShowingForcedThought && currentThought == null && !isVisible && !isThinking) {
                 currentThought = temporaryThoughts.random()
                 isVisible = true
                 delay(ThoughtBubbleConfig.displayDurationMs)
-                isVisible = false
-                delay(400)
-                currentThought = null
+                // Check again before hiding - a forced thought might have started
+                if (!isShowingForcedThought) {
+                    isVisible = false
+                    delay(400)
+                    if (!isShowingForcedThought) {
+                        currentThought = null
+                    }
+                }
             }
         }
     }
@@ -124,7 +166,47 @@ fun ThoughtBubble(
     Box(modifier = modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val thought = currentThought
-            if (bubbleScale > 0.01f && thought != null) {
+            val showThinking = isThinking && bubbleScale > 0.01f
+            val showThought = bubbleScale > 0.01f && thought != null && !isThinking
+
+            if (showThinking) {
+                // Draw thinking bubble with animated dots
+                val creatureCenterX = size.width / 2
+                val creatureCenterY = size.height / 2
+
+                val bubbleWidth = 80.dp.toPx()
+                val bubbleHeight = 50.dp.toPx()
+                val bubbleX = creatureCenterX
+                val bubbleY = creatureCenterY - 180.dp.toPx()
+
+                // Draw connecting dots
+                drawThoughtDots(
+                    startX = creatureCenterX + 30.dp.toPx(),
+                    startY = creatureCenterY - 85.dp.toPx(),
+                    endX = bubbleX,
+                    endY = bubbleY + bubbleHeight / 2 * bubbleScale,
+                    scale = bubbleScale
+                )
+
+                // Draw cloud bubble
+                drawDynamicCloudBubble(
+                    centerX = bubbleX,
+                    centerY = bubbleY,
+                    width = bubbleWidth,
+                    height = bubbleHeight,
+                    scale = bubbleScale
+                )
+
+                // Draw animated thinking dots
+                if (bubbleScale > 0.5f) {
+                    drawThinkingDots(
+                        centerX = bubbleX,
+                        centerY = bubbleY,
+                        progress = thinkingProgress,
+                        alpha = (bubbleScale - 0.5f) * 2f
+                    )
+                }
+            } else if (showThought) {
                 val creatureCenterX = size.width / 2
                 val creatureCenterY = size.height / 2
 
@@ -253,6 +335,36 @@ private fun DrawScope.drawDynamicCloudBubble(
             color = Color.White,
             radius = puffRadius,
             center = Offset(centerX + offset.x, centerY + offset.y)
+        )
+    }
+}
+
+/**
+ * Draw animated thinking dots (three dots that bounce sequentially)
+ */
+private fun DrawScope.drawThinkingDots(
+    centerX: Float,
+    centerY: Float,
+    progress: Float,
+    alpha: Float
+) {
+    val dotRadius = 5.dp.toPx()
+    val spacing = 14.dp.toPx()
+    val bounceHeight = 6.dp.toPx()
+
+    for (i in 0..2) {
+        // Each dot bounces at a different phase
+        val phase = (progress + i * 0.33f) % 1f
+        val bounce = sin(phase * Math.PI.toFloat() * 2) * bounceHeight
+        val dotAlpha = if (phase < 0.5f) alpha else alpha * 0.5f
+
+        drawCircle(
+            color = CharcoalDark.copy(alpha = dotAlpha),
+            radius = dotRadius,
+            center = Offset(
+                centerX + (i - 1) * spacing,
+                centerY - bounce.coerceAtLeast(0f)
+            )
         )
     }
 }

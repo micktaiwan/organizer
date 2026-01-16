@@ -25,7 +25,7 @@ fun DrawScope.drawCreature(animState: TamagotchiAnimatedState) {
     rotate(degrees = animState.bodyRotation, pivot = center) {
         drawBody(center, scale)
         drawEyes(center, scale, animState)
-        drawMouth(center, scale, animState.mouthOpenness)
+        drawMouth(center, scale, animState.mouthOpenness, animState.smileAmount)
         drawBlush(center, scale, animState.mouthOpenness)
     }
     drawFingerCursor(animState.state.fingerPosition)
@@ -170,15 +170,16 @@ private fun DrawScope.drawPupils(
 
 /**
  * Draw mouth - closed smile or open oval
+ * smileAmount: -1 = sad (frown), 0 = neutral, 1 = smile, 2 = big smile
  */
-private fun DrawScope.drawMouth(center: Offset, scale: Float, mouthOpenness: Float) {
+private fun DrawScope.drawMouth(center: Offset, scale: Float, mouthOpenness: Float, smileAmount: Float) {
     val mouthY = center.y + TamagotchiConfig.mouthOffsetY.toPx() * scale
     val mouthWidth = TamagotchiConfig.mouthWidth.toPx() * scale
     val mouthHeight = TamagotchiConfig.mouthClosedHeight.toPx() +
             (TamagotchiConfig.mouthOpenHeight.toPx() * mouthOpenness)
 
     if (mouthOpenness > 0.1f) {
-        // Open mouth
+        // Open mouth (surprised, laughing)
         drawOval(
             color = TamagotchiConfig.pupilColor.copy(alpha = 0.7f),
             topLeft = Offset(center.x - mouthWidth / 2, mouthY - mouthHeight / 2),
@@ -194,15 +195,34 @@ private fun DrawScope.drawMouth(center: Offset, scale: Float, mouthOpenness: Flo
             )
         }
     } else {
-        // Closed smile
-        drawArc(
-            color = TamagotchiConfig.pupilColor.copy(alpha = 0.5f),
-            startAngle = 20f,
-            sweepAngle = 140f,
-            useCenter = false,
-            topLeft = Offset(center.x - mouthWidth / 2, mouthY - 10.dp.toPx()),
-            size = Size(mouthWidth, 20.dp.toPx())
-        )
+        // Closed mouth - shape depends on smileAmount
+        val baseArcHeight = 20.dp.toPx() * scale
+        val arcHeight = baseArcHeight * smileAmount.coerceIn(0.5f, 2f)
+
+        if (smileAmount < 0) {
+            // Sad - frown (inverted arc)
+            drawArc(
+                color = TamagotchiConfig.pupilColor.copy(alpha = 0.5f),
+                startAngle = 200f,
+                sweepAngle = 140f,
+                useCenter = false,
+                topLeft = Offset(center.x - mouthWidth / 2, mouthY - baseArcHeight / 2),
+                size = Size(mouthWidth, baseArcHeight * (-smileAmount).coerceIn(0.5f, 1.5f))
+            )
+        } else {
+            // Happy/neutral - smile arc
+            val sweepAngle = 100f + (smileAmount * 30f).coerceIn(0f, 60f)  // 100° to 160°
+            val startAngle = (180f - sweepAngle) / 2  // Center the arc
+
+            drawArc(
+                color = TamagotchiConfig.pupilColor.copy(alpha = 0.5f),
+                startAngle = startAngle,
+                sweepAngle = sweepAngle,
+                useCenter = false,
+                topLeft = Offset(center.x - mouthWidth / 2, mouthY - arcHeight / 2),
+                size = Size(mouthWidth, arcHeight)
+            )
+        }
     }
 }
 

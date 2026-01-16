@@ -20,6 +20,7 @@ public/uploads/images/
 
 # Credentials
 .credentials
+agent-config.json
 
 # MacOS
 .DS_Store

@@ -126,14 +126,14 @@ Cycle :
 
 ## Roadmap
 
-### Phase 0 : Tamagotchi UI (MVP graphique)
+### Phase 0 : Tamagotchi UI (MVP graphique) ✅
 
 **Objectif** : Valider le concept visuel, pas de backend.
 
-- [ ] Canvas animé dans un nouvel onglet Android
-- [ ] Réponse au toucher (animations)
-- [ ] Design de la créature
-- [ ] Aucun LLM, aucun vital, juste du fun visuel
+- [x] Canvas animé dans un nouvel onglet Android
+- [x] Réponse au toucher (animations)
+- [x] Design de la créature
+- [x] Aucun LLM, aucun vital, juste du fun visuel
 
 ### Phase 1 : Le cerveau qui écoute
 
@@ -142,13 +142,25 @@ Cycle :
 - [ ] API pour requêter la mémoire
 - [ ] Test : voir ce que l'agent a "entendu"
 
-### Phase 2 : Premier dialogue
+### Phase 2 : Premier dialogue ✅
 
-- [ ] Intégrer Claude Agent SDK
-- [ ] System prompt initial (conscience naissante)
-- [ ] RAG sur Qdrant pendant le dialogue
-- [ ] UI de chat dans l'onglet Tamagotchi
-- [ ] Première vraie conversation
+- [x] Intégrer Claude Agent SDK (worker.mjs + service.ts)
+- [x] System prompt initial (conscience naissante)
+- [ ] RAG sur Qdrant pendant le dialogue (Phase 1 nécessaire)
+- [x] UI de chat dans l'onglet Tamagotchi (TextField + ThoughtBubble)
+- [x] Première vraie conversation
+
+**Architecture implémentée :**
+```
+Android (TextField) → POST /agent/ask → AgentService
+                                              ↓
+                                    spawn worker.mjs
+                                              ↓
+                                    Claude Agent SDK
+                                    (Sonnet 4.5)
+                                              ↓
+                                    ThoughtBubble
+```
 
 ### Phase 3 : Vitals et personnalité
 

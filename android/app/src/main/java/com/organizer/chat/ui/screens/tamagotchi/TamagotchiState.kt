@@ -9,6 +9,29 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
+ * Parameters for facial expressions
+ */
+data class ExpressionParams(
+    val eyeOpenness: Float,
+    val mouthOpenness: Float,
+    val smileAmount: Float = 1f  // 0 = neutral, 1 = normal smile, 2 = big smile
+)
+
+/**
+ * Map expression name to facial parameters
+ */
+fun String.toExpressionParams(): ExpressionParams = when (this) {
+    "happy" -> ExpressionParams(1.0f, 0.0f, 2f)      // Eyes open, big closed smile
+    "laughing" -> ExpressionParams(0.3f, 0.8f, 2f)   // Squinted eyes, open laughing mouth
+    "surprised" -> ExpressionParams(1.0f, 0.7f, 0f)  // Wide eyes, "O" mouth
+    "sad" -> ExpressionParams(0.7f, 0.0f, -1f)       // Half-closed eyes, frown
+    "sleepy" -> ExpressionParams(0.2f, 0.0f, 0.5f)   // Nearly closed eyes
+    "curious" -> ExpressionParams(1.0f, 0.0f, 1.2f)  // Open eyes, slight smile
+    "thinking" -> ExpressionParams(0.5f, 0.0f, 0.5f) // Half-closed eyes, neutral
+    else -> ExpressionParams(1.0f, 0.0f, 1f)         // neutral - normal smile
+}
+
+/**
  * State holder for Tamagotchi animations and interactions
  */
 class TamagotchiState {
@@ -174,6 +197,7 @@ data class TamagotchiAnimatedState(
     val touchScale: Float,
     val mouthOpenness: Float,
     val eyeOpenness: Float,
+    val smileAmount: Float = 1f,       // Smile curve: -1 = sad, 0 = neutral, 1 = smile, 2 = big smile
     val pupilOffset: Offset,
     val tiltOffset: Offset = Offset.Zero,
     val isShaking: Boolean = false,
@@ -186,7 +210,8 @@ fun rememberTamagotchiAnimatedState(
     roll: Float = 0f,      // Tilt left/right in degrees (-180 to +180)
     pitch: Float = 0f,     // Tilt forward/back in degrees (-90 to +90)
     gyroZ: Float = 0f,     // Gyroscope Z rotation speed (rad/s) for eye tracking
-    isShaking: Boolean = false
+    isShaking: Boolean = false,
+    expression: String = "neutral"  // Current facial expression
 ): TamagotchiAnimatedState {
     val state = remember { TamagotchiState() }
 
@@ -216,9 +241,16 @@ fun rememberTamagotchiAnimatedState(
         label = "touchScale"
     )
 
-    // Mouth animation (also open when shaking)
+    // Expression parameters (from API response or thinking state)
+    val expressionParams = remember(expression) { expression.toExpressionParams() }
+
+    // Mouth animation - expression takes priority over touch/shake
     val mouthOpenness by animateFloatAsState(
-        targetValue = if (state.isTouched || isShaking) 1f else 0f,
+        targetValue = when {
+            expression != "neutral" -> expressionParams.mouthOpenness
+            state.isTouched || isShaking -> 1f
+            else -> 0f
+        },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
@@ -226,11 +258,29 @@ fun rememberTamagotchiAnimatedState(
         label = "mouthOpenness"
     )
 
-    // Eye blink animation
+    // Eye animation - expression takes priority, then blink
     val eyeOpenness by animateFloatAsState(
-        targetValue = if (state.isBlinking) 0.1f else 1f,
+        targetValue = when {
+            state.isBlinking -> 0.1f
+            expression != "neutral" -> expressionParams.eyeOpenness
+            else -> 1f
+        },
         animationSpec = tween(100),
         label = "eyeOpenness"
+    )
+
+    // Smile amount animation - controls smile curve
+    val smileAmount by animateFloatAsState(
+        targetValue = when {
+            expression != "neutral" -> expressionParams.smileAmount
+            state.isTouched || isShaking -> 2f  // Big smile when touched
+            else -> 1f  // Normal smile
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "smileAmount"
     )
 
     // Pupil follow animation
@@ -322,6 +372,7 @@ fun rememberTamagotchiAnimatedState(
         touchScale = touchScale,
         mouthOpenness = mouthOpenness,
         eyeOpenness = eyeOpenness,
+        smileAmount = smileAmount,
         pupilOffset = Offset(pupilOffsetX, pupilOffsetY),
         tiltOffset = Offset(animatedTiltX, animatedTiltY),
         isShaking = isShaking,
