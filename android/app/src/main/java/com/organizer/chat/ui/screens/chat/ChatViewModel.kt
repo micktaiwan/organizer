@@ -302,6 +302,7 @@ class ChatViewModel(
                             status = "sent",
                             readBy = emptyList(),
                             reactions = emptyList(),
+                            clientSource = event.clientSource,
                             createdAt = Instant.now().toString()
                         )
 

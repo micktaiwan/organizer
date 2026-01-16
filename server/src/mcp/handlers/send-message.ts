@@ -119,6 +119,7 @@ export async function sendMessageHandler(
       content: content.trim(),
       status: 'sent',
       readBy: [],
+      clientSource: 'api',
     });
 
     await message.save();

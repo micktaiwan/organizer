@@ -16,6 +16,7 @@ data class Message(
     val status: String = "sent",  // "sent", "delivered", "read"
     val readBy: List<String> = emptyList(),
     val reactions: List<Reaction> = emptyList(),
+    val clientSource: String? = null,  // "desktop", "android", "api"
     val createdAt: String,
     val updatedAt: String? = null
 )
@@ -42,7 +43,8 @@ data class MessagesResponse(
 data class SendMessageRequest(
     val roomId: String,
     val type: String = "text",
-    val content: String
+    val content: String,
+    val clientSource: String = "android"
 )
 
 data class MessageResponse(

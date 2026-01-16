@@ -158,7 +158,7 @@ router.post('/image', imageUpload.single('image'), async (req: AuthRequest, res:
       return;
     }
 
-    const { roomId, caption } = req.body;
+    const { roomId, caption, clientSource } = req.body;
 
     if (!roomId) {
       res.status(400).json({ error: 'roomId est requis' });
@@ -202,7 +202,8 @@ router.post('/image', imageUpload.single('image'), async (req: AuthRequest, res:
       content: urlPath, // Store relative path
       caption: caption || undefined,
       status: 'sent',
-      readBy: [req.userId]
+      readBy: [req.userId],
+      clientSource: clientSource || undefined,
     });
 
     // Populate sender info
@@ -227,7 +228,7 @@ router.post('/file', fileUpload.single('file'), async (req: AuthRequest, res: Re
       return;
     }
 
-    const { roomId, caption } = req.body;
+    const { roomId, caption, clientSource } = req.body;
 
     if (!roomId) {
       res.status(400).json({ error: 'roomId est requis' });
@@ -265,7 +266,8 @@ router.post('/file', fileUpload.single('file'), async (req: AuthRequest, res: Re
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
       status: 'sent',
-      readBy: [req.userId]
+      readBy: [req.userId],
+      clientSource: clientSource || undefined,
     });
 
     // Populate sender info

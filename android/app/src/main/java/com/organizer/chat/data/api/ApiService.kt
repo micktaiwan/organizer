@@ -59,7 +59,8 @@ interface ApiService {
     suspend fun uploadImageMessage(
         @Part image: MultipartBody.Part,
         @Part("roomId") roomId: RequestBody,
-        @Part("caption") caption: RequestBody?
+        @Part("caption") caption: RequestBody?,
+        @Part("clientSource") clientSource: RequestBody
     ): MessageResponse
 
     @Multipart
@@ -67,7 +68,8 @@ interface ApiService {
     suspend fun uploadFileMessage(
         @Part file: MultipartBody.Part,
         @Part("roomId") roomId: RequestBody,
-        @Part("caption") caption: RequestBody?
+        @Part("caption") caption: RequestBody?,
+        @Part("clientSource") clientSource: RequestBody
     ): MessageResponse
 
     @PATCH("messages/{messageId}/read")

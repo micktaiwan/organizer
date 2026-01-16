@@ -573,6 +573,13 @@ button.copied {
   white-space: nowrap;
 }
 
+.client-icon {
+  margin-left: 4px;
+  opacity: 0.5;
+  vertical-align: middle;
+  display: inline;
+}
+
 /* Message footer - combines timestamp, reactions, delete on one line */
 .message-footer {
   display: flex;

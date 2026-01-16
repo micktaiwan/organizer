@@ -143,6 +143,7 @@ interface Message {
   status: 'sent' | 'delivered' | 'read';
   readBy: string[];
   reactions?: Reaction[];
+  clientSource?: 'desktop' | 'android' | 'api';
   createdAt: string;
 }
 
@@ -344,6 +345,7 @@ class ApiService {
       const formData = new FormData();
       formData.append('roomId', roomId);
       formData.append('image', imageBlob, 'image.jpg');
+      formData.append('clientSource', 'desktop');
       if (caption) {
         formData.append('caption', caption);
       }
@@ -354,7 +356,7 @@ class ApiService {
     const content = audio || text || '';
     return this.request<{ message: Message }>('/messages', {
       method: 'POST',
-      body: JSON.stringify({ roomId, type, content }),
+      body: JSON.stringify({ roomId, type, content, clientSource: 'desktop' }),
     });
   }
 
@@ -362,6 +364,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('roomId', roomId);
     formData.append('file', file, file.name);
+    formData.append('clientSource', 'desktop');
     if (caption) {
       formData.append('caption', caption);
     }

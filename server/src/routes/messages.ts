@@ -14,6 +14,7 @@ const sendMessageSchema = z.object({
   roomId: z.string(),
   type: z.enum(['text', 'audio', 'system']).default('text'),
   content: z.string().min(1),
+  clientSource: z.enum(['desktop', 'android', 'api']).optional(),
 });
 
 // POST /messages - Send message to room
@@ -62,6 +63,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       content: data.content,
       status: 'sent',
       readBy: [],
+      clientSource: data.clientSource,
     });
 
     await message.save();

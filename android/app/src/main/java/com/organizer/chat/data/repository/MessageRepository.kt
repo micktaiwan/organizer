@@ -69,8 +69,9 @@ class MessageRepository {
             val imagePart = MultipartBody.Part.createFormData("image", imageFile.name, requestBody)
             val roomIdPart = roomId.toRequestBody("text/plain".toMediaTypeOrNull())
             val captionPart = caption?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val clientSourcePart = "android".toRequestBody("text/plain".toMediaTypeOrNull())
 
-            val response = api.uploadImageMessage(imagePart, roomIdPart, captionPart)
+            val response = api.uploadImageMessage(imagePart, roomIdPart, captionPart, clientSourcePart)
             Result.success(response.message)
         } catch (e: Exception) {
             Result.failure(e)
@@ -83,8 +84,9 @@ class MessageRepository {
             val filePart = MultipartBody.Part.createFormData("file", file.name, requestBody)
             val roomIdPart = roomId.toRequestBody("text/plain".toMediaTypeOrNull())
             val captionPart = caption?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val clientSourcePart = "android".toRequestBody("text/plain".toMediaTypeOrNull())
 
-            val response = api.uploadFileMessage(filePart, roomIdPart, captionPart)
+            val response = api.uploadFileMessage(filePart, roomIdPart, captionPart, clientSourcePart)
             Result.success(response.message)
         } catch (e: Exception) {
             Result.failure(e)

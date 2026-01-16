@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText } from "lucide-react";
+import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText, Monitor, Smartphone, Bot } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji, UserStatus } from "../../types";
 import { formatMessageTimestamp } from "../../utils/dateFormat";
@@ -331,6 +331,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               <span className="read-status"> ✓✓ Lu</span>
             )}
             {groupStatus === "failed" && " ✗"}
+            {lastMsg.clientSource === 'desktop' && <Monitor size={12} className="client-icon" />}
+            {lastMsg.clientSource === 'android' && <Smartphone size={12} className="client-icon" />}
+            {lastMsg.clientSource === 'api' && <Bot size={12} className="client-icon" />}
           </span>
           {aggregatedReactions.map((r) => (
             <button

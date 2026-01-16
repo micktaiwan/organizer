@@ -75,6 +75,9 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.CircularProgressIndicator
 import com.organizer.chat.util.ImageDownloader
 import androidx.compose.ui.text.style.TextAlign
@@ -245,6 +248,19 @@ fun MessageBubble(
                                 status = groupStatus,
                                 readBy = lastMsg.readBy,
                                 roomMemberCount = roomMemberCount
+                            )
+                        }
+                        // Client source icon
+                        lastMsg.clientSource?.let { source ->
+                            Icon(
+                                imageVector = when (source) {
+                                    "desktop" -> Icons.Default.Computer
+                                    "android" -> Icons.Default.PhoneAndroid
+                                    else -> Icons.Default.SmartToy
+                                },
+                                contentDescription = source,
+                                modifier = Modifier.size(12.dp),
+                                tint = MessageSecondaryColor.copy(alpha = 0.5f)
                             )
                         }
                     }
