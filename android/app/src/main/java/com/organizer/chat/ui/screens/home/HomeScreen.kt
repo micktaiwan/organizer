@@ -18,13 +18,15 @@ import com.organizer.chat.ui.screens.users.UsersScreen
 import com.organizer.chat.ui.screens.users.UsersViewModel
 import com.organizer.chat.ui.screens.notes.NotesScreen
 import com.organizer.chat.ui.screens.rooms.RoomsContent
+import com.organizer.chat.ui.screens.tamagotchi.TamagotchiScreen
 import com.organizer.chat.util.AppPreferences
 import com.organizer.chat.util.TokenManager
 
 enum class HomeTab {
     CONVERSATIONS,
     NOTES,
-    USERS
+    USERS,
+    TAMAGOTCHI
 }
 
 @Composable
@@ -93,6 +95,17 @@ fun HomeScreen(
                     },
                     label = { Text("Users") }
                 )
+                NavigationBarItem(
+                    selected = selectedTab == HomeTab.TAMAGOTCHI,
+                    onClick = { selectedTabIndex = HomeTab.TAMAGOTCHI.ordinal },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Pets,
+                            contentDescription = "Pet"
+                        )
+                    },
+                    label = { Text("Pet") }
+                )
             }
         }
     ) { paddingValues ->
@@ -130,6 +143,9 @@ fun HomeScreen(
                         onSettingsClick = onSettingsClick,
                         onMapClick = onMapClick
                     )
+                }
+                HomeTab.TAMAGOTCHI -> {
+                    TamagotchiScreen()
                 }
             }
         }
