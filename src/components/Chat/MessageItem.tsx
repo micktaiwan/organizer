@@ -4,6 +4,7 @@ import { Avatar } from "../ui/Avatar";
 import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji, UserStatus } from "../../types";
 import { formatMessageTimestamp } from "../../utils/dateFormat";
 import { getApiBaseUrl } from "../../services/api";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 interface ReactionCount {
   emoji: ReactionEmoji;
@@ -64,6 +65,51 @@ const downloadFile = async (url: string, filename: string) => {
   } catch (error) {
     console.error('Download failed:', error);
   }
+};
+
+// URL regex pattern
+const URL_REGEX = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g;
+
+// Render text with clickable links
+const renderTextWithLinks = (text: string): React.ReactNode[] => {
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  // Reset regex state
+  URL_REGEX.lastIndex = 0;
+
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    // Add text before the URL
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    // Add the clickable URL
+    const url = match[0];
+    parts.push(
+      <a
+        key={`link-${match.index}`}
+        href={url}
+        className="message-link"
+        onClick={(e) => {
+          e.preventDefault();
+          openUrl(url).catch(console.error);
+        }}
+      >
+        {url}
+      </a>
+    );
+
+    lastIndex = URL_REGEX.lastIndex;
+  }
+
+  // Add remaining text after last URL
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
 };
 
 export const MessageItem: React.FC<MessageItemProps> = ({
@@ -268,7 +314,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               {msg.caption && msg.type === 'file' && <span className="file-caption">{msg.caption}</span>}
               {msg.text && (
                 <>
-                  <span>{msg.text}</span>
+                  <span>{renderTextWithLinks(msg.text)}</span>
                   {idx < messages.length - 1 && <br />}
                 </>
               )}
