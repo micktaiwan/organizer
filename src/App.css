@@ -1169,8 +1169,16 @@ button.copied {
 }
 
 /* Read receipts */
-.read-status {
-  color: #007aff;
+.sent-icon {
+  color: #888;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.read-icon {
+  color: #4CAF50;
+  margin-left: 4px;
+  vertical-align: middle;
 }
 
 /* Audio messages */

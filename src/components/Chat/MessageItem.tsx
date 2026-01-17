@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText, Monitor, Smartphone, Bot } from "lucide-react";
+import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText, Monitor, Smartphone, Bot, CheckCircle, Check } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji, UserStatus } from "../../types";
 import { formatMessageTimestamp } from "../../utils/dateFormat";
@@ -329,10 +329,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           <span className="timestamp">
             {formatMessageTimestamp(lastMsg.timestamp)}
             {groupStatus === "sending" && " ..."}
-            {groupStatus === "sent" && !isAllRead && " ✓✓"}
-            {isAllRead && (
-              <span className="read-status"> ✓✓ Lu</span>
-            )}
+            {groupStatus === "sent" && !isAllRead && <Check size={12} className="sent-icon" />}
+            {isAllRead && <CheckCircle size={12} className="read-icon" />}
             {groupStatus === "failed" && " ✗"}
             {lastMsg.clientSource === 'desktop' && <Monitor size={12} className="client-icon" />}
             {lastMsg.clientSource === 'android' && <Smartphone size={12} className="client-icon" />}
