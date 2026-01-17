@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import { Types } from 'mongoose';
 import { Room, Message } from '../models/index.js';
+import { indexLiveMessage } from '../memory/live.service.js';
 
 interface MessageEmitData {
   io: Server;
@@ -74,6 +75,21 @@ export async function emitNewMessage({ io, socket, roomId, userId, message }: Me
           unreadCount,
         });
       }
+    }
+
+    // Observer: index Lobby messages for pet's live context (text only, skip media)
+    if (room.isLobby && message.type === 'text' && message.content) {
+      indexLiveMessage({
+        messageId: message._id.toString(),
+        content: message.content,
+        author: sender?.displayName || sender?.username || 'Unknown',
+        authorId: userId,
+        room: room.name,
+        roomId: roomId,
+        timestamp: new Date().toISOString(),
+      }).catch((err) => {
+        console.error('[Live] Failed to index message:', err.message);
+      });
     }
   }
 }

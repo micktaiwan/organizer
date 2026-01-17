@@ -5,7 +5,7 @@ import type { FactMemoryInput, MemoryPayload, MemorySearchOptions, MemorySearchR
 const SIMILARITY_THRESHOLD = 0.5;
 const DEDUP_THRESHOLD = 0.85;
 
-const QDRANT_URL = process.env.QDRANT_URL || 'http://qdrant:6333';
+export const QDRANT_URL = process.env.QDRANT_URL || 'http://qdrant:6333';
 const COLLECTION_NAME = 'organizer_memory';
 
 interface QdrantSearchResponse {
@@ -38,7 +38,7 @@ interface QdrantUpsertResponse {
   time: number;
 }
 
-async function qdrantRequest<T>(path: string, options?: RequestInit): Promise<T> {
+export async function qdrantRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${QDRANT_URL}${path}`, {
     ...options,
     headers: {

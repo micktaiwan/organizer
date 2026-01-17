@@ -40,6 +40,10 @@
   background: #f44336;
 }
 
+.log-status.error {
+  background: #ff9800;
+}
+
 .log-panel-actions {
   display: flex;
   gap: 8px;

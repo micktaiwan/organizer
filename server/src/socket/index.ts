@@ -3,7 +3,6 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { User, Room, Message } from '../models/index.js';
 import { JwtPayload } from '../middleware/auth.js';
-import { emitNewMessage } from '../utils/socketEmit.js';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -101,7 +100,6 @@ export function setupSocket(httpServer: HttpServer): Server {
     const userRooms = await Room.find({ 'members.userId': userId });
     for (const room of userRooms) {
       socket.join(`room:${room._id}`);
-      console.log(`User ${socket.username} joined room: ${room.name}`);
     }
 
     // Préparer les données de statut
@@ -197,30 +195,7 @@ export function setupSocket(httpServer: HttpServer): Server {
       socket.to(`room:${data.roomId}`).emit('typing:stop', { from: userId, roomId: data.roomId });
     });
 
-    // MODIFIED: Notification de nouveau message (broadcast à la room)
-    socket.on('message:notify', async (data: { roomId: string; messageId: string }) => {
-      try {
-        // Fetch message to include content in notification
-        const message = await Message.findById(data.messageId).populate('senderId', 'username displayName status statusMessage');
-
-        if (!message) {
-          console.error(`Message ${data.messageId} not found for notification`);
-          return;
-        }
-
-        await emitNewMessage({
-          io,
-          socket,
-          roomId: data.roomId,
-          userId,
-          message: message as any,
-        });
-      } catch (error) {
-        console.error('Error notifying message:', error);
-      }
-    });
-
-    // MODIFIED: Notification de message lu (broadcast à la room)
+    // Message read notification (broadcast to room)
     socket.on('message:read', (data: { roomId: string; messageIds: string[] }) => {
       socket.to(`room:${data.roomId}`).emit('message:read', {
         from: userId,
@@ -331,13 +306,11 @@ export function setupSocket(httpServer: HttpServer): Server {
     // Subscribe to notes updates
     socket.on('note:subscribe', () => {
       socket.join('notes');
-      console.log(`User ${socket.username} subscribed to notes`);
     });
 
     // Unsubscribe from notes updates
     socket.on('note:unsubscribe', () => {
       socket.leave('notes');
-      console.log(`User ${socket.username} unsubscribed from notes`);
     });
 
     // ===== End Notes Events =====

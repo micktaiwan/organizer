@@ -132,7 +132,7 @@ Cycle :
 | 1 | Le cerveau qui écoute (Qdrant, listeners) | ✅ |
 | 2 | Premier dialogue (Claude Agent SDK, RAG) | ✅ |
 | 1.5 | Mémoire persistante → [memory-architecture.md](memory-architecture.md) | ✅ |
-| 2.5 | Boucle agentique avec tools → [memory-architecture.md](memory-architecture.md) | 🔜 |
+| 2.5 | Boucle agentique avec tools → [memory-architecture.md](memory-architecture.md) | ✅ |
 | 3 | Vitals et personnalité | ⏳ |
 | 4 | Système de capacités | ⏳ |
 | 5 | Boucle agentique autonome | ⏳ |

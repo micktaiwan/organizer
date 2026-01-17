@@ -69,6 +69,23 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 /Users/mickaelfm/projects/perso/organizer/server/send-bot-message.sh <room-name> "message"
 ```
 
+## Desktop (Tauri) - CRITICAL
+
+**Two independent server connections** - do NOT confuse them:
+
+1. **Main app connection** (`AuthContext` + `socketService`)
+   - Always connected to PROD (`51.210.150.25:3001`)
+   - Used for: chat, rooms, notes, user status
+   - Controlled by: `ServerConfigContext.selectedServer`
+
+2. **Pet Debug panel** (`PetDebugScreen` + `LogPanel`)
+   - Independent Local/Prod toggle in the debug UI
+   - Used for: agent testing, server logs viewing
+   - Controlled by: `debugUseLocalServer` state in `App.tsx`
+   - Persisted in: `pet-debug.json` store
+
+When debugging the LogPanel or Pet agent, check `debugUseLocalServer`, NOT `selectedServer`.
+
 ## Android UI - CRITICAL
 
 Dark "Charcoal" theme → default Material3 colors are invisible.

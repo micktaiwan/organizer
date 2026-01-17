@@ -441,9 +441,6 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
             }
           : m
       ));
-
-      // Notify room of new message
-      socketService.notifyMessage(currentRoomId, response.message._id);
     } catch (error) {
       console.error('Failed to send message:', error);
       setMessages(prev => prev.map(m =>
@@ -489,9 +486,6 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
             }
           : m
       ));
-
-      // Notify room of new message
-      socketService.notifyMessage(currentRoomId, response.message._id);
     } catch (error) {
       console.error('Failed to send file:', error);
       setMessages(prev => prev.map(m =>

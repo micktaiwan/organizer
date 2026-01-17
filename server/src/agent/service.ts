@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as readline from 'readline';
 import * as path from 'path';
 import * as fs from 'fs';
-import { getAnthropicApiKey, getOpenAIApiKey } from '../config/agent.js';
+import { getAnthropicApiKey, getOpenAIApiKey, getAgentModel } from '../config/agent.js';
 import { storeFactMemory } from '../memory/index.js';
 import type { FactMemoryInput } from '../memory/index.js';
 import type { Expression } from './types.js';
@@ -78,6 +78,7 @@ export class AgentService {
           ...process.env,
           ANTHROPIC_API_KEY: getAnthropicApiKey(),
           OPENAI_API_KEY: getOpenAIApiKey(),
+          AGENT_MODEL: getAgentModel(),
           QDRANT_URL: process.env.QDRANT_URL || 'http://qdrant:6333',
         },
       });

@@ -4,6 +4,8 @@ import path from 'path';
 interface AgentConfig {
   anthropicApiKey: string;
   openaiApiKey?: string;
+  agentModel?: string;
+  digestModel?: string;
 }
 
 let cachedConfig: AgentConfig | null = null;
@@ -43,4 +45,15 @@ export function getOpenAIApiKey(): string {
     throw new Error('openaiApiKey is required in agent-config.json for embeddings');
   }
   return key;
+}
+
+const DEFAULT_AGENT_MODEL = 'claude-sonnet-4-5';
+const DEFAULT_DIGEST_MODEL = 'claude-sonnet-4-5-20250929';
+
+export function getAgentModel(): string {
+  return getAgentConfig().agentModel || DEFAULT_AGENT_MODEL;
+}
+
+export function getDigestModel(): string {
+  return getAgentConfig().digestModel || DEFAULT_DIGEST_MODEL;
 }
