@@ -1,16 +1,36 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as readline from 'readline';
 import * as path from 'path';
+import * as fs from 'fs';
 import { getAnthropicApiKey } from '../config/agent.js';
+import { searchFacts, storeFactMemory } from '../memory/index.js';
+import type { FactMemoryInput } from '../memory/index.js';
 import type { Expression } from './types.js';
 
-const getWorkerPath = () => path.join(process.cwd(), 'dist', 'agent', 'worker.mjs');
+const isDev = () => {
+  // Check if running with tsx (dev mode) vs compiled (prod mode)
+  const distPath = path.join(process.cwd(), 'dist', 'agent', 'worker.mjs');
+  return !fs.existsSync(distPath);
+};
+
+const getWorkerConfig = () => {
+  if (isDev()) {
+    // Dev mode: worker.mjs is already JS, run it directly
+    const workerPath = path.join(process.cwd(), 'src', 'agent', 'worker.mjs');
+    return { command: 'node', args: [workerPath] };
+  } else {
+    // Prod mode: run compiled JS
+    const workerPath = path.join(process.cwd(), 'dist', 'agent', 'worker.mjs');
+    return { command: 'node', args: [workerPath] };
+  }
+};
 
 interface WorkerMessage {
   type: 'ready' | 'text' | 'done' | 'error' | 'session' | 'pong' | 'reset_done';
   text?: string;
   response?: string;
   expression?: Expression;
+  memories?: FactMemoryInput[];
   message?: string;
   requestId?: string;
   sessionId?: string;
@@ -45,11 +65,11 @@ export class AgentService {
     }
 
     return new Promise((resolve, reject) => {
-      const workerPath = getWorkerPath();
+      const { command, args } = getWorkerConfig();
 
-      console.log('[Agent] Starting worker...');
+      console.log(`[Agent] Starting worker (${isDev() ? 'dev' : 'prod'} mode)...`);
 
-      this.worker = spawn('node', [workerPath], {
+      this.worker = spawn(command, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
@@ -128,6 +148,10 @@ export class AgentService {
       case 'done':
         clearTimeout(pending.timeout);
         this.pendingRequests.delete(msg.requestId);
+        // Store memories asynchronously (don't block response)
+        if (msg.memories && msg.memories.length > 0) {
+          this.storeMemories(msg.memories);
+        }
         pending.resolve({
           response: msg.response || pending.response.trim(),
           expression: msg.expression || pending.expression || 'neutral',
@@ -166,6 +190,25 @@ export class AgentService {
 
     const requestId = `req_${++this.requestCounter}_${Date.now()}`;
 
+    // Search for relevant memories
+    let promptWithMemories = question;
+    try {
+      const memories = await searchFacts(question, 5);
+      if (memories.length > 0) {
+        // Parse the original JSON to inject memories
+        const parsed = JSON.parse(question);
+        parsed.memories = memories.map((m) => ({
+          content: m.payload.content,
+          subjects: m.payload.subjects,
+        }));
+        promptWithMemories = JSON.stringify(parsed);
+        console.log(`[Agent] Injected ${memories.length} memories`);
+      }
+    } catch (error) {
+      // If parsing fails or search fails, just use original question
+      console.warn('[Agent] Memory search failed:', error);
+    }
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(requestId);
@@ -181,7 +224,7 @@ export class AgentService {
       });
 
       console.log(`[Agent] User asked: "${question}"`);
-      this.sendToWorker({ type: 'prompt', prompt: question, requestId });
+      this.sendToWorker({ type: 'prompt', prompt: promptWithMemories, requestId });
     });
   }
 
@@ -192,6 +235,16 @@ export class AgentService {
     this.sendToWorker({ type: 'reset', requestId });
     this.sessionId = null;
     console.log('[Agent] Session reset');
+  }
+
+  private async storeMemories(memories: FactMemoryInput[]): Promise<void> {
+    for (const memory of memories) {
+      try {
+        await storeFactMemory(memory);
+      } catch (error) {
+        console.error('[Agent] Failed to store memory:', error);
+      }
+    }
   }
 }
 

@@ -41,11 +41,15 @@ import com.organizer.chat.ui.screens.tamagotchi.sensors.rememberGyroscopeState
 import com.organizer.chat.ui.screens.tamagotchi.sensors.rememberRotationVectorState
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.Charcoal
+import com.organizer.chat.util.LockScreenOrientation
 
 @Composable
 fun TamagotchiScreen(
     viewModel: TamagotchiViewModel = viewModel()
 ) {
+    // Lock to portrait on this screen
+    LockScreenOrientation()
+
     val uiState by viewModel.uiState.collectAsState()
 
     // Fused rotation sensor for stable orientation

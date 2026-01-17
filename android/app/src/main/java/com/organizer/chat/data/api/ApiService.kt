@@ -217,7 +217,24 @@ interface ApiService {
     // Agent
     @POST("agent/ask")
     suspend fun askAgent(@Body request: AskAgentRequest): AskAgentResponse
+
+    // Files (Gallery)
+    @GET("files")
+    suspend fun getFiles(
+        @Query("limit") limit: Int? = null,
+        @Query("before") before: String? = null,
+        @Query("after") after: String? = null,
+        @Query("type") type: String? = null
+    ): GalleryFilesResponse
+
+    @DELETE("files/{fileId}")
+    suspend fun deleteFile(@Path("fileId") fileId: String): DeleteFileResponse
 }
+
+data class DeleteFileResponse(
+    val success: Boolean,
+    val messageId: String
+)
 
 data class UsersSearchResponse(
     val users: List<User>

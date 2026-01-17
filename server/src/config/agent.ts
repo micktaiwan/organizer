@@ -3,6 +3,7 @@ import path from 'path';
 
 interface AgentConfig {
   anthropicApiKey: string;
+  openaiApiKey?: string;
 }
 
 let cachedConfig: AgentConfig | null = null;
@@ -34,4 +35,12 @@ export function getAgentConfig(): AgentConfig {
 
 export function getAnthropicApiKey(): string {
   return getAgentConfig().anthropicApiKey;
+}
+
+export function getOpenAIApiKey(): string {
+  const key = getAgentConfig().openaiApiKey;
+  if (!key) {
+    throw new Error('openaiApiKey is required in agent-config.json for embeddings');
+  }
+  return key;
 }

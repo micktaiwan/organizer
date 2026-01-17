@@ -211,19 +211,31 @@ fun MessageBubble(
                                 messageId = message.id,
                                 onLongPress = onLongPress
                             )
-                            "image" -> ImageMessageContent(
-                                imageUrl = message.content,
-                                caption = message.caption,
-                                onLongPress = onLongPress
-                            )
-                            "file" -> FileMessageContent(
-                                fileUrl = message.content,
-                                fileName = message.fileName,
-                                fileSize = message.fileSize,
-                                mimeType = message.mimeType,
-                                caption = message.caption,
-                                onLongPress = onLongPress
-                            )
+                            "image" -> {
+                                if (message.fileDeleted) {
+                                    DeletedFileContent(caption = message.caption)
+                                } else {
+                                    ImageMessageContent(
+                                        imageUrl = message.content,
+                                        caption = message.caption,
+                                        onLongPress = onLongPress
+                                    )
+                                }
+                            }
+                            "file" -> {
+                                if (message.fileDeleted) {
+                                    DeletedFileContent(caption = message.caption)
+                                } else {
+                                    FileMessageContent(
+                                        fileUrl = message.content,
+                                        fileName = message.fileName,
+                                        fileSize = message.fileSize,
+                                        mimeType = message.mimeType,
+                                        caption = message.caption,
+                                        onLongPress = onLongPress
+                                    )
+                                }
+                            }
                             else -> {
                                 TextMessageContent(
                                     content = message.content,
@@ -559,6 +571,50 @@ private fun AudioMessageContent(
     }
 }
 
+@Composable
+private fun DeletedFileContent(
+    caption: String?
+) {
+    Column {
+        // Deleted file placeholder
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = CharcoalLight.copy(alpha = 0.5f),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Image,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = Color.Gray
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Fichier supprimé",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    ),
+                    color = Color.Gray
+                )
+            }
+        }
+
+        // Show caption if present
+        if (!caption.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = caption,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MessageTextColor
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ImageMessageContent(
@@ -832,138 +888,6 @@ private fun performImageDownload(context: Context, imageUrl: String) {
                 "Erreur: ${result.message}",
                 Toast.LENGTH_SHORT
             ).show()
-        }
-    }
-}
-
-@Composable
-private fun FullscreenImageDialog(
-    imageUrl: String,
-    onDismiss: () -> Unit,
-    onDownload: () -> Unit
-) {
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onDoubleTap = {
-                            // Double tap to reset zoom or zoom in
-                            if (scale > 1f) {
-                                scale = 1f
-                                offset = Offset.Zero
-                            } else {
-                                scale = 2.5f
-                            }
-                        },
-                        onTap = {
-                            // Single tap to close only if not zoomed
-                            if (scale <= 1f) {
-                                onDismiss()
-                            }
-                        }
-                    )
-                }
-        ) {
-            val imageModifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(1f, 5f)
-                        if (scale > 1f) {
-                            val maxOffset = (scale - 1f) * size.width / 2
-                            offset = Offset(
-                                x = (offset.x + pan.x).coerceIn(-maxOffset, maxOffset),
-                                y = (offset.y + pan.y).coerceIn(-maxOffset, maxOffset)
-                            )
-                        } else {
-                            offset = Offset.Zero
-                        }
-                    }
-                }
-                .graphicsLayer(
-                    scaleX = scale,
-                    scaleY = scale,
-                    translationX = offset.x,
-                    translationY = offset.y
-                )
-
-            if (imageUrl.startsWith("data:")) {
-                // Base64 data URL
-                val base64Data = imageUrl.substringAfter(",")
-                val imageBytes = try {
-                    Base64.decode(base64Data, Base64.DEFAULT)
-                } catch (e: Exception) {
-                    null
-                }
-
-                if (imageBytes != null) {
-                    val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                    if (bitmap != null) {
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = "Image fullscreen",
-                            modifier = imageModifier,
-                            contentScale = ContentScale.Fit
-                        )
-                    }
-                }
-            } else {
-                // HTTP URL
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = "Image fullscreen",
-                    modifier = imageModifier,
-                    contentScale = ContentScale.Fit
-                )
-            }
-
-            // Download button (top-left)
-            IconButton(
-                onClick = onDownload,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp)
-                    .background(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        shape = CircleShape
-                    )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Download,
-                    contentDescription = "Telecharger l'image",
-                    tint = Color.White
-                )
-            }
-
-            // Close button (top-right)
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .background(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        shape = CircleShape
-                    )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color.White
-                )
-            }
         }
     }
 }

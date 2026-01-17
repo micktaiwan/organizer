@@ -11,6 +11,7 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017/organizer
       - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      - QDRANT_URL=http://qdrant:6333
     volumes:
       - uploads_data:/app/public/uploads
       - apk_data:/app/public/apk
@@ -35,6 +36,20 @@ services:
     networks:
       - organizer-network
 
+  qdrant:
+    image: qdrant/qdrant:v1.16.3
+    container_name: organizer-qdrant
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - organizer-network
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__SERVICE__HTTP_PORT=6333
+
 networks:
   organizer-network:
     driver: bridge
@@ -43,3 +58,4 @@ volumes:
   mongodb_data:
   uploads_data:
   apk_data:
+  qdrant_data:

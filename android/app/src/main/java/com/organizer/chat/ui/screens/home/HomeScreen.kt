@@ -19,11 +19,14 @@ import com.organizer.chat.ui.screens.users.UsersViewModel
 import com.organizer.chat.ui.screens.notes.NotesScreen
 import com.organizer.chat.ui.screens.rooms.RoomsContent
 import com.organizer.chat.ui.screens.tamagotchi.TamagotchiScreen
+import com.organizer.chat.ui.screens.gallery.GalleryScreen
+import com.organizer.chat.ui.screens.gallery.GalleryViewModel
 import com.organizer.chat.util.AppPreferences
 import com.organizer.chat.util.TokenManager
 
 enum class HomeTab {
-    CONVERSATIONS,
+    CHATS,
+    GALLERY,
     NOTES,
     USERS,
     TAMAGOTCHI
@@ -48,8 +51,9 @@ fun HomeScreen(
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
     val selectedTab = HomeTab.entries[selectedTabIndex]
 
-    // Create ViewModel at HomeScreen level so it persists across tab switches
+    // Create ViewModels at HomeScreen level so they persist across tab switches
     val usersViewModel = remember { UsersViewModel(context) }
+    val galleryViewModel = remember { GalleryViewModel(context) }
 
     // Initialize socket manager when it becomes available
     LaunchedEffect(chatService?.socketManager) {
@@ -63,15 +67,26 @@ fun HomeScreen(
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
-                    selected = selectedTab == HomeTab.CONVERSATIONS,
-                    onClick = { selectedTabIndex = HomeTab.CONVERSATIONS.ordinal },
+                    selected = selectedTab == HomeTab.CHATS,
+                    onClick = { selectedTabIndex = HomeTab.CHATS.ordinal },
                     icon = {
                         Icon(
                             imageVector = Icons.Default.Chat,
-                            contentDescription = "Conversations"
+                            contentDescription = "Chats"
                         )
                     },
-                    label = { Text("Conversations") }
+                    label = { Text("Chats") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == HomeTab.GALLERY,
+                    onClick = { selectedTabIndex = HomeTab.GALLERY.ordinal },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = "Gallery"
+                        )
+                    },
+                    label = { Text("Gallery") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == HomeTab.NOTES,
@@ -115,7 +130,7 @@ fun HomeScreen(
                 .padding(paddingValues)
         ) {
             when (selectedTab) {
-                HomeTab.CONVERSATIONS -> {
+                HomeTab.CHATS -> {
                     RoomsContent(
                         roomRepository = roomRepository,
                         tokenManager = tokenManager,
@@ -125,6 +140,12 @@ fun HomeScreen(
                         onRoomClick = onRoomClick,
                         onSettingsClick = onSettingsClick,
                         onLogout = onLogout
+                    )
+                }
+                HomeTab.GALLERY -> {
+                    GalleryScreen(
+                        viewModel = galleryViewModel,
+                        onSettingsClick = onSettingsClick
                     )
                 }
                 HomeTab.NOTES -> {

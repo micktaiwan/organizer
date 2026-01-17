@@ -6,7 +6,7 @@ type AuthMode = 'login' | 'register';
 
 export const AuthScreen: React.FC = () => {
   const { login, register, getSavedCredentials } = useAuth();
-  const { selectedServer } = useServerConfig();
+  const { selectedServer, resetConfig } = useServerConfig();
   const [mode, setMode] = useState<AuthMode>('login');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +124,13 @@ export const AuthScreen: React.FC = () => {
   return (
     <main className="container">
       <h1>Organizer Chat</h1>
+
+      <div className="server-indicator" onClick={resetConfig}>
+        <span className="server-label">Serveur:</span>
+        <span className="server-name">{selectedServer?.name || 'Non configuré'}</span>
+        <span className="server-change">Changer</span>
+      </div>
+
       <div className="connection-box auth-box">
         <div className="auth-tabs">
           <button

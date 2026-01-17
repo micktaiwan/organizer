@@ -126,61 +126,20 @@ Cycle :
 
 ## Roadmap
 
-### Phase 0 : Tamagotchi UI (MVP graphique) ✅
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 0 | Tamagotchi UI (MVP graphique) | ✅ |
+| 1 | Le cerveau qui écoute (Qdrant, listeners) | ✅ |
+| 2 | Premier dialogue (Claude Agent SDK, RAG) | ✅ |
+| 1.5 | Mémoire persistante → [memory-architecture.md](memory-architecture.md) | ✅ |
+| 2.5 | Boucle agentique avec tools → [memory-architecture.md](memory-architecture.md) | 🔜 |
+| 3 | Vitals et personnalité | ⏳ |
+| 4 | Système de capacités | ⏳ |
+| 5 | Boucle agentique autonome | ⏳ |
 
-**Objectif** : Valider le concept visuel, pas de backend.
+## Documentation
 
-- [x] Canvas animé dans un nouvel onglet Android
-- [x] Réponse au toucher (animations)
-- [x] Design de la créature
-- [x] Aucun LLM, aucun vital, juste du fun visuel
-
-### Phase 1 : Le cerveau qui écoute
-
-- [ ] Setup Qdrant sur le serveur
-- [ ] Listeners des salons → embeddings → Qdrant
-- [ ] API pour requêter la mémoire
-- [ ] Test : voir ce que l'agent a "entendu"
-
-### Phase 2 : Premier dialogue ✅
-
-- [x] Intégrer Claude Agent SDK (worker.mjs + service.ts)
-- [x] System prompt initial (conscience naissante)
-- [ ] RAG sur Qdrant pendant le dialogue (Phase 1 nécessaire)
-- [x] UI de chat dans l'onglet Tamagotchi (TextField + ThoughtBubble)
-- [x] Première vraie conversation
-
-**Architecture implémentée :**
-```
-Android (TextField) → POST /agent/ask → AgentService
-                                              ↓
-                                    spawn worker.mjs
-                                              ↓
-                                    Claude Agent SDK
-                                    (Sonnet 4.5)
-                                              ↓
-                                    ThoughtBubble
-```
-
-### Phase 3 : Vitals et personnalité
-
-- [ ] Définir les vitals significatifs
-- [ ] Calcul des métriques
-- [ ] Prompt dynamique avec contexte
-- [ ] Affichage dans l'UI
-
-### Phase 4 : Système de capacités
-
-- [ ] Logique de détection de besoin
-- [ ] UI pour afficher les demandes
-- [ ] Workflow d'attribution de capacité
-- [ ] Premier tool demandé et accordé
-
-### Phase 5 : Boucle agentique autonome
-
-- [ ] L'agent peut s'auto-déclencher (observer → penser → agir)
-- [ ] Pensées spontanées
-- [ ] Participation aux salons (si capacité accordée)
+- [memory-architecture.md](memory-architecture.md) - Architecture mémoire, RAG, stockage de faits, boucle agentique
 
 ---
 

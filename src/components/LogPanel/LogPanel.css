@@ -1,0 +1,118 @@
+.log-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1a1a1a;
+  border-left: 1px solid #333;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+}
+
+.log-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #252525;
+  border-bottom: 1px solid #333;
+}
+
+.log-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #888;
+  font-weight: 500;
+}
+
+.log-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #666;
+}
+
+.log-status.connected {
+  background: #4CAF50;
+}
+
+.log-status.disconnected {
+  background: #f44336;
+}
+
+.log-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.log-panel-actions button {
+  padding: 4px 8px;
+  background: #333;
+  border: none;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.log-panel-actions button:hover {
+  background: #444;
+  color: #fff;
+}
+
+.log-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.log-entry {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+  line-height: 1.4;
+}
+
+.log-time {
+  color: #666;
+  flex-shrink: 0;
+}
+
+.log-message {
+  color: #ccc;
+  word-break: break-word;
+}
+
+.log-log .log-message {
+  color: #ccc;
+}
+
+.log-error .log-message {
+  color: #f44336;
+}
+
+.log-warn .log-message {
+  color: #ff9800;
+}
+
+/* Minimized state */
+.log-panel-minimized {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 1000;
+}
+
+.log-panel-minimized:hover {
+  background: #333;
+}

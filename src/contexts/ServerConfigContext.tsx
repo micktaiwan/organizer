@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { load } from '@tauri-apps/plugin-store';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { load, Store } from '@tauri-apps/plugin-store';
 
 const SERVER_CONFIGS_KEY = 'server_configs';
 const SELECTED_SERVER_KEY = 'selected_server';
@@ -34,24 +34,35 @@ export function ServerConfigProvider({ children }: { children: ReactNode }) {
   const [servers, setServers] = useState<ServerConfig[]>([]);
   const [selectedServer, setSelectedServer] = useState<ServerConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const storeRef = useRef<Store | null>(null);
+
+  const getStore = async (): Promise<Store> => {
+    if (!storeRef.current) {
+      storeRef.current = await load('settings.json', { autoSave: false, defaults: {} });
+    }
+    return storeRef.current;
+  };
 
   useEffect(() => {
     const initConfig = async () => {
       try {
-        const store = await load('settings.json', { autoSave: true, defaults: {} });
+        const store = await getStore();
 
         let savedServers = await store.get<ServerConfig[]>(SERVER_CONFIGS_KEY);
         if (!savedServers || savedServers.length === 0) {
           savedServers = DEFAULT_SERVERS;
           await store.set(SERVER_CONFIGS_KEY, savedServers);
+          await store.save();
         }
         setServers(savedServers);
 
         const selectedId = await store.get<string>(SELECTED_SERVER_KEY);
-        if (selectedId) {
-          const server = savedServers.find(s => s.id === selectedId);
-          if (server) {
-            setSelectedServer(server);
+        const server = savedServers.find(s => s.id === (selectedId || 'local'));
+        if (server) {
+          setSelectedServer(server);
+          if (!selectedId) {
+            await store.set(SELECTED_SERVER_KEY, 'local');
+            await store.save();
           }
         }
       } catch (error) {
@@ -75,8 +86,9 @@ export function ServerConfigProvider({ children }: { children: ReactNode }) {
     const updatedServers = [...servers, newServer];
     setServers(updatedServers);
 
-    const store = await load('settings.json', { autoSave: true, defaults: {} });
+    const store = await getStore();
     await store.set(SERVER_CONFIGS_KEY, updatedServers);
+    await store.save();
   };
 
   const updateServer = async (id: string, name: string, url: string) => {
@@ -89,8 +101,9 @@ export function ServerConfigProvider({ children }: { children: ReactNode }) {
       setSelectedServer({ ...selectedServer, name, url: url.replace(/\/$/, '') });
     }
 
-    const store = await load('settings.json', { autoSave: true, defaults: {} });
+    const store = await getStore();
     await store.set(SERVER_CONFIGS_KEY, updatedServers);
+    await store.save();
   };
 
   const deleteServer = async (id: string) => {
@@ -99,13 +112,14 @@ export function ServerConfigProvider({ children }: { children: ReactNode }) {
     const updatedServers = servers.filter(s => s.id !== id);
     setServers(updatedServers);
 
-    const store = await load('settings.json', { autoSave: true, defaults: {} });
+    const store = await getStore();
     await store.set(SERVER_CONFIGS_KEY, updatedServers);
 
     if (selectedServer?.id === id) {
       setSelectedServer(null);
       await store.delete(SELECTED_SERVER_KEY);
     }
+    await store.save();
   };
 
   const selectServer = async (id: string) => {
@@ -114,8 +128,13 @@ export function ServerConfigProvider({ children }: { children: ReactNode }) {
 
     setSelectedServer(server);
 
-    const store = await load('settings.json', { autoSave: true, defaults: {} });
-    await store.set(SELECTED_SERVER_KEY, id);
+    try {
+      const store = await getStore();
+      await store.set(SELECTED_SERVER_KEY, id);
+      await store.save();
+    } catch (error) {
+      console.error('[ServerConfig] Failed to save:', error);
+    }
   };
 
   const testConnection = async (url: string): Promise<boolean> => {
@@ -133,8 +152,9 @@ export function ServerConfigProvider({ children }: { children: ReactNode }) {
 
   const resetConfig = async () => {
     setSelectedServer(null);
-    const store = await load('settings.json', { autoSave: true, defaults: {} });
+    const store = await getStore();
     await store.delete(SELECTED_SERVER_KEY);
+    await store.save();
   };
 
   return (

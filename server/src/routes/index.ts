@@ -7,3 +7,4 @@ export { default as adminRoutes } from './admin.js';
 export { default as apkRoutes } from './apk.js';
 export { default as notesRoutes } from './notes.js';
 export { default as labelsRoutes } from './labels.js';
+export { default as filesRoutes } from './files.js';

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { MessageCircle, StickyNote } from "lucide-react";
+import { MessageCircle, StickyNote, Bug } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { compressImage, blobToDataUrl, isImageFile, formatFileSize } from "./utils/imageCompression";
+import { initNotifications } from "./utils/notifications";
 import { useAuth } from "./contexts/AuthContext";
 import { useServerConfig } from "./contexts/ServerConfigContext";
 import { useUserStatus } from "./contexts/UserStatusContext";
@@ -12,6 +13,7 @@ import { useWebRTCCall } from "./hooks/useWebRTCCall";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder";
 import { useRooms } from "./hooks/useRooms";
 import { useNotes } from "./hooks/useNotes";
+import { useWindowState } from "./hooks/useWindowState";
 import { UserStatus } from "./types";
 import { UpdateNoteRequest } from "./services/api";
 // TODO: Restore Contact-related features in room context
@@ -31,10 +33,16 @@ import { IncomingCallModal } from "./components/Call/IncomingCallModal";
 import { AdminPanel } from "./components/Admin/AdminPanel";
 import { NotesList, NoteEditor, LabelManager } from "./components/Notes";
 import { ConnectionBanner } from "./components/ui/ConnectionBanner";
+import { PetDebugScreen } from "./components/PetDebug";
+import { LogPanel } from "./components/LogPanel";
+import { ErrorIndicator } from "./components/ErrorIndicator";
 
 import "./App.css";
 
 function App() {
+  // Persist and restore window position/size
+  useWindowState();
+
   const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
   const { isLoading: serverLoading, isConfigured, resetConfig, selectedServer } = useServerConfig();
   const [inputMessage, setInputMessage] = useState("");
@@ -55,8 +63,23 @@ function App() {
   // const [newContactInitialName, setNewContactInitialName] = useState("");
   // const [newContactInitialUserId, setNewContactInitialUserId] = useState("");
 
-  // App tabs state
-  const [activeTab, setActiveTab] = useState<'chat' | 'notes'>('chat');
+  // App tabs state - persist last visited tab
+  const [activeTab, setActiveTab] = useState<'chat' | 'notes' | 'pet'>(() => {
+    const saved = localStorage.getItem('organizer-active-tab');
+    if (saved === 'chat' || saved === 'notes' || saved === 'pet') {
+      return saved;
+    }
+    return 'chat';
+  });
+
+  // Persist active tab when it changes
+  useEffect(() => {
+    localStorage.setItem('organizer-active-tab', activeTab);
+  }, [activeTab]);
+
+  // Dev tools state
+  const [showLogPanel, setShowLogPanel] = useState(false);
+  const isLocalServer = selectedServer?.id === 'local';
 
   // Notes view state
   const [notesView, setNotesView] = useState<'list' | 'editor' | 'labels'>('list');
@@ -249,6 +272,9 @@ function App() {
   useEffect(() => {
     const title = import.meta.env.DEV ? "Organizer - Dev mode" : "Organizer";
     getCurrentWindow().setTitle(title);
+
+    // Initialize desktop notifications
+    initNotifications();
 
     // Add welcome message with build info
     const welcomeMessage = {
@@ -450,8 +476,10 @@ function App() {
   }
 
   return (
+    <div className={`app-root ${showLogPanel ? 'with-log-panel' : ''}`}>
     <main className="chat-container">
       <ConnectionBanner />
+      <ErrorIndicator />
 
       {isCompressing && (
         <div className="loading-overlay">
@@ -475,6 +503,13 @@ function App() {
         >
           <StickyNote size={18} />
           <span>Notes</span>
+        </button>
+        <button
+          className={`app-tab ${activeTab === 'pet' ? 'active' : ''}`}
+          onClick={() => setActiveTab('pet')}
+        >
+          <Bug size={18} />
+          <span>Pet</span>
         </button>
       </div>
 
@@ -593,6 +628,16 @@ function App() {
         </div>
       )}
 
+      {/* Pet Debug Tab Content */}
+      {activeTab === 'pet' && (
+        <div className="pet-tab-content">
+          <PetDebugScreen
+            showLogPanel={showLogPanel}
+            onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
+          />
+        </div>
+      )}
+
       {callState === 'incoming' && (
         <IncomingCallModal
           remoteUsername="Appel entrant"
@@ -646,6 +691,10 @@ function App() {
         />
       )}
     </main>
+
+    {/* Dev: Log Panel (connects to local server) */}
+    {showLogPanel && <LogPanel />}
+    </div>
   );
 }
 
