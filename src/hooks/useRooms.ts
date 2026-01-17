@@ -5,6 +5,7 @@ import { Room, Message as ServerMessage, getApiBaseUrl } from '../services/api';
 import { Message, Reaction } from '../types';
 import { api } from '../services/api';
 import { socketService } from '../services/socket';
+import { showMessageNotification } from '../utils/notifications';
 
 // Helper to update tray badge
 const setTrayBadge = async (hasBadge: boolean) => {
@@ -275,6 +276,24 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       unsubUnread();
       unlisten.then(fn => fn());
     };
+  }, [userId]);
+
+  // Show desktop notifications for new messages when window is not focused
+  useEffect(() => {
+    if (!userId) return;
+
+    const unsubNotification = socketService.on('message:new', async (data: any) => {
+      // Don't notify for own messages
+      if (data.from === userId) return;
+
+      // Only notify when window is not focused
+      const isFocused = await getCurrentWindow().isFocused();
+      if (!isFocused && data.fromName && data.preview) {
+        showMessageNotification(data.fromName, data.roomName || 'Chat', data.preview);
+      }
+    });
+
+    return () => unsubNotification();
   }, [userId]);
 
   // Listen for deleted messages in current room

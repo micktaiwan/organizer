@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText, Monitor, Smartphone, Bot, CheckCircle, Check } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
 import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji, UserStatus } from "../../types";
 import { formatMessageTimestamp } from "../../utils/dateFormat";
 import { getApiBaseUrl } from "../../services/api";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
 
 interface ReactionCount {
   emoji: ReactionEmoji;
@@ -49,19 +51,26 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-// Helper to download a file
+// Helper to download a file using Tauri APIs
 const downloadFile = async (url: string, filename: string) => {
   try {
     const response = await fetch(url);
     const blob = await response.blob();
-    const blobUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(blobUrl);
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    // Get file extension for filter
+    const ext = filename.split('.').pop() || 'jpg';
+
+    // Open save dialog
+    const filePath = await save({
+      defaultPath: filename,
+      filters: [{ name: 'Image', extensions: [ext] }]
+    });
+
+    if (filePath) {
+      await writeFile(filePath, uint8Array);
+    }
   } catch (error) {
     console.error('Download failed:', error);
   }
@@ -127,6 +136,18 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | undefined>(undefined);
+
+  // Close fullscreen image on Escape key
+  useEffect(() => {
+    if (!showFullscreenImage) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowFullscreenImage(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showFullscreenImage]);
 
   // First and last message of the group
   if (!messages || messages.length === 0) {

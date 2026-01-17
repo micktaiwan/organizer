@@ -131,6 +131,7 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             // Load saved settings from store
             let (autostart_enabled, minimize_to_tray_enabled) = {

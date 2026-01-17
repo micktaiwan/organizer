@@ -10,6 +10,23 @@ COMPOSE_FILE="docker-compose.prod.yml"
 
 echo "🚀 Déploiement sur $SERVER"
 
+# 0. Vérification de l'espace disque sur le serveur
+echo "💾 Vérification de l'espace disque..."
+AVAILABLE_GB=$(ssh $SERVER "df -BG / | tail -1 | awk '{print \$4}' | sed 's/G//'")
+echo "   Espace disponible: ${AVAILABLE_GB}GB"
+
+if [ "$AVAILABLE_GB" -lt 2 ]; then
+  echo "⚠️  Espace disque faible (<2GB). Nettoyage Docker en cours..."
+  ssh $SERVER "sudo docker system prune -af --volumes"
+  AVAILABLE_GB=$(ssh $SERVER "df -BG / | tail -1 | awk '{print \$4}' | sed 's/G//'")
+  echo "   Espace après nettoyage: ${AVAILABLE_GB}GB"
+
+  if [ "$AVAILABLE_GB" -lt 2 ]; then
+    echo "❌ Toujours moins de 2GB disponibles. Déploiement annulé."
+    exit 1
+  fi
+fi
+
 # 1. Sync des fichiers vers le serveur
 echo "📦 Synchronisation des fichiers..."
 rsync -avz --exclude 'node_modules' --exclude 'dist' --exclude '.env' \

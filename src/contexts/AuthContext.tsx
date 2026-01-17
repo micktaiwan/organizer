@@ -43,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Set API base URL when server changes
+    console.log('[Auth] Setting API URL to:', selectedServer.url);
     setApiBaseUrl(selectedServer.url);
 
     const initAuth = async () => {

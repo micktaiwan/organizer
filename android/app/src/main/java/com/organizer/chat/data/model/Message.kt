@@ -13,6 +13,7 @@ data class Message(
     val fileName: String? = null,  // Original filename for file messages
     val fileSize: Long? = null,  // File size in bytes
     val mimeType: String? = null,  // MIME type (application/pdf, etc.)
+    val fileDeleted: Boolean = false,  // True if the file was soft-deleted
     val status: String = "sent",  // "sent", "delivered", "read"
     val readBy: List<String> = emptyList(),
     val reactions: List<Reaction> = emptyList(),

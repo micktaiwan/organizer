@@ -22,6 +22,7 @@ export interface IMessage extends Document {
   fileName?: string;
   fileSize?: number;
   mimeType?: string;
+  fileDeleted?: boolean;
   status: MessageStatus;
   readBy: Types.ObjectId[];
   reactions: IReaction[];
@@ -67,6 +68,10 @@ const MessageSchema = new Schema<IMessage>(
     mimeType: {
       type: String,
       required: false,
+    },
+    fileDeleted: {
+      type: Boolean,
+      default: false,
     },
     status: {
       type: String,

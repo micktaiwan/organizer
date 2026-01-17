@@ -13,6 +13,39 @@ Working directory may be a subfolder. Use absolute paths for scripts:
 ### Android versioning
 **DO NOT** increment `versionCode`/`versionName` unless explicitly requested for a release.
 
+### Bash commands (macOS)
+
+**Chain commands with `&&` or `;`** - never use newlines to separate commands:
+```bash
+# WRONG - will fail
+command1
+sleep 2
+command2
+
+# CORRECT
+command1 && sleep 2 && command2
+```
+
+**No `timeout` on macOS** - use background process + sleep + kill instead.
+
+**Check dependencies FIRST** - before testing a server, verify its dependencies:
+```bash
+# Server needs MongoDB? Check it first
+lsof -i :27017 || echo "MongoDB not running"
+
+# Server needs another service? Check the port
+lsof -i :3001
+```
+
+**Process detection - use specific paths** to avoid matching wrong processes:
+```bash
+# WRONG - matches client AND server
+ps aux | grep "tsx.*index"
+
+# CORRECT - specific to server path
+ps aux | grep "organizer/server.*tsx"
+```
+
 ## Specific Commands
 
 ```bash

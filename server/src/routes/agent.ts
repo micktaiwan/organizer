@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { agentService } from '../agent/index.js';
+import { getCollectionInfo, listMemories, deleteMemory } from '../memory/index.js';
 
 const router = Router();
 
@@ -69,6 +70,54 @@ router.post('/ask', authMiddleware, async (req: AuthRequest, res: Response): Pro
     }
     console.error('[Agent] Error:', error);
     res.status(500).json({ error: 'Erreur lors de la génération de réponse' });
+  }
+});
+
+router.post('/reset', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    await agentService.resetSession();
+    console.log(`[Agent] Session reset by ${req.user?.username}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Agent] Reset error:', error);
+    res.status(500).json({ error: 'Erreur lors du reset de session' });
+  }
+});
+
+router.get('/memory/info', authMiddleware, async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const info = await getCollectionInfo();
+    res.json(info);
+  } catch (error) {
+    console.error('[Agent] Memory info error:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des infos mémoire' });
+  }
+});
+
+router.get('/memory/list', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = req.query.offset as string | undefined;
+    const result = await listMemories(limit, offset);
+    res.json({
+      memories: result.points,
+      nextOffset: result.nextOffset,
+      count: result.points.length,
+    });
+  } catch (error) {
+    console.error('[Agent] Memory list error:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des mémoires' });
+  }
+});
+
+router.delete('/memory/:id', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    await deleteMemory(id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Agent] Memory delete error:', error);
+    res.status(500).json({ error: 'Erreur lors de la suppression' });
   }
 });
 
