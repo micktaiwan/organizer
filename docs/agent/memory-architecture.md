@@ -206,10 +206,14 @@ Pas nécessaire au début. Si Qdrant rame un jour, on ajoutera. Avec un bon TTL 
 - [x] Embeddings (OpenAI text-embedding-3-small) → `server/src/memory/embedding.service.ts`
 - [x] Memory service base → `server/src/memory/qdrant.service.ts`
   - `indexMemory()`, `searchMemory()`, `deleteMemory()`, `listMemories()`
+  - `storeFactMemory()`, `searchFacts()`, `deleteExpiredMemories()`
+- [x] Live collection (contexte récent) → `server/src/memory/live.service.ts`
+- [x] Digest service (extraction de faits) → `server/src/memory/digest.service.ts`
+- [x] Config agent → `server/src/config/agent.ts` + `server/agent-config.json`
 
 ### À faire
 
-- [ ] Cron cleanup des mémoires expirées
+- [ ] Cron cleanup des mémoires expirées (fonction existe, pas encore schedulé)
 
 ## Architecture technique
 
@@ -240,6 +244,123 @@ Le worker est un process Node.js isolé qui :
 
 ---
 
+## Observation passive (à venir)
+
+Le pet peut observer passivement les conversations (salons, notes) pour enrichir sa mémoire, sans qu'on lui parle directement.
+
+### Problème : latence vs qualité
+
+Un digest journalier filtre bien le bruit mais crée une latence inacceptable :
+- David dit "je pars en Grèce demain" à 10h dans le Lobby
+- À 11h, David parle au pet → le pet ne sait pas encore
+
+### Solution : deux collections Qdrant
+
+```
+Message salon
+     │
+     ▼
+Embedding + insert "live" collection
+     │
+     ├─────── Quand le pet répond ──────┐
+     │                                   ▼
+     │                    search("live", query, limit=10)
+     │                                   │
+     │                                   ▼
+     │                         Injecté dans le prompt
+     │
+     └─────── Toutes les ~6h ───────────┐
+                                         ▼
+                              Digest LLM sur toute la collection
+                                         │
+                                         ▼
+                              Faits importants → "memories" collection
+                                         │
+                                         ▼
+                              Clear "live" collection
+```
+
+### Collection "live" (contexte récent)
+
+Stocke les messages bruts du **Lobby uniquement** (pour commencer).
+
+**1 message = 1 document Qdrant** avec payload pour reconstruire la timeline si besoin :
+
+```typescript
+// Qdrant point structure
+{
+  id: "msg-123",
+  vector: number[],           // Embedding du content
+  payload: {
+    content: string,          // Le message brut
+    author: string,           // Username
+    room: string,             // "lobby" pour l'instant
+    timestamp: string         // ISO date pour tri temporel
+  }
+}
+```
+
+**Quand le pet répond** :
+1. Recherche sémantique dans "live" avec la question de l'utilisateur
+2. Top 10 par pertinence → **injecté automatiquement** dans le prompt
+3. Les "ok", "lol" ont des embeddings génériques → score faible → filtrés naturellement
+
+**Format d'injection dans le prompt** :
+
+```
+[Contexte live - extraits pertinents du Lobby, pas une conversation complète]
+• david (17/01 10:23) : je pars en Grèce demain
+• david (17/01 10:48) : une semaine
+
+[Mémoire - faits que tu connais]
+• dev = Mickael
+• David est le frère de Mickael
+• ...
+```
+
+Le prompt doit être explicite : le contexte live n'est **pas** une conversation temporelle, juste les messages les plus pertinents par rapport à la question.
+
+### Collection "memories" (faits durables)
+
+La collection existante. Les faits importants extraits par le digest y sont stockés avec le mécanisme habituel (déduplication par similarité, TTL, etc.).
+
+### Digest périodique
+
+Toutes les ~6h :
+1. Récupère tous les messages de la collection "live"
+2. Le LLM extrait les **faits durables** (pas les bavardages)
+3. Insert dans "memories" (avec déduplication)
+4. Clear la collection "live"
+
+### Avantages vs buffer RAM
+
+| Aspect | Buffer RAM | Qdrant "live" |
+|--------|-----------|---------------|
+| Filtre | Chronologique | Par pertinence sémantique |
+| Bruit ("ok", "lol") | Inclus | Score faible → filtré |
+| Persistance | Perdu si crash | Persisté |
+| Infra | Nouveau système | Réutilise Qdrant existant |
+
+### Décisions observers
+
+| Question | Décision |
+|----------|----------|
+| Salons à observer | Lobby uniquement (pour commencer) |
+| Granularité | 1 message = 1 document Qdrant |
+| Metadata | `author`, `room`, `timestamp` dans le payload |
+| Injection | Automatique (pas de tool), le prompt distingue contexte live vs mémoire |
+
+### Implémentation
+
+- [x] Collection Qdrant "organizer_live" → `server/src/memory/live.service.ts`
+- [x] Observer : écoute les messages du Lobby → embedding → insert "live" → `server/src/utils/socketEmit.ts`
+- [x] Injection auto : search "live" + format dans le prompt du pet → `server/src/agent/worker.mjs`
+- [x] Cron digest (~6h) : LLM extrait facts → "memories" → clear "live" → `server/src/memory/digest.service.ts`
+- [x] Endpoint admin pour forcer un digest manuel → `POST /admin/digest`
+- [x] Bouton Digest dans PetDebugScreen
+
+---
+
 ## Historique des décisions
 
 | Date | Décision | Raison |
@@ -257,3 +378,52 @@ Le worker est un process Node.js isolé qui :
 | 2026-01-17 | Pas de seuil recherche | Top 10 triés par score, le LLM juge la pertinence |
 | 2026-01-17 | Services mémoire dans worker | Évite IPC complexe, juste des fetch |
 | 2026-01-17 | Sessions par utilisateur | Chaque user a son contexte de conversation |
+| 2026-01-17 | Deux collections Qdrant (live + memories) | Contexte récent sans latence + filtrage par pertinence |
+| 2026-01-18 | Vidage du live après digest : on garde | Infos temporaires perdues pas graves, le live est éphémère |
+| 2026-01-18 | Doublons live/mémoire acceptés | Temporaires (jusqu'au prochain digest), le LLM gère |
+
+---
+
+## Discussion : Vidage du live après digest (2026-01-18)
+
+### Problème soulevé
+
+Après un digest, la collection live est vidée. Les infos temporaires (ex: "j'ai mal au dos") non extraites comme faits sont perdues.
+
+### Décision
+
+**Garder le comportement actuel** (vider le live après digest).
+
+**Raisons** :
+- Le digest tourne toutes les 6h. Perdre un état temporaire après 6h est acceptable.
+- Si c'était important, le digest devrait l'extraire avec TTL.
+- Le live est éphémère, pas un historique.
+- Évite les doublons live/mémoire permanents.
+
+**Amélioration future possible** : affiner le prompt du digest pour mieux extraire les états temporaires (blessure, maladie) avec TTL.
+
+---
+
+## Discussion : Analyse des URLs (2026-01-18)
+
+### État actuel
+
+Les URLs dans les messages sont indexées comme texte brut. Le pet voit "Mickael a envoyé https://..." mais ne connaît pas le contenu du lien.
+
+### Idée écartée : service de fetch/résumé
+
+Un service qui :
+1. Détecte les URLs dans les messages
+2. Fetch le contenu web
+3. Résume avec LLM
+4. Extrait des faits → "Mickael a partagé un article sur X"
+
+### Décision
+
+**On garde simple.** Le fetch automatique ajouterait :
+- Latence à l'indexation
+- Coût LLM pour chaque lien
+- Gestion des erreurs (liens morts, paywall, timeout)
+- Risque de contenu inapproprié
+
+Le flow actuel suffit : le pet voit l'URL, peut demander "c'était quoi ?", et stocke la réponse de l'utilisateur.

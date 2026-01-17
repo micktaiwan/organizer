@@ -446,7 +446,6 @@ class ChatViewModel(
                     Log.d(TAG, "Message sent successfully: ${message.id}")
                     addMessageIfNotExists(message)
                     _uiState.value = _uiState.value.copy(isSending = false)
-                    chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                 },
                 onFailure = { error ->
                     Log.e(TAG, "Failed to send message: ${error.message}")
@@ -575,7 +574,6 @@ class ChatViewModel(
                     Log.d(TAG, "Audio message sent successfully: ${message.id}")
                     addMessageIfNotExists(message)
                     _uiState.value = _uiState.value.copy(isSending = false)
-                    chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                 },
                 onFailure = { error ->
                     Log.e(TAG, "Failed to send audio message: ${error.message}")
@@ -652,7 +650,6 @@ class ChatViewModel(
                         Log.d(TAG, "File uploaded successfully: ${message.id}")
                         addMessageIfNotExists(message)
                         _uiState.value = _uiState.value.copy(isUploadingFile = false)
-                        chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                         clearSelectedFile()
                     },
                     onFailure = { error ->
@@ -717,7 +714,6 @@ class ChatViewModel(
                         Log.d(TAG, "Image uploaded successfully: ${message.id}")
                         addMessageIfNotExists(message)
                         _uiState.value = _uiState.value.copy(isUploadingImage = false)
-                        chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                         clearSelectedImage()
                     },
                     onFailure = { error ->

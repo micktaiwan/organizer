@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { load } from "@tauri-apps/plugin-store";
 import { MessageCircle, StickyNote, Bug } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from '@tauri-apps/plugin-dialog';
@@ -79,7 +80,24 @@ function App() {
 
   // Dev tools state
   const [showLogPanel, setShowLogPanel] = useState(false);
+  const [debugUseLocalServer, setDebugUseLocalServer] = useState(false);
   const isLocalServer = selectedServer?.id === 'local';
+
+  // Load debug server preference on mount
+  useEffect(() => {
+    const loadDebugPreference = async () => {
+      try {
+        const store = await load('pet-debug.json', { autoSave: false, defaults: {} });
+        const saved = await store.get<boolean>('useLocalServer');
+        if (saved !== null && saved !== undefined) {
+          setDebugUseLocalServer(saved);
+        }
+      } catch (error) {
+        console.error('[App] Failed to load debug server preference:', error);
+      }
+    };
+    loadDebugPreference();
+  }, []);
 
   // Notes view state
   const [notesView, setNotesView] = useState<'list' | 'editor' | 'labels'>('list');
@@ -634,6 +652,8 @@ function App() {
           <PetDebugScreen
             showLogPanel={showLogPanel}
             onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
+            useLocalServer={debugUseLocalServer}
+            onUseLocalServerChange={setDebugUseLocalServer}
           />
         </div>
       )}
@@ -692,8 +712,8 @@ function App() {
       )}
     </main>
 
-    {/* Dev: Log Panel (connects to local server) */}
-    {showLogPanel && <LogPanel />}
+    {/* Dev: Log Panel */}
+    {showLogPanel && <LogPanel useLocalServer={debugUseLocalServer} onClose={() => setShowLogPanel(false)} />}
     </div>
   );
 }

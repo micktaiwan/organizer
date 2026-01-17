@@ -10,6 +10,7 @@ import { z } from 'zod';
 const QDRANT_URL = process.env.QDRANT_URL || 'http://qdrant:6333';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const COLLECTION_NAME = 'organizer_memory';
+const LIVE_COLLECTION_NAME = 'organizer_live';
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 
 // =============================================================================
@@ -145,6 +146,82 @@ async function getRecentMemories(limit = 10) {
   return results;
 }
 
+/**
+ * Search live context (recent Lobby messages) by semantic similarity
+ */
+async function searchLiveContext(queryText, limit = 10) {
+  log('debug', `[Live] Searching live context for: "${queryText.slice(0, 50)}..."`);
+
+  try {
+    const vector = await generateEmbedding(queryText);
+
+    const response = await fetch(`${QDRANT_URL}/collections/${LIVE_COLLECTION_NAME}/points/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vector,
+        limit,
+        with_payload: true,
+      }),
+    });
+
+    if (!response.ok) {
+      // Collection might not exist yet, that's ok
+      if (response.status === 404) {
+        log('debug', '[Live] Collection not found, skipping');
+        return [];
+      }
+      const error = await response.text();
+      throw new Error(`Qdrant search failed: ${response.status} ${error}`);
+    }
+
+    const data = await response.json();
+    const results = data.result.map((item) => ({
+      score: item.score,
+      content: item.payload.content,
+      author: item.payload.author,
+      timestamp: item.payload.timestamp,
+    }));
+
+    log('debug', `[Live] Found ${results.length} relevant messages`);
+    return results;
+  } catch (error) {
+    log('error', `[Live] Search error: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Format live context for injection into prompt
+ */
+function formatLiveContext(messages) {
+  if (messages.length === 0) return '';
+
+  // Sort by timestamp for readability, handling invalid dates
+  const sorted = [...messages].sort((a, b) => {
+    const timeA = new Date(a.timestamp).getTime();
+    const timeB = new Date(b.timestamp).getTime();
+    if (isNaN(timeA)) return 1;
+    if (isNaN(timeB)) return -1;
+    return timeA - timeB;
+  });
+
+  const formatted = sorted.map(m => {
+    const date = new Date(m.timestamp);
+    const isValidDate = !isNaN(date.getTime());
+    const dateStr = isValidDate
+      ? date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+      : '??/??';
+    const timeStr = isValidDate
+      ? date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      : '??:??';
+    return `• ${m.author} (${dateStr} ${timeStr}) : ${m.content}`;
+  }).join('\n');
+
+  return `[Contexte live - extraits pertinents du Lobby, pas une conversation complète]
+${formatted}`;
+}
+
 // =============================================================================
 // SYSTEM PROMPT
 // =============================================================================
@@ -256,7 +333,7 @@ let currentRequest = {
 // Cleanup inactive sessions (15 minutes timeout)
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 
-setInterval(() => {
+const sessionCleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [userId, session] of userSessions) {
     if (now - session.lastActivity > SESSION_TIMEOUT_MS) {
@@ -265,6 +342,19 @@ setInterval(() => {
     }
   }
 }, 60 * 1000);
+
+// Cleanup on shutdown
+process.on('SIGTERM', () => {
+  clearInterval(sessionCleanupInterval);
+  log('info', '[Worker] Received SIGTERM, shutting down');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  clearInterval(sessionCleanupInterval);
+  log('info', '[Worker] Received SIGINT, shutting down');
+  process.exit(0);
+});
 
 // Schema for memory items
 const memorySchema = z.object({
@@ -420,9 +510,20 @@ function extractUserId(prompt) {
   }
 }
 
+// Extract message text from prompt JSON
+function extractMessage(prompt) {
+  try {
+    const parsed = JSON.parse(prompt);
+    return parsed.message || '';
+  } catch {
+    return prompt;
+  }
+}
+
 async function runQuery(params) {
   const { prompt, requestId } = params;
   const userId = extractUserId(prompt);
+  const userMessage = extractMessage(prompt);
 
   // Set current request context (safe because queue serializes)
   currentRequest = {
@@ -445,13 +546,26 @@ async function runQuery(params) {
     log('info', `[Agent] 👤 Raw prompt`, { prompt: prompt.slice(0, 100) });
   }
 
+  // Search live context (recent Lobby messages relevant to the query)
+  const liveMessages = await searchLiveContext(userMessage, 10);
+  const liveContext = formatLiveContext(liveMessages);
+
+  if (liveMessages.length > 0) {
+    log('info', `[Agent] 📡 Live context: ${liveMessages.length} relevant messages`);
+  }
+
+  // Build system prompt with live context if available
+  const systemPromptWithContext = liveContext
+    ? `${PET_SYSTEM_PROMPT}\n\n${liveContext}`
+    : PET_SYSTEM_PROMPT;
+
   // Get or create session for this user
   const userSession = userSessions.get(userId) || { sessionId: null, lastActivity: Date.now() };
 
   try {
     const options = {
-      model: 'claude-sonnet-4-5',
-      systemPrompt: PET_SYSTEM_PROMPT,
+      model: process.env.AGENT_MODEL || 'claude-sonnet-4-5',
+      systemPrompt: systemPromptWithContext,
       maxTurns: 5,
       mcpServers: {
         pet: petServer

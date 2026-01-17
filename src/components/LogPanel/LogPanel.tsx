@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useAuth } from '../../contexts/AuthContext';
 import './LogPanel.css';
 
 const LOCAL_SERVER_URL = 'http://localhost:3001';
+const PROD_SERVER_URL = 'http://51.210.150.25:3001';
 
 interface LogEntry {
   id: string;
@@ -11,17 +13,43 @@ interface LogEntry {
   timestamp: string;
 }
 
-export function LogPanel() {
+interface LogPanelProps {
+  useLocalServer: boolean;
+  onClose: () => void;
+}
+
+export function LogPanel({ useLocalServer, onClose }: LogPanelProps) {
+  const { token, user } = useAuth();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
+  const isAdmin = user?.isAdmin ?? false;
+  const serverUrl = useLocalServer ? LOCAL_SERVER_URL : PROD_SERVER_URL;
+  const serverName = useLocalServer ? 'Local' : 'Prod';
+
   useEffect(() => {
-    // Connect to logs namespace on local server
-    const socket = io(`${LOCAL_SERVER_URL}/logs`, {
+    // Cleanup previous socket
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+
+    // Only connect if user is admin and server is selected
+    if (!token || !isAdmin || !serverUrl) {
+      setAuthError(!serverUrl ? 'Aucun serveur sélectionné' : 'Accès réservé aux administrateurs');
+      setIsConnected(false);
+      return;
+    }
+
+    setAuthError(null);
+
+    // Connect to logs namespace with auth token
+    const socket = io(`${serverUrl}/logs`, {
       transports: ['websocket'],
+      auth: { token },
     });
 
     socketRef.current = socket;
@@ -33,7 +61,7 @@ export function LogPanel() {
         {
           id: Date.now().toString(),
           level: 'log',
-          message: '[LogPanel] Connected to server',
+          message: `[LogPanel] Connected to ${serverUrl}`,
           timestamp: new Date().toISOString(),
         },
       ]);
@@ -60,17 +88,23 @@ export function LogPanel() {
       });
     });
 
+    socket.on('connect_error', (error) => {
+      setAuthError(error.message);
+      setIsConnected(false);
+    });
+
     return () => {
       socket.disconnect();
+      socketRef.current = null;
     };
-  }, []);
+  }, [token, isAdmin, serverUrl]);
 
   // Auto-scroll to bottom
   useEffect(() => {
-    if (logsEndRef.current && !isMinimized) {
+    if (logsEndRef.current) {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [logs, isMinimized]);
+  }, [logs]);
 
   const clearLogs = () => setLogs([]);
 
@@ -82,32 +116,29 @@ export function LogPanel() {
     });
   };
 
-  if (isMinimized) {
-    return (
-      <div className="log-panel-minimized" onClick={() => setIsMinimized(false)}>
-        <span className={`log-status ${isConnected ? 'connected' : 'disconnected'}`} />
-        <span>Logs ({logs.length})</span>
-      </div>
-    );
-  }
-
   return (
     <div className="log-panel">
       <div className="log-panel-header">
         <div className="log-panel-title">
-          <span className={`log-status ${isConnected ? 'connected' : 'disconnected'}`} />
-          <span>Server Logs</span>
+          <span className={`log-status ${isConnected ? 'connected' : authError ? 'error' : 'disconnected'}`} />
+          <span>{serverName} Logs</span>
         </div>
         <div className="log-panel-actions">
           <button onClick={clearLogs} title="Clear logs">
             Clear
           </button>
-          <button onClick={() => setIsMinimized(true)} title="Minimize">
-            _
+          <button onClick={onClose} title="Close">
+            ×
           </button>
         </div>
       </div>
       <div className="log-panel-content">
+        {authError && (
+          <div className="log-entry log-error">
+            <span className="log-time">{formatTime(new Date().toISOString())}</span>
+            <span className="log-message">[Auth] {authError}</span>
+          </div>
+        )}
         {logs.map((log) => (
           <div key={log.id} className={`log-entry log-${log.level}`}>
             <span className="log-time">{formatTime(log.timestamp)}</span>

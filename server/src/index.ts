@@ -14,6 +14,8 @@ import mcpAdminRoutes from './routes/mcp-admin.js';
 import agentRoutes from './routes/agent.js';
 import { Room, User } from './models/index.js';
 import { getCollectionInfo } from './memory/qdrant.service.js';
+import { ensureLiveCollection } from './memory/live.service.js';
+import { scheduleDigest } from './memory/digest.service.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -111,10 +113,8 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 const io = setupSocket(httpServer);
 app.set('io', io);
 
-// Setup log streamer for dev
-if (process.env.NODE_ENV !== 'production') {
-  setupLogStreamer(io);
-}
+// Setup log streamer (admin-only, protected by auth)
+setupLogStreamer(io);
 
 // Start server
 const PORT = process.env.PORT || 3001;
@@ -188,10 +188,24 @@ async function start() {
     ensureUploadDirectories();
     await connectDB();
     await ensureLobby();
+    await ensureLiveCollection();
 
     httpServer.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`Socket.io ready`);
+
+      // Start the digest cron (every 6 hours)
+      const digestInterval = scheduleDigest(6);
+
+      // Cleanup on shutdown
+      const shutdown = () => {
+        console.log('Shutting down...');
+        clearInterval(digestInterval);
+        httpServer.close();
+        process.exit(0);
+      };
+      process.on('SIGTERM', shutdown);
+      process.on('SIGINT', shutdown);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

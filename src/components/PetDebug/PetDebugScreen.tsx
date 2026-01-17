@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Trash2, Database, Server, Laptop, Power, RefreshCw, Brain, X, Skull, Copy, ScrollText } from 'lucide-react';
+import { Send, Trash2, Database, Server, Laptop, Power, RefreshCw, Brain, X, Skull, Copy, ScrollText, Zap } from 'lucide-react';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { Command, Child } from '@tauri-apps/plugin-shell';
 import { load, Store } from '@tauri-apps/plugin-store';
@@ -42,39 +42,24 @@ interface MemoryItem {
 interface PetDebugScreenProps {
   showLogPanel?: boolean;
   onToggleLogPanel?: () => void;
+  useLocalServer: boolean;
+  onUseLocalServerChange: (value: boolean) => void;
 }
 
-export function PetDebugScreen({ showLogPanel, onToggleLogPanel }: PetDebugScreenProps) {
+export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer, onUseLocalServerChange }: PetDebugScreenProps) {
   const { token } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [useLocalServer, setUseLocalServer] = useState(false);
   const [localServerRunning, setLocalServerRunning] = useState(false);
   const debugStoreRef = useRef<Store | null>(null);
 
-  // Load persisted preference on mount
-  useEffect(() => {
-    const loadPreference = async () => {
-      try {
-        debugStoreRef.current = await load('pet-debug.json', { autoSave: false });
-        const saved = await debugStoreRef.current.get<boolean>(PET_DEBUG_STORE_KEY);
-        if (saved !== null && saved !== undefined) {
-          setUseLocalServer(saved);
-        }
-      } catch (error) {
-        console.error('[PetDebug] Failed to load preference:', error);
-      }
-    };
-    loadPreference();
-  }, []);
-
   // Save preference when it changes
   const setUseLocalServerPersisted = async (value: boolean) => {
-    setUseLocalServer(value);
+    onUseLocalServerChange(value);
     try {
       if (!debugStoreRef.current) {
-        debugStoreRef.current = await load('pet-debug.json', { autoSave: false });
+        debugStoreRef.current = await load('pet-debug.json', { autoSave: false, defaults: {} });
       }
       await debugStoreRef.current.set(PET_DEBUG_STORE_KEY, value);
       await debugStoreRef.current.save();
@@ -89,6 +74,7 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel }: PetDebugScree
   const [memoriesNextOffset, setMemoriesNextOffset] = useState<string | null>(null);
   const [memoriesLoading, setMemoriesLoading] = useState(false);
   const [prodServerStatus, setProdServerStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
+  const [isDigesting, setIsDigesting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const processRef = useRef<Child | null>(null);
   const startupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -699,6 +685,29 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel }: PetDebugScree
     addSystemMessage(results.join('\n'));
   };
 
+  const runDigest = async () => {
+    if (isDigesting) return;
+    setIsDigesting(true);
+    addSystemMessage('Running digest...');
+    try {
+      const response = await fetch(`${serverUrl}/admin/digest`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        addSystemMessage(`Digest terminé: ${data.factsExtracted} faits extraits de ${data.messagesProcessed} messages`);
+      } else {
+        const error = await response.text();
+        addSystemMessage(`Digest error: HTTP ${response.status} - ${error}`);
+      }
+    } catch (error) {
+      addSystemMessage(`Digest error: ${error}`);
+    } finally {
+      setIsDigesting(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -907,6 +916,10 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel }: PetDebugScree
         </button>
         <button onClick={runDiagnostic} title="Diagnostic complet">
           🔍 Diagnostic
+        </button>
+        <button onClick={runDigest} disabled={isDigesting} title="Extraire les faits des messages live">
+          <Zap size={16} />
+          {isDigesting ? 'Digesting...' : 'Digest'}
         </button>
       </div>
 

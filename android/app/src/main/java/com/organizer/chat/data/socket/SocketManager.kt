@@ -526,13 +526,6 @@ class SocketManager(private val tokenManager: TokenManager) {
         socket?.emit("room:leave", JSONObject().put("roomId", roomId))
     }
 
-    fun notifyNewMessage(roomId: String, messageId: String) {
-        socket?.emit("message:notify", JSONObject().apply {
-            put("roomId", roomId)
-            put("messageId", messageId)
-        })
-    }
-
     fun notifyTypingStart(roomId: String) {
         socket?.emit("typing:start", JSONObject().put("roomId", roomId))
     }

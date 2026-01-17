@@ -1,5 +1,7 @@
 package com.organizer.chat.ui.screens.home
 
+import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -9,6 +11,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import com.organizer.chat.data.model.Room
 import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.NoteRepository
@@ -62,8 +65,36 @@ fun HomeScreen(
         }
     }
 
+    // Double-tap to exit logic
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var lastBackPressTime by remember { mutableLongStateOf(0L) }
+
+    BackHandler {
+        if (selectedTab != HomeTab.CHATS) {
+            // Not on CHATS tab -> go back to CHATS
+            selectedTabIndex = HomeTab.CHATS.ordinal
+        } else {
+            // On CHATS tab -> double-tap to exit
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastBackPressTime < 2000) {
+                // Exit app
+                (context as? Activity)?.finish()
+            } else {
+                lastBackPressTime = currentTime
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Appuyez encore pour quitter",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        }
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
