@@ -6,12 +6,13 @@ Permettre au pet de se souvenir des informations importantes sur les utilisateur
 
 ## Principes
 
-### 1. Recherche systématique (pas cher)
+### 1. Recherche agentique (le LLM cherche lui-même)
 
-À chaque message utilisateur :
-1. Embedding du message (~0.0001$)
-2. Recherche Qdrant (gratuit, local, rapide)
-3. Injection dans le contexte SI pertinent ET nouveau
+Le LLM dispose de **tools** pour chercher dans sa mémoire :
+- `search_memories(query)` : recherche sémantique (10 résultats max)
+- `get_recent_memories(limit)` : dernières mémoires stockées
+
+Il peut faire plusieurs recherches par conversation (`maxTurns: 5`).
 
 ### 2. Stockage sélectif
 
@@ -61,46 +62,65 @@ interface Memory {
 - **Par sémantique** : vecteur (cas général)
 - **Par sujet** : filtre sur `subjects` (ex: "tout sur mickael")
 
-## Flow complet
+## Flow complet (boucle agentique)
 
 ```
-User: "je suis mickael"
+User (dev): "hello !"
        ↓
-   Embedding → Recherche Qdrant
+[Agent] 🚀 Starting query
+[Agent] 👤 From: dev {message: "hello !", time: "sam. 17 janv. 2026, 22:19"}
        ↓
-   Trouve: [{content: "mickael aime le ski", subjects: ["mickael", "ski"]}]
+LLM décide: tool_call search_memories("dev")
        ↓
-   Score > 0.5 ? Injecte dans contexte
+[Memory] 🔍 Searching facts: "dev"
+[Memory] Found 5 facts: [{score: 0.38, "dev = Mickael"}, ...]
        ↓
-Pet: "Salut Mickael ! Tu vas retourner skier bientôt ?"
+LLM voit les résultats, décide de répondre:
+tool_call respond({expression: "happy", message: "Coucou Mickael !"})
+       ↓
+[Agent] ✅ Query completed {turns: 2}
+```
 
-User: "non je me suis cassé l'épaule"
-       ↓
-Pet décide de stocker (fait important)
-       ↓
-   Recherche similaire → rien de proche
-       ↓
-   INSERT {content: "Mickael s'est cassé l'épaule", subjects: ["mickael", "blessure"]}
-       ↓
-Pet: "Ah mince ! C'était quand ?"
+### Exemple avec plusieurs recherches
 
-User: "la semaine dernière, le 10 janvier"
+```
+User (dev): "on a parlé de quoi ?"
        ↓
-Pet veut stocker avec la date
+LLM: tool_call get_recent_memories(10)
        ↓
-   Recherche → trouve "Mickael s'est cassé l'épaule" (score 0.92)
+Result: ["dev = Mickael", "vacances Grèce", ...]
        ↓
-   DELETE ancien + INSERT {content: "Mickael s'est cassé l'épaule le 10 janvier 2026", ...}
+LLM: tool_call search_memories("Mickael vacances")  ← Il creuse !
+       ↓
+Result: ["Mickael part en Grèce en février", ...]
+       ↓
+LLM: tool_call respond("On a parlé de tes vacances en Grèce !")
+```
+
+### Stockage d'une nouvelle info
+
+```
+User: "je me suis cassé l'épaule"
+       ↓
+LLM: tool_call respond({
+  message: "Ah mince ! C'était quand ?",
+  memories: [{content: "Mickael s'est cassé l'épaule", subjects: ["mickael", "blessure"], ttl: null}]
+})
+       ↓
+[Agent] 💾 Storing memory...
+[Memory] Recherche similaire → rien de proche → INSERT
 ```
 
 ## Décisions prises
 
 ### Seuils de similarité
 
-- **Recherche : 0.5** — pour injecter les mémoires pertinentes dans le contexte
+- **Recherche : pas de seuil** — on retourne les 10 meilleurs résultats triés par score, le LLM décide ce qui est pertinent (~200 tokens max)
 - **Déduplication : 0.85** — pour détecter si une info similaire existe déjà (et la mettre à jour)
 
 Le seuil de déduplication est élevé pour éviter d'écraser des faits différents sur la même personne (ex: "habite à Paris" vs "a un fils").
+
+**Pourquoi pas de seuil pour la recherche ?** Un seuil de 0.5 filtrait des infos utiles comme "dev = Mickael" (score 0.38). Avec 10 résultats max triés par score, le coût en tokens est acceptable et le LLM peut juger lui-même.
 
 ### Critère de stockage : les connexions, pas les entités
 
@@ -189,81 +209,34 @@ Pas nécessaire au début. Si Qdrant rame un jour, on ajoutera. Avec un bon TTL 
 
 ### À faire
 
-- [x] Ajouter type `fact` dans `MemoryPayload` avec `subjects: string[]` et `expiresAt: string | null`
-- [x] Fonction `storeFactMemory()` avec logique de déduplication (recherche similarité > 0.5 → delete + insert)
-- [x] Parser TTL ("7d" → date ISO)
-- [x] Intégration agent : injecter mémoires pertinentes dans le contexte
-- [x] Intégration agent : parser `memories[]` dans la réponse JSON et stocker
-- [ ] Cron cleanup des mémoires expirées (plus tard)
+- [ ] Cron cleanup des mémoires expirées
 
-## Limitations connues
+## Architecture technique
 
-### Recherche sémantique limitée par le contexte
+### Worker (`server/src/agent/worker.mjs`)
 
-**Problème découvert** : La recherche RAG est basée sur la similarité sémantique entre la question et les mémoires. Les questions génériques ("on a parlé de quoi ?") ont une faible similarité avec les mémoires spécifiques ("Mickael part en Grèce").
+Le worker est un process Node.js isolé qui :
+- Communique avec le service via stdin/stdout (JSON)
+- Contient les services mémoire embarqués (fetch Qdrant/OpenAI)
+- Gère les sessions par utilisateur (Map userId → sessionId)
+- Sérialise les requêtes via une queue (évite les race conditions)
 
-```
-Mémoires stockées :
-- "dev s'appelle en réalité Mickael"
-- "Mickael part en vacances en Grèce"
-- "Le PSG a gagné 3-0"
+**Tools disponibles** :
+- `search_memories(query)` : recherche sémantique, 10 résultats max
+- `get_recent_memories(limit)` : dernières mémoires (1-20)
+- `respond(expression, message, memories?)` : répondre + stocker
 
-User (dev) : "on a parlé de quoi avant ?"
-RAG embedding sur : { "from": "dev", "message": "on a parlé de quoi avant ?" }
-RAG trouve : les 2 mémoires avec "dev" (similarité OK)
-RAG ne trouve pas : "Mickael part en Grèce" (faible similarité sémantique)
-```
+**Sessions** :
+- Une session Claude par utilisateur (conserve le contexte de conversation)
+- Timeout 15 minutes d'inactivité
+- Nettoyage automatique via setInterval
 
-**Impact** : Les questions ouvertes ne retrouvent pas toutes les mémoires pertinentes.
+### Service (`server/src/agent/service.ts`)
 
-**Pistes d'amélioration** :
-1. Résoudre les alias avant recherche (dev → Mickael → chercher les deux)
-2. Utiliser les `subjects` comme filtre additionnel
-3. Augmenter le nombre de résultats (actuellement 5)
-4. Faire une recherche en deux passes : d'abord les alias, puis élargir
-
-**Workaround actuel** : Le pet apprend les alias et les stocke. Les questions spécifiques ("où est-ce que je pars en vacances ?") fonctionnent mieux que les questions génériques.
-
----
-
-## Évolution prévue : Boucle agentique avec tools
-
-### Problème actuel
-
-Le serveur fait **une seule** recherche mémoire avant d'envoyer au LLM (`maxTurns: 1`). Le LLM ne peut pas creuser davantage s'il a besoin de plus d'infos.
-
-### Solution retenue
-
-Donner des **tools** au LLM pour qu'il cherche lui-même, avec plusieurs tours possibles :
-
-```
-User: "on a parlé de quoi ?"
-     ↓
-LLM: tool_call search_memories("conversations dev")
-     ↓
-Tool result: ["dev = Mickael", ...]
-     ↓
-LLM: tool_call search_memories("Mickael")  ← Il creuse !
-     ↓
-Tool result: ["vacances Grèce", "PSG 3-0", ...]
-     ↓
-LLM: respond("On a parlé de tes vacances en Grèce !")
-```
-
-### Implémentation
-
-**Approche choisie** : Tools directement dans le worker (pas d'IPC complexe)
-
-- Les services mémoire sont légers (juste des `fetch` vers Qdrant/OpenAI)
-- Le SDK Agent est conçu pour des tools async
-- Passer `QDRANT_URL` et `OPENAI_API_KEY` via env
-
-**Changements à faire** :
-- [ ] Importer les services mémoire dans `worker.mjs`
-- [ ] Augmenter `maxTurns` (1 → 5)
-- [ ] Ajouter tool `search_memories(query)` - recherche sémantique
-- [ ] Ajouter tool `get_recent_memories(limit)` - dernières mémoires
-- [ ] Retirer la recherche préalable dans `service.ts`
+- Spawn et manage le worker
+- Forward les requêtes au worker
+- Gère les logs du worker → console.log → LogPanel
+- Stocke les mémoires retournées par le LLM
 
 ---
 
@@ -272,9 +245,7 @@ LLM: respond("On a parlé de tes vacances en Grèce !")
 | Date | Décision | Raison |
 |------|----------|--------|
 | 2026-01-17 | Tags plats vs hiérarchie | Plus flexible, gère les chevauchements |
-| 2026-01-17 | Recherche systématique | Qdrant est gratuit, autant chercher toujours |
 | 2026-01-17 | Update par similarité | Évite les doublons sans gérer des IDs manuellement |
-| 2026-01-17 | Seuil 0.5 | Bas = moins de doublons, on ajustera |
 | 2026-01-17 | Stocker les connexions | Le LLM connaît les entités, pas les relations personnelles |
 | 2026-01-17 | Pas de forget() | Les corrections passent par l'update naturel |
 | 2026-01-17 | Expiration selon type | Faits durables vs états temporaires |
@@ -282,4 +253,7 @@ LLM: respond("On a parlé de tes vacances en Grèce !")
 | 2026-01-17 | Pas d'action "update" | La similarité gère l'update automatiquement |
 | 2026-01-17 | TTL lisible ("7d") | Simple pour le LLM, l'agent calcule expiresAt |
 | 2026-01-17 | Pas de limite mémoires | Qdrant gère, on ajustera si besoin |
-| 2026-01-17 | Réutiliser memory service existant | Ajouter type `fact` au lieu de refaire |
+| 2026-01-17 | Boucle agentique | Le LLM cherche lui-même avec des tools, peut creuser |
+| 2026-01-17 | Pas de seuil recherche | Top 10 triés par score, le LLM juge la pertinence |
+| 2026-01-17 | Services mémoire dans worker | Évite IPC complexe, juste des fetch |
+| 2026-01-17 | Sessions par utilisateur | Chaque user a son contexte de conversation |
