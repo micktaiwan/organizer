@@ -2,8 +2,8 @@ import { spawn, ChildProcess } from 'child_process';
 import * as readline from 'readline';
 import * as path from 'path';
 import * as fs from 'fs';
-import { getAnthropicApiKey } from '../config/agent.js';
-import { searchFacts, storeFactMemory } from '../memory/index.js';
+import { getAnthropicApiKey, getOpenAIApiKey } from '../config/agent.js';
+import { storeFactMemory } from '../memory/index.js';
 import type { FactMemoryInput } from '../memory/index.js';
 import type { Expression } from './types.js';
 
@@ -26,7 +26,7 @@ const getWorkerConfig = () => {
 };
 
 interface WorkerMessage {
-  type: 'ready' | 'text' | 'done' | 'error' | 'session' | 'pong' | 'reset_done';
+  type: 'ready' | 'text' | 'done' | 'error' | 'session' | 'pong' | 'reset_done' | 'log';
   text?: string;
   response?: string;
   expression?: Expression;
@@ -36,6 +36,9 @@ interface WorkerMessage {
   sessionId?: string;
   inputTokens?: number;
   outputTokens?: number;
+  // For log messages
+  level?: 'info' | 'debug' | 'error' | 'warn';
+  data?: unknown;
 }
 
 export interface AgentResponse {
@@ -74,6 +77,8 @@ export class AgentService {
         env: {
           ...process.env,
           ANTHROPIC_API_KEY: getAnthropicApiKey(),
+          OPENAI_API_KEY: getOpenAIApiKey(),
+          QDRANT_URL: process.env.QDRANT_URL || 'http://qdrant:6333',
         },
       });
 
@@ -126,6 +131,25 @@ export class AgentService {
   }
 
   private handleWorkerMessage(msg: WorkerMessage) {
+    // Handle log messages (no requestId needed)
+    if (msg.type === 'log') {
+      const logData = msg.data ? ` ${JSON.stringify(msg.data)}` : '';
+      switch (msg.level) {
+        case 'error':
+          console.error(msg.message + logData);
+          break;
+        case 'warn':
+          console.warn(msg.message + logData);
+          break;
+        case 'debug':
+          console.log(`[DEBUG] ${msg.message}${logData}`);
+          break;
+        default:
+          console.log(msg.message + logData);
+      }
+      return;
+    }
+
     if (!msg.requestId) return;
 
     const pending = this.pendingRequests.get(msg.requestId);
@@ -190,24 +214,7 @@ export class AgentService {
 
     const requestId = `req_${++this.requestCounter}_${Date.now()}`;
 
-    // Search for relevant memories
-    let promptWithMemories = question;
-    try {
-      const memories = await searchFacts(question, 5);
-      if (memories.length > 0) {
-        // Parse the original JSON to inject memories
-        const parsed = JSON.parse(question);
-        parsed.memories = memories.map((m) => ({
-          content: m.payload.content,
-          subjects: m.payload.subjects,
-        }));
-        promptWithMemories = JSON.stringify(parsed);
-        console.log(`[Agent] Injected ${memories.length} memories`);
-      }
-    } catch (error) {
-      // If parsing fails or search fails, just use original question
-      console.warn('[Agent] Memory search failed:', error);
-    }
+    // No pre-search: the agent now has tools to search memory itself (agentic loop)
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -223,8 +230,8 @@ export class AgentService {
         timeout,
       });
 
-      console.log(`[Agent] User asked: "${question}"`);
-      this.sendToWorker({ type: 'prompt', prompt: promptWithMemories, requestId });
+      console.log(`[Agent] 📩 Received question, forwarding to worker`);
+      this.sendToWorker({ type: 'prompt', prompt: question, requestId });
     });
   }
 
@@ -238,11 +245,13 @@ export class AgentService {
   }
 
   private async storeMemories(memories: FactMemoryInput[]): Promise<void> {
+    console.log(`[Agent] 💾 Storing ${memories.length} memories from agent response`);
     for (const memory of memories) {
       try {
         await storeFactMemory(memory);
+        console.log(`[Agent] ✅ Stored: "${memory.content.slice(0, 50)}..." (ttl: ${memory.ttl || 'permanent'})`);
       } catch (error) {
-        console.error('[Agent] Failed to store memory:', error);
+        console.error('[Agent] ❌ Failed to store memory:', error);
       }
     }
   }
