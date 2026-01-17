@@ -81,9 +81,10 @@ class ChatViewModel(
         loadMessages()
         observeServiceMessages()
         observeTypingState()
+        observeMessageReadEvents()
         observeConnectionState()
+        observeForegroundState()
         joinRoom()
-        markRoomAsRead()
     }
 
     private fun observeTypingState() {
@@ -106,7 +107,6 @@ class ChatViewModel(
         chatService?.socketManager?.let { socketManager ->
             viewModelScope.launch {
                 var wasConnected = socketManager.isConnected()
-                var readEventsObserverStarted = false
                 socketManager.connectionState.collect { state ->
                     when (state) {
                         is ConnectionState.Connected -> {
@@ -115,11 +115,6 @@ class ChatViewModel(
                                 loadMessages()
                                 joinRoom()
                             }
-                            // Start observing read events once socket is connected
-                            if (!readEventsObserverStarted) {
-                                observeMessageReadEvents()
-                                readEventsObserverStarted = true
-                            }
                             wasConnected = true
                         }
                         is ConnectionState.Disconnected,
@@ -127,6 +122,25 @@ class ChatViewModel(
                             wasConnected = false
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * Observe foreground state to mark messages as read when app comes to foreground.
+     */
+    private fun observeForegroundState() {
+        chatService?.let { service ->
+            viewModelScope.launch {
+                var wasInForeground = service.isAppInForeground.value
+                service.isAppInForeground.collect { inForeground ->
+                    if (inForeground && !wasInForeground) {
+                        // App just came to foreground - mark unread messages as read
+                        Log.d(TAG, "App came to foreground, marking unread messages as read")
+                        markUnreadMessagesAsRead(_uiState.value.messages)
+                    }
+                    wasInForeground = inForeground
                 }
             }
         }
@@ -149,19 +163,6 @@ class ChatViewModel(
 
     private fun joinRoom() {
         chatService?.socketManager?.joinRoom(roomId)
-    }
-
-    private fun markRoomAsRead() {
-        viewModelScope.launch {
-            roomRepository.markRoomAsRead(roomId).fold(
-                onSuccess = {
-                    Log.d(TAG, "Room $roomId marked as read")
-                },
-                onFailure = { error ->
-                    Log.e(TAG, "Failed to mark room as read: ${error.message}")
-                }
-            )
-        }
     }
 
     private fun loadCurrentUser() {
@@ -204,8 +205,10 @@ class ChatViewModel(
                         hasMoreMessages = messages.size == MESSAGE_PAGE_SIZE,
                         shouldScrollToBottom = true
                     )
-                    // Mark unread messages as read
-                    markUnreadMessagesAsRead(messages)
+                    // Mark unread messages as read only if app is in foreground
+                    if (chatService?.isAppInForeground?.value == true) {
+                        markUnreadMessagesAsRead(messages)
+                    }
                 },
                 onFailure = { error ->
                     Log.e(TAG, "Failed to load messages: ${error.message}")
@@ -291,8 +294,9 @@ class ChatViewModel(
                             onSuccess = { message ->
                                 if (addMessageIfNotExists(message)) {
                                     Log.d(TAG, "Added new message from API: ${event.messageId}")
-                                    // Mark as read immediately since we're viewing the room
-                                    if (message.senderId.id != _uiState.value.currentUserId) {
+                                    // Mark as read only if app is in foreground (user is actually viewing)
+                                    if (message.senderId.id != _uiState.value.currentUserId &&
+                                        service.isAppInForeground.value) {
                                         markUnreadMessagesAsRead(listOf(message))
                                     }
                                 }

@@ -187,11 +187,18 @@ fun MessageBubble(
         }
 
         Box {
+            // Long press on bubble padding (content components handle their own long press)
             Surface(
                 shape = bubbleShape,
                 color = bubbleColor,
                 shadowElevation = 1.dp,
-                modifier = Modifier.widthIn(max = 280.dp)
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .pointerInput(onLongPress) {
+                        detectTapGestures(
+                            onLongPress = { onLongPress?.invoke() }
+                        )
+                    }
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -373,7 +380,10 @@ private fun TextMessageContent(
         }
     }
 
-    // Use Text with pointerInput to handle both tap (URLs) and long press (delete)
+    // NOTE: Long press is handled BOTH here and on the parent Surface bubble.
+    // This is intentional: the Text captures gestures on its area (for URLs + long press),
+    // while the Surface captures long press on padding areas outside the text.
+    // Without this duplication, long press wouldn't work on small messages or text areas.
     Text(
         text = annotatedString,
         style = MaterialTheme.typography.bodyMedium,
