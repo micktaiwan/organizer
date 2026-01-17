@@ -83,6 +83,21 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
     };
   }, [currentRoom?._id]);
 
+  // Get IDs of human (non-bot) members for read status calculation
+  // Must be before early return to maintain consistent hook order
+  const humanMemberIds = useMemo(() => {
+    if (!currentRoom) return [];
+    return currentRoom.members
+      .filter(m => {
+        const user = typeof m.userId === 'object' ? m.userId : null;
+        return user && !user.isBot;
+      })
+      .map(m => {
+        const user = m.userId as any;
+        return user._id || user.id;
+      });
+  }, [currentRoom]);
+
   if (!currentRoom) {
     return (
       <div className="room-messaging-empty">
@@ -115,20 +130,6 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputMessage(e.target.value);
   };
-
-  // Get IDs of human (non-bot) members for read status calculation
-  const humanMemberIds = useMemo(() => {
-    if (!currentRoom) return [];
-    return currentRoom.members
-      .filter(m => {
-        const user = typeof m.userId === 'object' ? m.userId : null;
-        return user && !user.isBot;
-      })
-      .map(m => {
-        const user = m.userId as any;
-        return user._id || user.id;
-      });
-  }, [currentRoom]);
 
   return (
     <div className="room-messaging">
