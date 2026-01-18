@@ -345,3 +345,37 @@
   color: #e0e0e0;
   line-height: 1.4;
 }
+
+/* TTL indicators */
+.item-ttl {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ttl-permanent {
+  color: #4CAF50;
+  background: rgba(76, 175, 80, 0.15);
+}
+
+.ttl-days {
+  color: #6B9FFF;
+  background: rgba(107, 159, 255, 0.15);
+}
+
+.ttl-hours {
+  color: #FFA726;
+  background: rgba(255, 167, 38, 0.15);
+}
+
+.ttl-minutes {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.15);
+}
+
+.ttl-expired {
+  color: #888;
+  background: rgba(136, 136, 136, 0.15);
+  text-decoration: line-through;
+}

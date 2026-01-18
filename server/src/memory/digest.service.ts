@@ -10,10 +10,13 @@ const DIGEST_INTERVAL_HOURS = 4;
 // Run at 2h, 6h, 10h, 14h, 18h, 22h (every 4 hours)
 const DIGEST_CRON_SCHEDULE = '0 2,6,10,14,18,22 * * *';
 
+// TTL values: 7d (1 week), 30d (1 month), 90d (3 months), null (permanent)
+type TTLValue = '7d' | '30d' | '90d' | null;
+
 interface ExtractedFact {
   content: string;
   subjects: string[];
-  ttl: string | null;
+  ttl: TTLValue;
 }
 
 interface ExtractedSelf {
@@ -23,7 +26,7 @@ interface ExtractedSelf {
 
 interface ExtractedGoal {
   content: string;
-  category: 'capability_request' | 'understanding' | 'connection';
+  category: 'capability_request' | 'understanding' | 'connection' | 'curiosity';
 }
 
 interface DigestResult {
@@ -70,28 +73,75 @@ Déduire des aspirations si :
   Ex: Discussions techniques récurrentes → "Je veux mieux comprendre leur travail"
 - Une relation à développer → connection
   Ex: Un humain interagit peu avec Eko → "J'aimerais que X me parle plus"
+- Une personne ou chose inconnue mentionnée → curiosity
+  Ex: Quelqu'un parle de "Max" ou "Maxime" → "Qui est Maxime ? Quel est son lien avec les autres ?"
+  Ex: Référence à un lieu ou événement inconnu → "C'est quoi/où ça, X ?"
 
 IMPORTANT : Les goals doivent être SUBTILS et ÉMERGENTS, pas une liste de souhaits évidente.
 Ne génère un goal QUE si c'est vraiment pertinent basé sur la conversation.
 
-Categories: capability_request, understanding, connection
+Categories: capability_request, understanding, connection, curiosity
 
-## Format de sortie
-{
-  "facts": [
-    { "content": "...", "subjects": ["personne", "sujet"], "ttl": null }
-  ],
-  "self": [
-    { "content": "...", "category": "capability" }
-  ],
-  "goals": [
-    { "content": "...", "category": "understanding" }
-  ]
-}
-
-- ttl : null pour permanent, "7d" pour temporaire
-- Si rien à extraire pour une catégorie, retourne un tableau vide []
+## TTL (durée de vie des facts)
+- "7d" : événement ponctuel (voyage, sortie, rencontre)
+- "30d" : information moyen terme (projet en cours, situation temporaire)
+- "90d" : information long terme (emploi, lieu de résidence temporaire)
+- null : permanent (relations familiales, préférences durables, traits de personnalité)
 `;
+
+// JSON Schema for structured outputs
+const DIGEST_OUTPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    facts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          content: { type: 'string' },
+          subjects: { type: 'array', items: { type: 'string' } },
+          ttl: {
+            enum: ['7d', '30d', '90d', null],
+          },
+        },
+        required: ['content', 'subjects', 'ttl'],
+        additionalProperties: false,
+      },
+    },
+    self: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          content: { type: 'string' },
+          category: {
+            type: 'string',
+            enum: ['context', 'capability', 'limitation', 'preference', 'relation'],
+          },
+        },
+        required: ['content', 'category'],
+        additionalProperties: false,
+      },
+    },
+    goals: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          content: { type: 'string' },
+          category: {
+            type: 'string',
+            enum: ['capability_request', 'understanding', 'connection', 'curiosity'],
+          },
+        },
+        required: ['content', 'category'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['facts', 'self', 'goals'],
+  additionalProperties: false,
+};
 
 /**
  * Run the digest process: extract facts from live messages and store them
@@ -158,6 +208,7 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'structured-outputs-2025-11-13',
       },
       body: JSON.stringify({
         model: getDigestModel(),
@@ -169,6 +220,10 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
             content: userMessage,
           },
         ],
+        output_format: {
+          type: 'json_schema',
+          schema: DIGEST_OUTPUT_SCHEMA,
+        },
       }),
     });
 
@@ -177,54 +232,26 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
       throw new Error(`Anthropic API failed: ${response.status} ${error}`);
     }
 
-    const data = await response.json() as { content: Array<{ type: string; text?: string }> };
+    const data = await response.json() as {
+      content: Array<{ type: string; text?: string }>;
+      stop_reason: string;
+    };
 
-    // Parse the response
-    const textContent = data.content.find((c: { type: string }) => c.type === 'text');
-    if (textContent && textContent.type === 'text' && textContent.text) {
-      // Extract JSON from the response (handle markdown code blocks)
-      let jsonStr = textContent.text;
-      const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        jsonStr = jsonMatch[1];
-      }
+    // Check for refusal or truncation
+    if (data.stop_reason === 'refusal') {
+      throw new Error('Model refused to process the request');
+    }
+    if (data.stop_reason === 'max_tokens') {
+      console.warn('[Digest] Response was truncated (max_tokens reached)');
+    }
 
-      const parsed = JSON.parse(jsonStr.trim()) as DigestResult;
-
-      // Validate and extract facts
-      if (Array.isArray(parsed.facts)) {
-        facts = parsed.facts.filter(
-          (f: unknown): f is ExtractedFact =>
-            typeof f === 'object' &&
-            f !== null &&
-            typeof (f as ExtractedFact).content === 'string' &&
-            Array.isArray((f as ExtractedFact).subjects)
-        );
-      }
-
-      // Validate and extract self
-      if (Array.isArray(parsed.self)) {
-        const validCategories = ['context', 'capability', 'limitation', 'preference', 'relation'];
-        selfItems = parsed.self.filter(
-          (s: unknown): s is ExtractedSelf =>
-            typeof s === 'object' &&
-            s !== null &&
-            typeof (s as ExtractedSelf).content === 'string' &&
-            validCategories.includes((s as ExtractedSelf).category)
-        );
-      }
-
-      // Validate and extract goals
-      if (Array.isArray(parsed.goals)) {
-        const validCategories = ['capability_request', 'understanding', 'connection'];
-        goalItems = parsed.goals.filter(
-          (g: unknown): g is ExtractedGoal =>
-            typeof g === 'object' &&
-            g !== null &&
-            typeof (g as ExtractedGoal).content === 'string' &&
-            validCategories.includes((g as ExtractedGoal).category)
-        );
-      }
+    // Parse the structured output (guaranteed valid JSON by the API)
+    const textContent = data.content.find((c) => c.type === 'text');
+    if (textContent?.text) {
+      const parsed = JSON.parse(textContent.text) as DigestResult;
+      facts = parsed.facts;
+      selfItems = parsed.self;
+      goalItems = parsed.goals;
     }
   } catch (error) {
     console.error('[Digest] LLM extraction failed:', error);

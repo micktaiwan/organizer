@@ -32,7 +32,7 @@ export interface MemoryPayload {
   selfCategory?: 'context' | 'capability' | 'limitation' | 'preference' | 'relation';
 
   // For goals (pet aspirations)
-  goalCategory?: 'capability_request' | 'understanding' | 'connection';
+  goalCategory?: 'capability_request' | 'understanding' | 'connection' | 'curiosity';
 }
 
 export interface MemoryDocument {
@@ -71,5 +71,5 @@ export interface SelfMemoryInput {
 // Input from LLM for storing goals
 export interface GoalMemoryInput {
   content: string;
-  category: 'capability_request' | 'understanding' | 'connection';
+  category: 'capability_request' | 'understanding' | 'connection' | 'curiosity';
 }
