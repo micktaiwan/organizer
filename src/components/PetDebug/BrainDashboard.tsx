@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, Trash2, ChevronDown, ChevronRight, Search, Zap } from 'lucide-react';
+import { RefreshCw, Trash2, ChevronDown, ChevronRight, Search, Zap, Image } from 'lucide-react';
 import './BrainDashboard.css';
 
 interface MemoryPayload {
@@ -22,6 +22,7 @@ interface LivePreview {
   id: string;
   author: string;
   content: string;
+  type?: 'text' | 'caption';
   timestamp: string;
 }
 
@@ -543,7 +544,10 @@ export function BrainDashboard({ serverUrl, getAuthHeaders }: BrainDashboardProp
                 {livePreview.map((msg) => (
                   <div key={msg.id} className="preview-item">
                     <div className="preview-main">
-                      <span className="preview-author">{msg.author}</span>
+                      <span className="preview-author">
+                        {msg.author}
+                        {msg.type === 'caption' && <span title="Image caption"><Image size={12} className="preview-caption-icon" /></span>}
+                      </span>
                       <span className="preview-content">{msg.content}</span>
                     </div>
                     <button

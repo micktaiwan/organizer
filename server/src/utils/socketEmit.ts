@@ -14,6 +14,7 @@ interface MessageEmitData {
     senderId: any;
     type?: string;
     content?: string;
+    caption?: string;
     clientSource?: 'desktop' | 'android' | 'api';
   };
 }
@@ -79,21 +80,30 @@ export async function emitNewMessage({ io, socket, roomId, userId, message }: Me
       }
     }
 
-    // Observer: index Lobby messages for pet's live context (text only, skip media)
-    // Skip messages mentioning Eko - they're already handled in real-time by the agent
-    const mentionsEko = /\beko\b/i.test(message.content || '');
-    if (room.isLobby && message.type === 'text' && message.content && !mentionsEko) {
-      indexLiveMessage({
-        messageId: message._id.toString(),
-        content: message.content,
-        author: sender?.displayName || sender?.username || 'Unknown',
-        authorId: userId,
-        room: room.name,
-        roomId: roomId,
-        timestamp: new Date().toISOString(),
-      }).catch((err) => {
-        console.error('[Live] Failed to index message:', err.message);
-      });
+    // Observer: index Lobby messages for pet's live context
+    // Index text messages and image captions (not audio/file)
+    if (room.isLobby) {
+      const isText = message.type === 'text' && message.content;
+      const isCaption = message.type === 'image' && message.caption;
+      const textContent = isText ? message.content : isCaption ? message.caption : null;
+
+      // Skip messages mentioning Eko - they're handled in real-time by the agent
+      const mentionsEko = textContent ? /\beko\b/i.test(textContent) : false;
+
+      if (textContent && !mentionsEko) {
+        indexLiveMessage({
+          messageId: message._id.toString(),
+          content: textContent,
+          type: isCaption ? 'caption' : 'text',
+          author: sender?.displayName || sender?.username || 'Unknown',
+          authorId: userId,
+          room: room.name,
+          roomId: roomId,
+          timestamp: new Date().toISOString(),
+        }).catch((err) => {
+          console.error('[Live] Failed to index message:', err.message);
+        });
+      }
     }
 
     // Detect Eko mentions (case-insensitive, word boundary)

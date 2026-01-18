@@ -87,6 +87,7 @@ router.get('/live', authMiddleware, async (_req: AuthRequest, res: Response): Pr
         id: m.id,
         author: m.payload.author,
         content: m.payload.content.slice(0, 100) + (m.payload.content.length > 100 ? '...' : ''),
+        type: m.payload.type || 'text',
         timestamp: m.payload.timestamp,
       })),
     });
