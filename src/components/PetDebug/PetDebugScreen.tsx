@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Trash2, Database, Server, Laptop, Power, RefreshCw, Brain, X, Skull, Copy, ScrollText, Activity, MessageCircle } from 'lucide-react';
-import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { Send, Trash2, Database, Server, Laptop, Power, RefreshCw, Brain, Skull, ScrollText, MessageCircle } from 'lucide-react';
 import { Command } from '@tauri-apps/plugin-shell';
 import { load, Store } from '@tauri-apps/plugin-store';
 import { getApiBaseUrl } from '../../services/api';
@@ -27,19 +26,6 @@ interface PetResponse {
 type MessageGroup =
   | { type: 'single'; message: Message }
   | { type: 'system-group'; messages: Message[]; id: string };
-
-interface MemoryPayload {
-  type: string;
-  content: string;
-  timestamp: string;
-  authorName?: string;
-  roomName?: string;
-}
-
-interface MemoryItem {
-  id: string;
-  payload: MemoryPayload;
-}
 
 interface PetDebugScreenProps {
   showLogPanel?: boolean;
@@ -99,12 +85,7 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
     }
   };
   const [collectionInfo, setCollectionInfo] = useState<string | null>(null);
-  const [showMemoriesModal, setShowMemoriesModal] = useState(false);
-  const [memories, setMemories] = useState<MemoryItem[]>([]);
-  const [memoriesNextOffset, setMemoriesNextOffset] = useState<string | null>(null);
-  const [memoriesLoading, setMemoriesLoading] = useState(false);
   const [prodServerStatus, setProdServerStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
-  const [liveStats, setLiveStats] = useState<string | null>(null);
   const [localServerError, setLocalServerError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -311,69 +292,6 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
     }
   };
 
-  const openMemoriesModal = async () => {
-    setShowMemoriesModal(true);
-    setMemories([]);
-    setMemoriesNextOffset(null);
-    await loadMemories(null);
-  };
-
-  const loadMemories = async (offset: string | null) => {
-    setMemoriesLoading(true);
-    try {
-      const url = offset
-        ? `${serverUrl}/agent/memory/list?limit=20&offset=${offset}`
-        : `${serverUrl}/agent/memory/list?limit=20`;
-      const response = await fetch(url, { headers: getAuthHeaders() });
-      if (response.ok) {
-        const data = await response.json();
-        setMemories((prev) => (offset ? [...prev, ...data.memories] : data.memories));
-        setMemoriesNextOffset(data.nextOffset);
-      } else {
-        addSystemMessage(`Erreur chargement mémoires: HTTP ${response.status}`);
-      }
-    } catch {
-      addSystemMessage('Erreur réseau: impossible de charger les mémoires');
-    } finally {
-      setMemoriesLoading(false);
-    }
-  };
-
-  const deleteMemoryItem = async (id: string) => {
-    try {
-      const response = await fetch(`${serverUrl}/agent/memory/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-      if (response.ok) {
-        setMemories((prev) => prev.filter((m) => m.id !== id));
-      } else {
-        addSystemMessage(`Erreur suppression: HTTP ${response.status}`);
-      }
-    } catch {
-      addSystemMessage('Erreur réseau: impossible de supprimer');
-    }
-  };
-
-  const formatMemoriesForExport = (items: MemoryItem[]) => {
-    return items.map(m => {
-      const date = new Date(m.payload.timestamp).toLocaleString('fr-FR');
-      const author = m.payload.authorName || m.payload.type;
-      return `[${date}] ${author}: ${m.payload.content}`;
-    }).join('\n');
-  };
-
-  const exportMemories = async (count: 'last10' | 'all') => {
-    const toExport = count === 'last10' ? memories.slice(0, 10) : memories;
-    if (toExport.length === 0) {
-      addSystemMessage('Aucune mémoire à exporter');
-      return;
-    }
-    const text = formatMemoriesForExport(toExport);
-    await writeText(text);
-    addSystemMessage(`${toExport.length} mémoire(s) copiée(s)`);
-  };
-
   const runDiagnostic = async () => {
     const mode = useLocalServer ? 'LOCAL' : 'PROD';
     addSystemMessage('Getting infos...');
@@ -562,34 +480,6 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
     addSystemMessage(results.join('\n'));
   };
 
-  const fetchLiveStats = async () => {
-    try {
-      const response = await fetch(`${serverUrl}/admin/live/stats`, {
-        headers: getAuthHeaders(),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.count === 0) {
-          setLiveStats('Live: 0 messages');
-        } else {
-          const oldest = new Date(data.oldestTimestamp);
-          const newest = new Date(data.newestTimestamp);
-          const formatDate = (d: Date) => d.toLocaleString('fr-FR', {
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-          setLiveStats(`Live: ${data.count} msgs | ${formatDate(oldest)} → ${formatDate(newest)}`);
-        }
-      } else {
-        setLiveStats(`Erreur: HTTP ${response.status}`);
-      }
-    } catch (error) {
-      setLiveStats(`Erreur: ${error}`);
-    }
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -732,71 +622,10 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
           </div>
 
           {/* Debug panel */}
-          {(collectionInfo || liveStats) && (
+          {collectionInfo && (
             <div className="debug-panel">
-              {collectionInfo && <pre>{collectionInfo}</pre>}
-              {liveStats && <pre>{liveStats}</pre>}
-              <button onClick={() => { setCollectionInfo(null); setLiveStats(null); }}>Close</button>
-            </div>
-          )}
-          {/* Memories Modal */}
-          {showMemoriesModal && (
-            <div className="memories-modal-overlay" onClick={() => setShowMemoriesModal(false)}>
-              <div className="memories-modal" onClick={(e) => e.stopPropagation()}>
-                <div className="memories-modal-header">
-                  <h3>Mémoires ({memories.length})</h3>
-                  <button onClick={() => setShowMemoriesModal(false)}>
-                    <X size={18} />
-                  </button>
-                </div>
-                <div className="memories-modal-content">
-                  {memories.length === 0 && !memoriesLoading && (
-                    <p className="no-memories">Aucune mémoire stockée</p>
-                  )}
-                  {memories.map((m) => (
-                    <div key={m.id} className="memory-item">
-                      <div className="memory-info">
-                        <span className="memory-date">
-                          {new Date(m.payload.timestamp).toLocaleString('fr-FR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                        <span className="memory-author">{m.payload.authorName || m.payload.type}</span>
-                      </div>
-                      <div className="memory-content">{m.payload.content}</div>
-                      <button
-                        className="memory-delete"
-                        onClick={() => deleteMemoryItem(m.id)}
-                        title="Supprimer"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                  {memoriesLoading && <p className="memories-loading">Chargement...</p>}
-                </div>
-                <div className="memories-modal-footer">
-                  {memoriesNextOffset && !memoriesLoading && (
-                    <button onClick={() => loadMemories(memoriesNextOffset)}>
-                      Charger plus...
-                    </button>
-                  )}
-                  <div className="memories-export-buttons">
-                    <button onClick={() => exportMemories('last10')} disabled={memories.length === 0}>
-                      <Copy size={14} />
-                      Last 10
-                    </button>
-                    <button onClick={() => exportMemories('all')} disabled={memories.length === 0}>
-                      <Copy size={14} />
-                      All
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <pre>{collectionInfo}</pre>
+              <button onClick={() => setCollectionInfo(null)}>Close</button>
             </div>
           )}
 
@@ -813,16 +642,8 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
               <Database size={16} />
               Qdrant Info
             </button>
-            <button onClick={openMemoriesModal} title="Voir les mémoires stockées">
-              <Brain size={16} />
-              Mémoires
-            </button>
             <button onClick={runDiagnostic} title="Diagnostic complet">
               🔍 Diagnostic
-            </button>
-            <button onClick={fetchLiveStats} title="Stats collection live (messages en attente de digest)">
-              <Activity size={16} />
-              Live Stats
             </button>
           </div>
 

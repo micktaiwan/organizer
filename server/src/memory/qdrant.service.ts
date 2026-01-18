@@ -193,39 +193,6 @@ interface QdrantScrollResponse {
   time: number;
 }
 
-export async function listMemories(
-  limit = 20,
-  offset?: string
-): Promise<{ points: { id: string; payload: MemoryPayload }[]; nextOffset: string | null }> {
-  // Fetch more to allow client-side sorting, then trim
-  const fetchLimit = offset ? limit : Math.min(limit * 2, 100);
-  const result = await qdrantRequest<QdrantScrollResponse>(
-    `/collections/${COLLECTION_NAME}/points/scroll`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        limit: fetchLimit,
-        offset: offset || null,
-        with_payload: true,
-        with_vector: false,
-      }),
-    }
-  );
-
-  // Sort by timestamp DESC (most recent first)
-  const sorted = result.result.points.sort((a, b) => {
-    const timeA = new Date(a.payload.timestamp).getTime();
-    const timeB = new Date(b.payload.timestamp).getTime();
-    return timeB - timeA;
-  });
-
-  // Return only requested limit
-  const points = sorted.slice(0, limit);
-  const nextOffset = result.result.next_page_offset;
-
-  return { points, nextOffset };
-}
-
 export async function deleteMemory(id: string): Promise<void> {
   await qdrantRequest(`/collections/${COLLECTION_NAME}/points/delete`, {
     method: 'POST',

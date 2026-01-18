@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { agentService } from '../agent/index.js';
-import { getCollectionInfo, listMemories, deleteMemory } from '../memory/index.js';
+import { getCollectionInfo, deleteMemory } from '../memory/index.js';
 import brainRoutes from './brain.js';
 
 const router = Router();
@@ -109,22 +109,6 @@ router.get('/memory/info', authMiddleware, async (_req: AuthRequest, res: Respon
   } catch (error) {
     console.error('[Agent] Memory info error:', error);
     res.status(500).json({ error: 'Erreur lors de la récupération des infos mémoire' });
-  }
-});
-
-router.get('/memory/list', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
-    const offset = req.query.offset as string | undefined;
-    const result = await listMemories(limit, offset);
-    res.json({
-      memories: result.points,
-      nextOffset: result.nextOffset,
-      count: result.points.length,
-    });
-  } catch (error) {
-    console.error('[Agent] Memory list error:', error);
-    res.status(500).json({ error: 'Erreur lors de la récupération des mémoires' });
   }
 });
 
