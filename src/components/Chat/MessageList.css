@@ -1,0 +1,260 @@
+.message-avatar {
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+}
+
+.message-sender-name {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.125rem;
+  padding-left: var(--spacing-sm);
+}
+
+.message-sender-name .status-dot {
+  width: 8px;
+  height: 8px;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  max-width: 70%;
+  margin-top: 0.75rem;
+}
+
+.message:first-child {
+  margin-top: 0;
+}
+
+.message.me {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.message.them {
+  flex-direction: row;
+  align-self: flex-start;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.bubble {
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  word-wrap: break-word;
+}
+
+.message.me .bubble {
+  background: #007aff;
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.message.me.failed .bubble {
+  background: #ff3b30;
+}
+
+.message.me.failed .timestamp {
+  color: #ff3b30;
+}
+
+.message.them .bubble {
+  background: white;
+  color: #1a1a1a;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.message-link {
+  color: #6B9FFF;
+  text-decoration: underline;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.message-link:hover {
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+.message.me .message-link {
+  color: #c8e0ff;
+}
+
+.timestamp {
+  font-size: 0.7rem;
+  color: #999;
+  white-space: nowrap;
+}
+
+.message-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.message-input {
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+}
+
+.message-input input {
+  flex: 1;
+}
+
+.message-image {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 12px;
+  display: block;
+  cursor: pointer;
+}
+
+.bubble .message-image + span {
+  display: block;
+  margin-top: 0.5rem;
+}
+
+.system-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem auto;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  max-width: 80%;
+}
+
+.system-message-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.system-message-icon {
+  font-size: 1rem;
+}
+
+.system-message-icon.missed-call,
+.system-message-icon.rejected-call {
+  color: #ff3b30;
+}
+
+.system-message-icon.ended-call {
+  color: #999;
+}
+
+.system-message-icon.announcement {
+  color: #34c759;
+}
+
+.system-message-text {
+  font-size: 0.85rem;
+  color: #999;
+  font-style: italic;
+  white-space: pre-line;
+  text-align: left;
+}
+
+.system-message-time {
+  font-size: 0.7rem;
+  color: #bbb;
+}
+
+.sent-icon {
+  color: #888;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.read-icon {
+  color: #4CAF50;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.message.me .audio-player {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+@media (prefers-color-scheme: dark) {
+.message.them .bubble {
+    background: #333333;
+    color: #f5f5f5;
+  }
+
+.timestamp {
+    color: #aaaaaa;
+  }
+
+.message-input {
+    background: #2a2a2a;
+    border-color: #333;
+  }
+}
+
+.message {
+  position: relative;
+}
+
+.message.me {
+  flex-direction: row;
+}
+
+.message-delete-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 59, 48, 0.1);
+  color: #ff3b30;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.message-delete-btn:hover {
+  background: rgba(255, 59, 48, 0.2);
+}
+
+.message-deleting {
+  font-size: 0.7rem;
+  color: #999;
+  margin-left: auto;
+}
+
+@media (prefers-color-scheme: dark) {
+.message-delete-btn {
+    background: rgba(255, 59, 48, 0.15);
+  }
+
+.message-delete-btn:hover {
+    background: rgba(255, 59, 48, 0.3);
+  }
+}
