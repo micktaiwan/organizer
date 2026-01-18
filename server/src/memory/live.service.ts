@@ -15,6 +15,7 @@ function generateUUID(input: string): string {
 
 export interface LiveMessagePayload {
   content: string;
+  type?: 'text' | 'caption';
   author: string;
   authorId: string;
   room: string;

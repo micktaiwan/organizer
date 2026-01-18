@@ -335,9 +335,17 @@
 }
 
 .preview-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 500;
   color: #6B9FFF;
+}
+
+.preview-caption-icon {
+  color: #888;
+  flex-shrink: 0;
 }
 
 .preview-content {

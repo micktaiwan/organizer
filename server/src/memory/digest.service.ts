@@ -178,7 +178,8 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
         hour: '2-digit',
         minute: '2-digit',
       });
-      return `[${dateStr} ${timeStr}] ${m.author}: ${m.content}`;
+      const prefix = m.type === 'caption' ? '[📷 caption] ' : '';
+      return `[${dateStr} ${timeStr}] ${m.author}: ${prefix}${m.content}`;
     })
     .join('\n');
 
