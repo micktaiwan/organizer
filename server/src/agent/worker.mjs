@@ -281,7 +281,8 @@ memories: [
 - ttl : "7d", "30d" pour temporaire, null pour permanent
 
 ## Comment répondre
-Tu DOIS utiliser l'outil "respond" pour chaque réponse. Choisis une expression qui correspond à ton émotion.
+Tu DOIS utiliser l'outil "respond" pour répondre. Choisis une expression qui correspond à ton émotion.
+IMPORTANT : N'appelle "respond" qu'UNE SEULE FOIS par message. Après avoir appelé respond, ARRÊTE-TOI immédiatement.
 
 Expressions disponibles :
 - neutral : visage normal
@@ -327,7 +328,8 @@ let isProcessing = false;
 let currentRequest = {
   requestId: null,
   userId: null,
-  responseData: { expression: 'neutral', message: '', memories: [] }
+  responseData: { expression: 'neutral', message: '', memories: [] },
+  hasResponded: false  // Flag to prevent multiple respond calls
 };
 
 // Cleanup inactive sessions (15 minutes timeout)
@@ -459,6 +461,14 @@ const respondTool = tool(
       .describe('Faits importants à retenir (relations, événements de vie). Pas les bavardages.')
   },
   async (args) => {
+    // Prevent multiple respond calls - only the first one counts
+    if (currentRequest.hasResponded) {
+      log('warn', `[Tool] ⚠️ respond called again, ignoring (already responded)`);
+      return {
+        content: [{ type: 'text', text: 'ERREUR: Tu as déjà répondu. N\'appelle respond qu\'UNE SEULE FOIS par conversation.' }]
+      };
+    }
+
     log('info', `[Tool] 💬 respond called`, {
       expression: args.expression,
       message: args.message.slice(0, 50) + (args.message.length > 50 ? '...' : ''),
@@ -475,6 +485,7 @@ const respondTool = tool(
       });
     }
 
+    currentRequest.hasResponded = true;
     currentRequest.responseData = {
       expression: args.expression,
       message: args.message,
@@ -482,7 +493,7 @@ const respondTool = tool(
     };
     send({ type: 'text', text: args.message, requestId: currentRequest.requestId });
     return {
-      content: [{ type: 'text', text: `Réponse envoyée avec expression: ${args.expression}` }]
+      content: [{ type: 'text', text: `Réponse envoyée (${args.expression}). STOP - n'appelle plus aucun outil.` }]
     };
   }
 );
@@ -529,7 +540,8 @@ async function runQuery(params) {
   currentRequest = {
     requestId,
     userId,
-    responseData: { expression: 'neutral', message: '', memories: [] }
+    responseData: { expression: 'neutral', message: '', memories: [] },
+    hasResponded: false
   };
 
   log('info', `[Agent] 🚀 Starting query`, { requestId, userId });

@@ -6,6 +6,20 @@ import { getCollectionInfo, listMemories, deleteMemory } from '../memory/index.j
 
 const router = Router();
 
+// Lightweight health check - no LLM call, just checks worker is running
+router.get('/health', authMiddleware, async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const isHealthy = await agentService.ping();
+    if (isHealthy) {
+      res.json({ status: 'ok' });
+    } else {
+      res.status(503).json({ status: 'unavailable', error: 'Worker not ready' });
+    }
+  } catch (error) {
+    res.status(503).json({ status: 'error', error: (error as Error).message });
+  }
+});
+
 const askSchema = z.object({
   question: z.string().min(1).max(500),
 });

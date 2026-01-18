@@ -1,6 +1,13 @@
+import cron, { ScheduledTask } from 'node-cron';
 import { getAllLiveMessages, clearLiveCollection, getLiveCollectionInfo } from './live.service.js';
 import { storeFactMemory } from './qdrant.service.js';
 import { getAnthropicApiKey, getDigestModel } from '../config/agent.js';
+import { getConfig, setConfig } from '../models/index.js';
+
+const DIGEST_CONFIG_KEY = 'lastDigestAt';
+const DIGEST_INTERVAL_HOURS = 4;
+// Run at 2h, 6h, 10h, 14h, 18h, 22h (every 4 hours)
+const DIGEST_CRON_SCHEDULE = '0 2,6,10,14,18,22 * * *';
 
 interface ExtractedFact {
   content: string;
@@ -189,6 +196,9 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
   const cleared = await clearLiveCollection();
   console.log(`[Digest] Cleared ${cleared} messages from live collection`);
 
+  // Save last digest timestamp
+  await setConfig(DIGEST_CONFIG_KEY, new Date().toISOString());
+
   const duration = Date.now() - startTime;
   console.log(`[Digest] Completed in ${duration}ms: ${facts.length} facts from ${messages.length} messages`);
 
@@ -196,18 +206,53 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
 }
 
 /**
- * Schedule the digest to run periodically
+ * Check if catch-up digest is needed (last digest > 4h ago)
  */
-export function scheduleDigest(intervalHours = 6): NodeJS.Timeout {
-  const intervalMs = intervalHours * 60 * 60 * 1000;
+async function checkAndRunCatchUp(): Promise<void> {
+  const lastDigestStr = await getConfig<string>(DIGEST_CONFIG_KEY);
 
-  console.log(`[Digest] Scheduled to run every ${intervalHours} hours`);
+  if (!lastDigestStr) {
+    console.log('[Digest] No previous digest found, running catch-up...');
+    await runDigest();
+    return;
+  }
 
-  return setInterval(async () => {
+  const lastDigest = new Date(lastDigestStr);
+  const hoursSinceLastDigest = (Date.now() - lastDigest.getTime()) / (1000 * 60 * 60);
+
+  if (hoursSinceLastDigest >= DIGEST_INTERVAL_HOURS) {
+    console.log(`[Digest] Last digest was ${hoursSinceLastDigest.toFixed(1)}h ago, running catch-up...`);
+    await runDigest();
+  } else {
+    console.log(`[Digest] Last digest was ${hoursSinceLastDigest.toFixed(1)}h ago, no catch-up needed`);
+  }
+}
+
+/**
+ * Schedule the digest with fixed hours + startup catch-up
+ * Runs at 2h, 6h, 10h, 14h, 18h, 22h (every 4 hours)
+ */
+export async function scheduleDigest(): Promise<ScheduledTask> {
+  console.log(`[Digest] Scheduling at fixed hours: ${DIGEST_CRON_SCHEDULE}`);
+
+  // Check for catch-up on startup
+  try {
+    await checkAndRunCatchUp();
+  } catch (error) {
+    console.error('[Digest] Catch-up check failed:', error);
+  }
+
+  // Schedule cron job for fixed hours
+  const task = cron.schedule(DIGEST_CRON_SCHEDULE, async () => {
+    console.log(`[Digest] Cron triggered at ${new Date().toISOString()}`);
     try {
       await runDigest();
     } catch (error) {
       console.error('[Digest] Scheduled digest failed:', error);
     }
-  }, intervalMs);
+  }, {
+    timezone: 'Europe/Paris'
+  });
+
+  return task;
 }

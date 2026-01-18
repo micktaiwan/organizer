@@ -289,7 +289,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       // Only notify when window is not focused
       const isFocused = await getCurrentWindow().isFocused();
       if (!isFocused && data.fromName && data.preview) {
-        showMessageNotification(data.fromName, data.roomName || 'Chat', data.preview);
+        showMessageNotification(data.fromName, data.roomName || 'Chat', data.preview, data.roomId);
       }
     });
 

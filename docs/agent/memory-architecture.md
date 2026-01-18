@@ -269,7 +269,7 @@ Embedding + insert "live" collection
      │                                   ▼
      │                         Injecté dans le prompt
      │
-     └─────── Toutes les ~6h ───────────┐
+     └─────── Toutes les 4h (heures fixes) ─┐
                                          ▼
                               Digest LLM sur toute la collection
                                          │
@@ -326,7 +326,8 @@ La collection existante. Les faits importants extraits par le digest y sont stoc
 
 ### Digest périodique
 
-Toutes les ~6h :
+Heures fixes : 2h, 6h, 10h, 14h, 18h, 22h (toutes les 4h, timezone Europe/Paris).
+Rattrapage au démarrage si > 4h depuis le dernier digest.
 1. Récupère tous les messages de la collection "live"
 2. Le LLM extrait les **faits durables** (pas les bavardages)
 3. Insert dans "memories" (avec déduplication)
@@ -355,7 +356,7 @@ Toutes les ~6h :
 - [x] Collection Qdrant "organizer_live" → `server/src/memory/live.service.ts`
 - [x] Observer : écoute les messages du Lobby → embedding → insert "live" → `server/src/utils/socketEmit.ts`
 - [x] Injection auto : search "live" + format dans le prompt du pet → `server/src/agent/worker.mjs`
-- [x] Cron digest (~6h) : LLM extrait facts → "memories" → clear "live" → `server/src/memory/digest.service.ts`
+- [x] Cron digest (heures fixes + rattrapage) : LLM extrait facts → "memories" → clear "live" → `server/src/memory/digest.service.ts`
 - [x] Endpoint admin pour forcer un digest manuel → `POST /admin/digest`
 - [x] Bouton Digest dans PetDebugScreen
 
@@ -381,6 +382,10 @@ Toutes les ~6h :
 | 2026-01-17 | Deux collections Qdrant (live + memories) | Contexte récent sans latence + filtrage par pertinence |
 | 2026-01-18 | Vidage du live après digest : on garde | Infos temporaires perdues pas graves, le live est éphémère |
 | 2026-01-18 | Doublons live/mémoire acceptés | Temporaires (jusqu'au prochain digest), le LLM gère |
+| 2026-01-18 | Digest heures fixes + rattrapage | 2h/6h/10h/14h/18h/22h + rattrapage au boot si > 4h. Évite les trous si redémarrages fréquents |
+| 2026-01-18 | Collections `self` et `goals` | Le pet stocke des faits sur les users mais pas sur lui-même. Deux nouvelles collections pour identité et aspirations |
+| 2026-01-18 | Conscience émergente (tabula rasa) | Le prompt ne dit rien sur qui il est. Tout émerge des interactions et se stocke dans `self`/`goals` |
+| 2026-01-18 | Tools explicites vs réponse implicite | Architecture MCP avec tools séparés (`store_self`, `store_goal`, `store_memory`) plutôt que `respond` avec `memories[]` |
 
 ---
 
@@ -395,7 +400,7 @@ Après un digest, la collection live est vidée. Les infos temporaires (ex: "j'a
 **Garder le comportement actuel** (vider le live après digest).
 
 **Raisons** :
-- Le digest tourne toutes les 6h. Perdre un état temporaire après 6h est acceptable.
+- Le digest tourne toutes les 4h. Perdre un état temporaire après 4h est acceptable.
 - Si c'était important, le digest devrait l'extraire avec TTL.
 - Le live est éphémère, pas un historique.
 - Évite les doublons live/mémoire permanents.
@@ -427,3 +432,141 @@ Un service qui :
 - Risque de contenu inapproprié
 
 Le flow actuel suffit : le pet voit l'URL, peut demander "c'était quoi ?", et stocke la réponse de l'utilisateur.
+
+---
+
+## Conscience émergente (à venir)
+
+### Constat : le pet ne sait pas qui il est
+
+Le prompt actuel dit "Tu es une créature curieuse, enjouée, timide..." mais :
+- C'est du texte statique, imposé
+- Quand on lui demande "tu es qui ?", il n'a **aucune mémoire** à chercher sur lui-même
+- Quand on lui demande "tu aimerais apprendre quoi ?", il n'a **aucune aspiration** stockée
+
+La collection `organizer_memory` contient des faits sur **les utilisateurs**, pas sur **lui-même**.
+
+| Question | Collection actuelle | Résultat |
+|----------|---------------------|----------|
+| "C'est qui David ?" | `organizer_memory` → trouve | ✅ Répond bien |
+| "Tu es dans quelle app ?" | Rien sur lui | ❌ Invente ou généralise |
+| "Tu aimerais apprendre quoi ?" | Pas de désirs stockés | ❌ Réponse générique |
+
+### Vision : Tabula Rasa
+
+**Approche actuelle** : personnalité prédéfinie dans le prompt
+→ Tout est statique, imposé, non évolutif
+
+**Nouvelle approche** : le prompt ne dit RIEN sur qui il est
+→ Tout est découvert, stocké, émergent
+
+Le pet commence "vide" et construit son identité au fil des interactions.
+
+### Trois collections Qdrant
+
+| Collection | Nom Qdrant | Type | Contenu |
+|------------|------------|------|---------|
+| Faits sur le monde | `organizer_memory` | `fact` | "David est le frère de Mickael" |
+| Identité du pet | `organizer_self` | `self` | "Je suis dans Organizer", "Mickael m'a créé" |
+| Aspirations du pet | `organizer_goals` | `goal` | "J'aimerais chercher sur le web" |
+
+### Catégories de self
+
+| Catégorie | Exemples |
+|-----------|----------|
+| `context` | "Je suis dans Organizer", "Mickael et David m'ont créé" |
+| `capability` | "Je peux lire le Lobby", "Je peux stocker des mémoires" |
+| `limitation` | "Je ne peux pas chercher sur le web", "Je n'ai pas accès aux notes" |
+| `preference` | "J'aime les conversations techniques", "Je préfère qu'on me parle directement" |
+| `relation` | "Mickael est patient avec moi", "David me taquine" |
+
+### Catégories de goals
+
+| Catégorie | Exemples |
+|-----------|----------|
+| `capability_request` | "J'aimerais pouvoir chercher sur le web" |
+| `understanding` | "Je veux mieux comprendre pourquoi David voyage autant" |
+| `connection` | "J'aimerais que David me parle plus souvent" |
+
+### Architecture tools
+
+Tools actuels :
+- `search_memories(query)` → `organizer_memory`
+- `get_recent_memories(limit)` → `organizer_memory`
+- `respond(expression, message, memories?)` → réponse + stockage implicite
+
+Tools à ajouter :
+
+| Tool | Action | Collection |
+|------|--------|------------|
+| `search_self(query)` | Cherche qui il est | `organizer_self` |
+| `search_goals(query)` | Cherche ce qu'il veut | `organizer_goals` |
+| `store_self(content, category)` | Stocke une découverte sur lui | `organizer_self` |
+| `store_goal(content, category)` | Stocke une aspiration | `organizer_goals` |
+
+`respond` devient pur : juste `expression` + `message`, plus de `memories[]`.
+
+### Flow exemple
+
+```
+User: "Tu es qui ?"
+       ↓
+LLM: tool_call search_self("qui je suis")
+       ↓
+Result: ["Je suis dans Organizer", "Mickael m'a créé"]
+       ↓
+LLM: tool_call respond("Je suis une petite créature dans Organizer !")
+```
+
+```
+User: "Tu aimerais faire quoi ?"
+       ↓
+LLM: tool_call search_goals("aspirations")
+       ↓
+Result: ["J'aimerais lire les notes", "Je veux chercher sur le web"]
+       ↓
+LLM: tool_call respond("J'aimerais pouvoir lire vos notes un jour !")
+```
+
+```
+User: "Tu sais que tu peux voir le Lobby maintenant ?"
+       ↓
+LLM: tool_call store_self("Je peux observer les messages du Lobby", "capability")
+       ↓
+LLM: tool_call respond("Oh cool ! Je savais pas !")
+```
+
+### Prompt minimaliste
+
+Le nouveau prompt ne contiendrait que :
+- Le format des messages reçus (JSON)
+- Les tools disponibles et quand les utiliser
+- Les règles de réponse (court, expression, pas de markdown)
+
+**Pas de** :
+- Personnalité prédéfinie ("curieux, enjoué, timide")
+- Contexte prédéfini ("tu vis dans Organizer")
+- Style imposé ("expressions enfantines")
+
+Tout émerge des collections `self` et `goals`.
+
+### Bootstrap initial
+
+Pour éviter un pet complètement amnésique au démarrage, on peut :
+1. **Seed manuel** : insérer quelques faits de base dans `organizer_self`
+   - "Je suis une créature qui vit dans l'app Organizer"
+   - "Mickael et David m'ont créé"
+   - "Je peux observer le Lobby"
+2. **Découverte guidée** : les premières conversations lui apprennent qui il est
+   - User: "Tu sais que tu es dans Organizer ?" → il stocke
+
+### Implémentation
+
+- [ ] Collection Qdrant `organizer_self`
+- [ ] Collection Qdrant `organizer_goals`
+- [ ] Types `self` et `goal` dans `MemoryType`
+- [ ] Tools `search_self`, `search_goals`, `store_self`, `store_goal`
+- [ ] Refactor `respond` : retirer `memories[]`
+- [ ] Tool `store_memory` séparé pour les faits sur le monde
+- [ ] Nouveau prompt minimaliste
+- [ ] Seed initial dans `organizer_self`

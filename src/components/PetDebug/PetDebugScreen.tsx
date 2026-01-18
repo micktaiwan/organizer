@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Trash2, Database, Server, Laptop, Power, RefreshCw, Brain, X, Skull, Copy, ScrollText, Zap } from 'lucide-react';
+import { Send, Trash2, Database, Server, Laptop, Power, RefreshCw, Brain, X, Skull, Copy, ScrollText, Zap, Activity } from 'lucide-react';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { Command, Child } from '@tauri-apps/plugin-shell';
 import { load, Store } from '@tauri-apps/plugin-store';
@@ -75,6 +75,7 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
   const [memoriesLoading, setMemoriesLoading] = useState(false);
   const [prodServerStatus, setProdServerStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
   const [isDigesting, setIsDigesting] = useState(false);
+  const [liveStats, setLiveStats] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const processRef = useRef<Child | null>(null);
   const startupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -663,21 +664,20 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
         results.push('✗ Token: Absent (non connecté?)');
       }
 
-      // 3. Check agent endpoint
+      // 3. Check agent endpoint (lightweight health check, no LLM call)
       try {
-        const agentRes = await fetch(`${serverUrl}/agent/ask`, {
-          method: 'POST',
+        const agentRes = await fetch(`${serverUrl}/agent/health`, {
           headers: getAuthHeaders(),
-          body: JSON.stringify({ question: 'ping' }),
-          signal: AbortSignal.timeout(10000)
+          signal: AbortSignal.timeout(5000)
         });
         if (agentRes.ok) {
-          results.push('✓ Agent endpoint: Répond');
+          results.push('✓ Agent worker: Actif');
         } else {
-          results.push(`⚠ Agent endpoint: HTTP ${agentRes.status}`);
+          const data = await agentRes.json().catch(() => ({}));
+          results.push(`⚠ Agent worker: ${data.error || `HTTP ${agentRes.status}`}`);
         }
       } catch {
-        results.push('✗ Agent endpoint: Non accessible ou timeout');
+        results.push('✗ Agent worker: Non accessible ou timeout');
       }
     }
 
@@ -705,6 +705,34 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
       addSystemMessage(`Digest error: ${error}`);
     } finally {
       setIsDigesting(false);
+    }
+  };
+
+  const fetchLiveStats = async () => {
+    try {
+      const response = await fetch(`${serverUrl}/admin/live/stats`, {
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.count === 0) {
+          setLiveStats('Live: 0 messages');
+        } else {
+          const oldest = new Date(data.oldestTimestamp);
+          const newest = new Date(data.newestTimestamp);
+          const formatDate = (d: Date) => d.toLocaleString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          setLiveStats(`Live: ${data.count} msgs | ${formatDate(oldest)} → ${formatDate(newest)}`);
+        }
+      } else {
+        setLiveStats(`Erreur: HTTP ${response.status}`);
+      }
+    } catch (error) {
+      setLiveStats(`Erreur: ${error}`);
     }
   };
 
@@ -830,10 +858,11 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
       </div>
 
       {/* Debug panel */}
-      {collectionInfo && (
+      {(collectionInfo || liveStats) && (
         <div className="debug-panel">
-          <pre>{collectionInfo}</pre>
-          <button onClick={() => setCollectionInfo(null)}>Close</button>
+          {collectionInfo && <pre>{collectionInfo}</pre>}
+          {liveStats && <pre>{liveStats}</pre>}
+          <button onClick={() => { setCollectionInfo(null); setLiveStats(null); }}>Close</button>
         </div>
       )}
       {/* Memories Modal */}
@@ -916,6 +945,10 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
         </button>
         <button onClick={runDiagnostic} title="Diagnostic complet">
           🔍 Diagnostic
+        </button>
+        <button onClick={fetchLiveStats} title="Stats collection live (messages en attente de digest)">
+          <Activity size={16} />
+          Live Stats
         </button>
         <button onClick={runDigest} disabled={isDigesting} title="Extraire les faits des messages live">
           <Zap size={16} />

@@ -219,3 +219,24 @@ export async function getLiveCollectionInfo(): Promise<{ pointsCount: number }> 
     return { pointsCount: 0 };
   }
 }
+
+/**
+ * Get detailed stats including time span
+ */
+export async function getLiveCollectionStats(): Promise<{
+  count: number;
+  oldestTimestamp: string | null;
+  newestTimestamp: string | null;
+}> {
+  const messages = await getAllLiveMessages(); // Already sorted by timestamp ASC
+
+  if (messages.length === 0) {
+    return { count: 0, oldestTimestamp: null, newestTimestamp: null };
+  }
+
+  return {
+    count: messages.length,
+    oldestTimestamp: messages[0].timestamp,
+    newestTimestamp: messages[messages.length - 1].timestamp,
+  };
+}

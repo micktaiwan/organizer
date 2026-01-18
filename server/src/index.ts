@@ -190,17 +190,17 @@ async function start() {
     await ensureLobby();
     await ensureLiveCollection();
 
+    // Start the digest cron (fixed hours: 2h, 6h, 10h, 14h, 18h, 22h + catch-up on startup)
+    const digestTask = await scheduleDigest();
+
     httpServer.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`Socket.io ready`);
 
-      // Start the digest cron (every 6 hours)
-      const digestInterval = scheduleDigest(6);
-
       // Cleanup on shutdown
       const shutdown = () => {
         console.log('Shutting down...');
-        clearInterval(digestInterval);
+        digestTask.stop();
         httpServer.close();
         process.exit(0);
       };
