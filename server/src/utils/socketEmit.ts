@@ -14,6 +14,7 @@ interface MessageEmitData {
     senderId: any;
     type?: string;
     content?: string;
+    clientSource?: 'desktop' | 'android' | 'api';
   };
 }
 
@@ -112,6 +113,7 @@ export async function emitNewMessage({ io, socket, roomId, userId, message }: Me
           authorId: userId,
           authorName: sender?.displayName || sender?.username || 'Unknown',
           roomName: room.name,
+          clientSource: message.clientSource,
         }).catch((err) => {
           console.error('[Eko] Failed to handle mention:', err.message);
         });
