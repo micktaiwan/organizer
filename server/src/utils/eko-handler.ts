@@ -9,13 +9,14 @@ interface EkoMentionData {
   authorId: string;
   authorName: string;
   roomName: string;
+  clientSource?: 'desktop' | 'android' | 'api';
 }
 
 /**
  * Handle Eko mention: get context, ask agent, post response
  */
 export async function handleEkoMention(data: EkoMentionData) {
-  const { io, roomId, messageContent, authorId, authorName, roomName } = data;
+  const { io, roomId, messageContent, authorId, authorName, roomName, clientSource } = data;
 
   try {
     // Get Eko user
@@ -43,13 +44,14 @@ export async function handleEkoMention(data: EkoMentionData) {
       .join('\n');
 
     // Build prompt for agent
+    const clientLabel = clientSource === 'android' ? 'Android' : clientSource === 'desktop' ? 'Desktop' : clientSource || 'inconnu';
     const prompt = `Tu es Eko, un assistant collaboratif dans l'app Organizer.
 Room: "${roomName}"
 
 Contexte récent:
 ${context}
 
-Dernier message de ${authorName}: ${messageContent}
+Dernier message de ${authorName} (depuis ${clientLabel}): ${messageContent}
 
 IMPORTANT - Analyse le contexte avant de répondre :
 - Si on te PARLE DIRECTEMENT (2ème personne: "Eko, dis-moi...", "Eko peux-tu...") → utilise respond pour répondre
