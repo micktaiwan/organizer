@@ -181,8 +181,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     if (!currentRoomId || !userId) return;
 
     const unsubNewMessage = socketService.on('message:new', async (data: any) => {
-      // Skip own messages - we already have them via optimistic update
-      if (data.from === userId) return;
+      // Note: We don't filter by userId here because the same user may send
+      // messages from different devices (Android, desktop). The duplicate check
+      // below (line checking serverMessageId) handles optimistic update deduplication.
 
       if (data.roomId === currentRoomId && data.messageId) {
         // Retry logic for transient failures
