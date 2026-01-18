@@ -83,7 +83,8 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
       isArchived: archived === 'true',
     };
 
-    if (labelId) {
+    // Only add labelId filter if it's a valid string (not an object or array)
+    if (labelId && typeof labelId === 'string' && labelId.length === 24) {
       filter.labels = labelId;
     }
 

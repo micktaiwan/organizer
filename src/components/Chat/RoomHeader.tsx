@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Globe, LogOut, Hash } from 'lucide-react';
+import { Settings, Globe, Hash } from 'lucide-react';
 import { Room } from '../../services/api';
 import { UserStatus } from '../../types';
 import { RoomMembers } from './RoomMembers';
@@ -19,7 +19,6 @@ interface RoomHeaderProps {
   onStatusChange: (status: UserStatus, statusMessage: string | null, isMuted: boolean) => void;
   onOpenSettings: () => void;
   onChangeServer: () => void;
-  onLogout: () => void;
 }
 
 export const RoomHeader: React.FC<RoomHeaderProps> = ({
@@ -36,7 +35,6 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   onStatusChange,
   onOpenSettings,
   onChangeServer,
-  onLogout,
 }) => {
   return (
     <header className="room-header">
@@ -92,14 +90,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
             currentIsMuted={userIsMuted}
             onStatusChange={onStatusChange}
           />
-          <button
-            className="room-header__user-btn"
-            onClick={onLogout}
-            title="Se déconnecter"
-          >
-            <span className="room-header__username">{username}</span>
-            <LogOut size={16} />
-          </button>
+          <span className="room-header__username">{username}</span>
         </div>
       </div>
     </header>

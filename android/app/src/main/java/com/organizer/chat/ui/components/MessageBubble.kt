@@ -150,7 +150,8 @@ fun MessageBubble(
             .padding(horizontal = 8.dp, vertical = 2.dp),
         horizontalAlignment = if (isMyMessage) Alignment.End else Alignment.Start
     ) {
-        // Sender name with status indicator
+        // Sender name with status indicator (special badge for Eko)
+        val isEko = firstMsg.senderId.displayName.lowercase() == "eko"
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(
@@ -159,30 +160,45 @@ fun MessageBubble(
                 bottom = 2.dp
             )
         ) {
-            // Status indicator dot
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .background(
-                        color = getStatusColor(firstMsg.senderId.status),
-                        shape = CircleShape
-                    )
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            // Sender name
-            Text(
-                text = firstMsg.senderId.displayName,
-                style = MaterialTheme.typography.labelSmall,
-                color = AccentBlue
-            )
-            // Status message if present
-            firstMsg.senderId.statusMessage?.let { statusMsg ->
-                Text(
-                    text = " · $statusMsg",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray,
-                    maxLines = 1
+            if (isEko) {
+                // Eko badge with bot icon
+                Icon(
+                    imageVector = Icons.Default.SmartToy,
+                    contentDescription = "Bot",
+                    modifier = Modifier.size(14.dp),
+                    tint = Color(0xFFA78BFA) // Purple color
                 )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Eko",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFA78BFA) // Purple color
+                )
+            } else {
+                // Normal user with status indicator dot
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            color = getStatusColor(firstMsg.senderId.status),
+                            shape = CircleShape
+                        )
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = firstMsg.senderId.displayName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AccentBlue
+                )
+                // Status message if present
+                firstMsg.senderId.statusMessage?.let { statusMsg ->
+                    Text(
+                        text = " · $statusMsg",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray,
+                        maxLines = 1
+                    )
+                }
             }
         }
 

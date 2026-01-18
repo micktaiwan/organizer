@@ -312,6 +312,42 @@ export async function searchFacts(query: string, limit = 5): Promise<MemorySearc
 }
 
 /**
+ * List all facts (for brain dashboard)
+ */
+export async function listFacts(limit = 50): Promise<{ id: string; payload: MemoryPayload }[]> {
+  const result = await qdrantRequest<QdrantScrollResponse>(
+    `/collections/${COLLECTION_NAME}/points/scroll`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        filter: {
+          must: [{ key: 'type', match: { value: 'fact' } }],
+        },
+        limit,
+        with_payload: true,
+        with_vector: false,
+      }),
+    }
+  );
+
+  // Sort by timestamp DESC (most recent first)
+  return result.result.points
+    .map((p) => ({ id: p.id, payload: p.payload }))
+    .sort((a, b) => {
+      const timeA = new Date(a.payload.timestamp).getTime();
+      const timeB = new Date(b.payload.timestamp).getTime();
+      return timeB - timeA;
+    });
+}
+
+/**
+ * Delete a fact by ID
+ */
+export async function deleteFact(id: string): Promise<void> {
+  await deleteMemory(id);
+}
+
+/**
  * Delete expired memories (for cron job)
  */
 export async function deleteExpiredMemories(): Promise<number> {

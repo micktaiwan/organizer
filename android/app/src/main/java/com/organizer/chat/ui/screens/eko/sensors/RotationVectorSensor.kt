@@ -1,4 +1,4 @@
-package com.organizer.chat.ui.screens.tamagotchi.sensors
+package com.organizer.chat.ui.screens.eko.sensors
 
 import android.content.Context
 import android.hardware.Sensor

@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import { Note, Label } from '../../models/index.js';
+import { updateNote, validateLabels } from '../../services/notes.service.js';
 import { IMcpToken } from '../../models/McpToken.js';
 import { IUser } from '../../models/User.js';
 import { McpToolDefinition, McpToolResult } from '../types.js';
@@ -60,75 +60,53 @@ export async function updateNoteHandler(
       };
     }
 
-    const note = await Note.findById(noteId);
+    // Validation
+    if (args.title !== undefined && (args.title as string).length > 200) {
+      return {
+        content: [{ type: 'text', text: 'title must be 200 characters or less' }],
+        isError: true,
+      };
+    }
+
+    if (args.content !== undefined && (args.content as string).length > 10000) {
+      return {
+        content: [{ type: 'text', text: 'content must be 10000 characters or less' }],
+        isError: true,
+      };
+    }
+
+    if (args.color !== undefined && !/^#[0-9A-Fa-f]{6}$/.test(args.color as string)) {
+      return {
+        content: [{ type: 'text', text: 'color must be a valid hex color (e.g., "#FF5733")' }],
+        isError: true,
+      };
+    }
+
+    if (args.labels !== undefined) {
+      const labels = args.labels as string[];
+      if (labels.length > 0 && !(await validateLabels(labels))) {
+        return {
+          content: [{ type: 'text', text: 'One or more label IDs are invalid' }],
+          isError: true,
+        };
+      }
+    }
+
+    const note = await updateNote(noteId, {
+      title: args.title as string | undefined,
+      content: args.content as string | undefined,
+      color: args.color as string | undefined,
+      isPinned: args.isPinned as boolean | undefined,
+      isArchived: args.isArchived as boolean | undefined,
+      labels: args.labels as string[] | undefined,
+    });
+
     if (!note) {
       return {
         content: [{ type: 'text', text: 'Note not found' }],
         isError: true,
       };
     }
-
-    if (args.title !== undefined) {
-      const title = args.title as string;
-      if (title.length > 200) {
-        return {
-          content: [{ type: 'text', text: 'title must be 200 characters or less' }],
-          isError: true,
-        };
-      }
-      note.title = title;
-    }
-
-    if (args.content !== undefined) {
-      const content = args.content as string;
-      if (content.length > 10000) {
-        return {
-          content: [{ type: 'text', text: 'content must be 10000 characters or less' }],
-          isError: true,
-        };
-      }
-      note.content = content;
-    }
-
-    if (args.color !== undefined) {
-      const color = args.color as string;
-      if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
-        return {
-          content: [{ type: 'text', text: 'color must be a valid hex color (e.g., "#FF5733")' }],
-          isError: true,
-        };
-      }
-      note.color = color;
-    }
-
-    if (args.isPinned !== undefined) {
-      note.isPinned = args.isPinned as boolean;
-    }
-
-    if (args.isArchived !== undefined) {
-      note.isArchived = args.isArchived as boolean;
-    }
-
-    if (args.labels !== undefined) {
-      const labels = args.labels as string[];
-      if (labels.length > 0) {
-        const labelCount = await Label.countDocuments({ _id: { $in: labels } });
-        if (labelCount !== labels.length) {
-          return {
-            content: [{ type: 'text', text: 'One or more label IDs are invalid' }],
-            isError: true,
-          };
-        }
-      }
-      note.labels = labels as any;
-    }
-
-    await note.save();
-    await note.populate([
-      { path: 'labels', select: 'name color' },
-      { path: 'assignedTo', select: 'username displayName' },
-      { path: 'createdBy', select: 'username displayName' },
-    ]);
 
     if (io) {
       io.to('notes').emit('note:updated', { note, updatedBy: user._id.toString() });

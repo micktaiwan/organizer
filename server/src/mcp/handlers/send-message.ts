@@ -1,5 +1,6 @@
 import { Server } from 'socket.io';
-import { Room, Message, User } from '../../models/index.js';
+import { createMessage, getBotUser } from '../../services/messages.service.js';
+import { getRoomById, ensureUserInRoom, updateRoomLastMessage } from '../../services/rooms.service.js';
 import { IMcpToken } from '../../models/McpToken.js';
 import { IUser } from '../../models/User.js';
 import { McpToolDefinition, McpToolResult } from '../types.js';
@@ -60,7 +61,7 @@ export async function sendMessageHandler(
       };
     }
 
-    const room = await Room.findById(roomId);
+    const room = await getRoomById(roomId);
     if (!room) {
       return {
         content: [{ type: 'text', text: 'Room not found' }],
@@ -72,7 +73,7 @@ export async function sendMessageHandler(
     let senderName = user.displayName;
 
     if (asBot) {
-      const botUser = await User.findOne({ isBot: true });
+      const botUser = await getBotUser();
       if (!botUser) {
         return {
           content: [{ type: 'text', text: 'No bot user found in the system' }],
@@ -81,16 +82,7 @@ export async function sendMessageHandler(
       }
       senderId = botUser._id as any;
       senderName = botUser.displayName;
-
-      const botIsMember = room.members.some(m => m.userId.toString() === botUser._id.toString());
-      if (!botIsMember) {
-        room.members.push({
-          userId: botUser._id as any,
-          joinedAt: new Date(),
-          lastReadAt: null,
-        });
-        await room.save();
-      }
+      await ensureUserInRoom(roomId, botUser._id as any);
     } else {
       const isMember = room.members.some(m => m.userId.toString() === user._id.toString());
       const isPublic = room.type === 'public' || room.type === 'lobby';
@@ -103,29 +95,18 @@ export async function sendMessageHandler(
       }
 
       if (!isMember && isPublic) {
-        room.members.push({
-          userId: user._id as any,
-          joinedAt: new Date(),
-          lastReadAt: null,
-        });
-        await room.save();
+        await ensureUserInRoom(roomId, user._id);
       }
     }
 
-    const message = new Message({
+    const message = await createMessage({
       roomId,
       senderId,
-      type: 'text',
-      content: content.trim(),
-      status: 'sent',
-      readBy: [],
-      clientSource: 'api',
+      content,
+      clientSource: 'mcp',
     });
 
-    await message.save();
-    await message.populate('senderId', 'username displayName status statusMessage');
-
-    await Room.findByIdAndUpdate(roomId, { lastMessageAt: new Date() });
+    await updateRoomLastMessage(roomId);
 
     if (io) {
       await emitNewMessage({

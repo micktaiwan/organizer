@@ -1,4 +1,4 @@
-package com.organizer.chat.ui.screens.tamagotchi.components
+package com.organizer.chat.ui.screens.eko.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring

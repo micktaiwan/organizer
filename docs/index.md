@@ -33,6 +33,7 @@
 
 | Document | Description |
 |----------|-------------|
+| [architecture.md](server/architecture.md) | Architecture services, MCP, Worker |
 | [https.md](server/https.md) | TODO: Migration vers HTTPS |
 
 ## Archive

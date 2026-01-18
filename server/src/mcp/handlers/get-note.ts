@@ -1,4 +1,4 @@
-import { Note } from '../../models/index.js';
+import { getNoteByIdWithPopulate } from '../../services/notes.service.js';
 import { IMcpToken } from '../../models/McpToken.js';
 import { IUser } from '../../models/User.js';
 import { McpToolDefinition, McpToolResult } from '../types.js';
@@ -33,10 +33,7 @@ export async function getNoteHandler(
       };
     }
 
-    const note = await Note.findById(noteId)
-      .populate('labels', 'name color')
-      .populate('assignedTo', 'username displayName')
-      .populate('createdBy', 'username displayName');
+    const note = await getNoteByIdWithPopulate(noteId);
 
     if (!note) {
       return {

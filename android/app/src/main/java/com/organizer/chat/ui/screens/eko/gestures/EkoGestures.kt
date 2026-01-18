@@ -1,17 +1,17 @@
-package com.organizer.chat.ui.screens.tamagotchi.gestures
+package com.organizer.chat.ui.screens.eko.gestures
 
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
-import com.organizer.chat.ui.screens.tamagotchi.TamagotchiState
+import com.organizer.chat.ui.screens.eko.EkoState
 
 /**
- * Modifier extension for Tamagotchi touch interactions
+ * Modifier extension for Eko touch interactions
  */
-fun Modifier.tamagotchiGestures(
-    state: TamagotchiState,
+fun Modifier.ekoGestures(
+    state: EkoState,
     getCanvasCenter: () -> Offset,
     onTap: () -> Unit = {}
 ): Modifier = this

@@ -1,4 +1,5 @@
-import { Room, Message } from '../../models/index.js';
+import { listMessages } from '../../services/messages.service.js';
+import { userHasAccessToRoom } from '../../services/rooms.service.js';
 import { IMcpToken } from '../../models/McpToken.js';
 import { IUser } from '../../models/User.js';
 import { McpToolDefinition, McpToolResult } from '../types.js';
@@ -43,33 +44,15 @@ export async function listMessagesHandler(
       };
     }
 
-    const room = await Room.findById(roomId);
-    if (!room) {
+    const { hasAccess, room, reason } = await userHasAccessToRoom(roomId, user._id);
+    if (!hasAccess) {
       return {
-        content: [{ type: 'text', text: 'Room not found' }],
+        content: [{ type: 'text', text: reason || 'Access denied' }],
         isError: true,
       };
     }
 
-    const isMember = room.members.some(m => m.userId.toString() === user._id.toString());
-    const isPublic = room.type === 'public' || room.type === 'lobby';
-
-    if (!isMember && !isPublic) {
-      return {
-        content: [{ type: 'text', text: 'Access denied to this room' }],
-        isError: true,
-      };
-    }
-
-    const query: Record<string, unknown> = { roomId };
-    if (before) {
-      query.createdAt = { $lt: new Date(before) };
-    }
-
-    const messages = await Message.find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .populate('senderId', 'username displayName');
+    const messages = await listMessages({ roomId, limit, before });
 
     const messageList = messages.reverse().map(msg => ({
       id: msg._id.toString(),

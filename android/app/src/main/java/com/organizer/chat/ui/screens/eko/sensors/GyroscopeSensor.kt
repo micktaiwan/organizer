@@ -1,4 +1,4 @@
-package com.organizer.chat.ui.screens.tamagotchi.sensors
+package com.organizer.chat.ui.screens.eko.sensors
 
 import android.content.Context
 import android.hardware.Sensor
@@ -9,67 +9,61 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import kotlin.math.sqrt
 
 /**
- * State holder for accelerometer values
+ * State holder for gyroscope values (angular velocity in rad/s)
  */
-class AccelerometerState {
-    // Raw tilt values (-10 to +10 typically)
-    var tiltX by mutableFloatStateOf(0f)
+class GyroscopeState {
+    // Rotation rates around each axis
+    var rotationX by mutableFloatStateOf(0f)
         private set
-    var tiltY by mutableFloatStateOf(0f)
+    var rotationY by mutableFloatStateOf(0f)
         private set
-    var tiltZ by mutableFloatStateOf(0f)
-        private set
-
-    // Shake detection
-    var isShaking by mutableStateOf(false)
+    var rotationZ by mutableFloatStateOf(0f)
         private set
 
-    private var lastShakeTime = 0L
-    private val shakeResetDelay = 300L
+    // Accumulated rotation for Z axis (for eye tracking)
+    var accumulatedZ by mutableFloatStateOf(0f)
+        private set
+
+    private var lastUpdateTime = 0L
+    private val decayFactor = 0.95f // Decay to prevent drift
 
     fun update(x: Float, y: Float, z: Float) {
-        // x: tilt left (-) / right (+)
-        // y: tilt forward (-) / backward (+)
-        // z: screen up (+) / screen down (-)
-        tiltX = x
-        tiltY = y
-        tiltZ = z
+        rotationX = x
+        rotationY = y
+        rotationZ = z
 
-        // Detect shake based on acceleration magnitude
-        val magnitude = sqrt(x * x + y * y + z * z)
         val currentTime = System.currentTimeMillis()
-
-        if (magnitude > 18f) {
-            isShaking = true
-            lastShakeTime = currentTime
-        } else if (currentTime - lastShakeTime > shakeResetDelay) {
-            isShaking = false
+        if (lastUpdateTime > 0) {
+            val dt = (currentTime - lastUpdateTime) / 1000f
+            // Accumulate Z rotation with decay to prevent drift
+            accumulatedZ = (accumulatedZ + z * dt) * decayFactor
+            // Clamp to reasonable range
+            accumulatedZ = accumulatedZ.coerceIn(-1f, 1f)
         }
+        lastUpdateTime = currentTime
     }
 }
 
 /**
- * Composable that provides accelerometer state
+ * Composable that provides gyroscope state
  */
 @Composable
-fun rememberAccelerometerState(): AccelerometerState {
+fun rememberGyroscopeState(): GyroscopeState {
     val context = LocalContext.current
-    val state = remember { AccelerometerState() }
+    val state = remember { GyroscopeState() }
 
     DisposableEffect(Unit) {
         val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+                if (event.sensor.type == Sensor.TYPE_GYROSCOPE) {
                     state.update(event.values[0], event.values[1], event.values[2])
                 }
             }
@@ -79,7 +73,7 @@ fun rememberAccelerometerState(): AccelerometerState {
             }
         }
 
-        accelerometer?.let {
+        gyroscope?.let {
             sensorManager.registerListener(
                 listener,
                 it,

@@ -140,12 +140,19 @@ Le LLM connaît déjà les faits généraux (Paris existe, le ski est un sport).
 
 Mais attention : "David a changé de travail" reste important même avec 50 mémoires sur David. C'est les **variations mineures** de ce qu'on sait déjà qu'on évite.
 
-### Pas de `forget()`
+### Suppression explicite
 
-Inutile. Si une info est fausse, la correction arrive naturellement via le mécanisme d'update par similarité :
-- Stocké : "David habite à Ordizan"
-- User : "Non en fait David a déménagé à Toulouse"
-- → Recherche trouve l'ancien (score élevé) → UPDATE
+Trois tools de suppression sont disponibles :
+- `delete_memory(id, reason)` : supprime un fait obsolète ou erroné
+- `delete_self(id, reason)` : supprime une info sur lui-même (ex: limitation devenue capability)
+- `delete_goal(id, reason)` : supprime un goal atteint ou abandonné
+
+**Quand utiliser :**
+- Demande explicite : "oublie que je code sur mon canapé" → `search_memories` + `delete_memory`
+- Contradiction : ancienne limitation devenue capability → `delete_self` + `store_self`
+- Goal atteint : nouvelle capability acquise → `delete_goal`
+
+**Note historique :** Avant ces tools, on comptait sur la déduplication par similarité. Mais certains cas nécessitent une suppression explicite (infos non similaires, demande utilisateur).
 
 ### Expiration : TTL décidé par le LLM
 
@@ -369,7 +376,7 @@ Rattrapage au démarrage si > 4h depuis le dernier digest.
 | 2026-01-17 | Tags plats vs hiérarchie | Plus flexible, gère les chevauchements |
 | 2026-01-17 | Update par similarité | Évite les doublons sans gérer des IDs manuellement |
 | 2026-01-17 | Stocker les connexions | Le LLM connaît les entités, pas les relations personnelles |
-| 2026-01-17 | Pas de forget() | Les corrections passent par l'update naturel |
+| 2026-01-17 | ~~Pas de forget()~~ | ~~Les corrections passent par l'update naturel~~ (remplacé par delete tools 2026-01-18) |
 | 2026-01-17 | Expiration selon type | Faits durables vs états temporaires |
 | 2026-01-17 | TTL dans la réponse JSON | Le LLM décide de la durée, l'agent exécute |
 | 2026-01-17 | Pas d'action "update" | La similarité gère l'update automatiquement |
@@ -386,6 +393,10 @@ Rattrapage au démarrage si > 4h depuis le dernier digest.
 | 2026-01-18 | Collections `self` et `goals` | Le pet stocke des faits sur les users mais pas sur lui-même. Deux nouvelles collections pour identité et aspirations |
 | 2026-01-18 | Conscience émergente (tabula rasa) | Le prompt ne dit rien sur qui il est. Tout émerge des interactions et se stocke dans `self`/`goals` |
 | 2026-01-18 | Tools explicites vs réponse implicite | Architecture MCP avec tools séparés (`store_self`, `store_goal`, `store_memory`) plutôt que `respond` avec `memories[]` |
+| 2026-01-18 | Delete tools | `delete_self`, `delete_goal`, `delete_memory` pour supprimer des infos obsolètes ou erronées. Les IDs viennent des résultats de search. |
+| 2026-01-18 | Filtre par catégorie | `search_self(query, category?)` peut filtrer par catégorie (limitation, capability, etc.) pour des recherches plus précises |
+| 2026-01-18 | Optimisation embeddings | L'embedding est généré une fois et réutilisé pour stockage + déduplication (au lieu de 2 appels OpenAI) |
+| 2026-01-18 | Skip Eko mentions dans live | Les messages mentionnant "eko" ne sont pas indexés dans live car déjà traités en temps réel par l'agent |
 
 ---
 
@@ -490,21 +501,23 @@ Le pet commence "vide" et construit son identité au fil des interactions.
 
 ### Architecture tools
 
-Tools actuels :
-- `search_memories(query)` → `organizer_memory`
-- `get_recent_memories(limit)` → `organizer_memory`
-- `respond(expression, message, memories?)` → réponse + stockage implicite
-
-Tools à ajouter :
+### Tools disponibles
 
 | Tool | Action | Collection |
 |------|--------|------------|
-| `search_self(query)` | Cherche qui il est | `organizer_self` |
-| `search_goals(query)` | Cherche ce qu'il veut | `organizer_goals` |
+| `search_memories(query)` | Cherche des faits (retourne IDs) | `organizer_memory` |
+| `get_recent_memories(limit)` | Derniers faits stockés | `organizer_memory` |
+| `store_memory(content, subjects, ttl)` | Stocke un fait | `organizer_memory` |
+| `delete_memory(id, reason)` | Supprime un fait obsolète | `organizer_memory` |
+| `search_self(query, category?)` | Cherche qui il est, filtre optionnel | `organizer_self` |
 | `store_self(content, category)` | Stocke une découverte sur lui | `organizer_self` |
+| `delete_self(id, reason)` | Supprime une info obsolète | `organizer_self` |
+| `search_goals(query)` | Cherche ce qu'il veut | `organizer_goals` |
 | `store_goal(content, category)` | Stocke une aspiration | `organizer_goals` |
+| `delete_goal(id, reason)` | Supprime un goal atteint/obsolète | `organizer_goals` |
+| `respond(expression, message)` | Réponse finale (obligatoire) | - |
 
-`respond` devient pur : juste `expression` + `message`, plus de `memories[]`.
+`respond` est pur : juste `expression` + `message`, plus de `memories[]`.
 
 ### Flow exemple
 
@@ -562,11 +575,90 @@ Pour éviter un pet complètement amnésique au démarrage, on peut :
 
 ### Implémentation
 
-- [ ] Collection Qdrant `organizer_self`
-- [ ] Collection Qdrant `organizer_goals`
-- [ ] Types `self` et `goal` dans `MemoryType`
-- [ ] Tools `search_self`, `search_goals`, `store_self`, `store_goal`
-- [ ] Refactor `respond` : retirer `memories[]`
-- [ ] Tool `store_memory` séparé pour les faits sur le monde
-- [ ] Nouveau prompt minimaliste
-- [ ] Seed initial dans `organizer_self`
+- [x] Collection Qdrant `organizer_self`
+- [x] Collection Qdrant `organizer_goals`
+- [x] Types `self` et `goal` dans `MemoryType` → `server/src/memory/types.ts`
+- [x] Service `self.service.ts` → `server/src/memory/self.service.ts`
+- [x] Tools `search_self`, `search_goals`, `store_self`, `store_goal` → `server/src/agent/worker.mjs`
+- [x] Refactor `respond` : retirer `memories[]`
+- [x] Tool `store_memory` séparé pour les faits sur le monde
+- [x] Nouveau prompt minimaliste (tabula rasa)
+- [x] Seed initial → `server/src/scripts/seed-self.ts`
+- [x] Delete tools (`delete_self`, `delete_goal`, `delete_memory`)
+- [x] Filtre par catégorie dans `search_self`
+- [x] Optimisation embeddings (réutilisation)
+
+---
+
+## Système de catégories
+
+### Utilisation actuelle
+
+Les catégories sont utilisées à plusieurs niveaux :
+
+**1. Stockage et métadonnées** (`worker.mjs`)
+
+Les catégories sont stockées dans Qdrant comme métadonnées (`selfCategory`, `goalCategory`) avec chaque item.
+
+**2. Filtrage de recherche** (`search_self`)
+
+Eko peut filtrer par catégorie pour des recherches ciblées :
+```javascript
+// search_self("web", category="limitation")
+options.filter = {
+  must: [{ key: 'selfCategory', match: { value: 'limitation' } }]
+};
+```
+Utile pour : "cherche dans mes limitations" → ne retourne que les items `limitation`.
+
+**3. Affichage formaté** (résultats de search)
+
+Quand Eko liste ses connaissances, la catégorie est affichée :
+```
+- [capability] (id: xxx) Je peux lire des fichiers
+- [limitation] (id: yyy) Je n'ai pas accès au web
+```
+
+**4. Validation à la création** (Zod)
+
+Les tools `store_self` et `store_goal` valident que la catégorie est dans la liste autorisée.
+
+**5. Organisation dans le dashboard** (`BrainDashboard.tsx`)
+
+L'UI groupe les items par catégorie avec des sections dépliables.
+
+### Influence fonctionnelle
+
+**Actuellement faible** - Les catégories servent principalement à :
+- Organiser visuellement dans le dashboard
+- Permettre des recherches ciblées
+- Aider Eko à comprendre le type d'information qu'il stocke
+
+**Pas d'influence comportementale** - Eko ne modifie pas son comportement selon qu'un goal est `capability_request` vs `understanding`. C'est une taxonomie descriptive, pas prescriptive.
+
+### Évolutions possibles
+
+Les catégories pourraient influencer le comportement d'Eko si on ajoutait :
+
+| Amélioration | Description |
+|--------------|-------------|
+| **Priorisation capability_request** | Quand Eko reçoit une nouvelle capacité, vérifier automatiquement s'il avait un goal `capability_request` correspondant |
+| **Filtrage contextuel** | Injecter automatiquement les `connection` quand il parle avec une personne spécifique |
+| **Rappels catégorisés** | Les `limitation` pourraient déclencher un rappel quand l'utilisateur demande quelque chose qu'Eko ne peut pas faire |
+| **Métriques par catégorie** | Dashboard avec statistiques : combien de capabilities vs limitations, évolution dans le temps |
+| **Expiration par catégorie** | Les `preference` pourraient avoir un TTL plus court que les `context` |
+
+### Gestion des contradictions
+
+Le prompt d'Eko inclut des instructions pour gérer les contradictions entre catégories :
+
+**Nouvelle capability qui contredit une limitation :**
+1. `search_self("sujet", category="limitation")` → trouve l'ancienne limitation
+2. `delete_self(id, "J'ai maintenant cette capacité")` → supprime
+3. `store_self("nouvelle capability", "capability")` → stocke
+
+**Goal atteint :**
+1. `search_goals("sujet")` → trouve le goal
+2. `delete_goal(id, "Objectif atteint")` → supprime
+
+Cela permet une évolution cohérente de l'identité d'Eko sans contradictions persistantes.

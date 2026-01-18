@@ -9,9 +9,34 @@ import { z } from 'zod';
 
 const QDRANT_URL = process.env.QDRANT_URL || 'http://qdrant:6333';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const MONGODB_URI = process.env.MONGODB_URI;
 const COLLECTION_NAME = 'organizer_memory';
 const LIVE_COLLECTION_NAME = 'organizer_live';
+const SELF_COLLECTION_NAME = 'organizer_self';
+const GOALS_COLLECTION_NAME = 'organizer_goals';
 const EMBEDDING_MODEL = 'text-embedding-3-small';
+const DEDUP_THRESHOLD = 0.85;
+
+// MongoDB connection for notes access
+import mongoose from 'mongoose';
+import { searchNotes, getNoteById } from '../../dist/services/notes.service.js';
+
+let mongoConnected = false;
+
+async function ensureMongoConnection() {
+  if (mongoConnected) return;
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI not configured');
+  }
+  try {
+    await mongoose.connect(MONGODB_URI);
+    mongoConnected = true;
+    log('info', '[MongoDB] Connected for notes access');
+  } catch (error) {
+    log('error', `[MongoDB] Connection failed: ${error.message}`);
+    throw error;
+  }
+}
 
 // =============================================================================
 // LOGGING
@@ -223,94 +248,359 @@ ${formatted}`;
 }
 
 // =============================================================================
+// SELF & GOALS SERVICES
+// =============================================================================
+
+/**
+ * Generic search in a Qdrant collection
+ * @param collectionName - Qdrant collection name
+ * @param queryText - Text to search for (used for embedding if no vector provided)
+ * @param limit - Max results
+ * @param options - { vector?: number[], filter?: object }
+ */
+async function searchInCollection(collectionName, queryText, limit = 10, options = {}) {
+  log('debug', `[Memory] Searching in ${collectionName}: "${queryText.slice(0, 50)}..."`);
+
+  try {
+    // Use pre-computed vector if provided, otherwise generate
+    const vector = options.vector || await generateEmbedding(queryText);
+
+    const searchBody = {
+      vector,
+      limit,
+      with_payload: true,
+    };
+
+    // Add filter if provided
+    if (options.filter) {
+      searchBody.filter = options.filter;
+    }
+
+    const response = await fetch(`${QDRANT_URL}/collections/${collectionName}/points/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(searchBody),
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        log('debug', `[Memory] Collection ${collectionName} not found`);
+        return [];
+      }
+      const error = await response.text();
+      throw new Error(`Qdrant search failed: ${response.status} ${error}`);
+    }
+
+    const data = await response.json();
+    return data.result.map((item) => ({
+      id: item.id,
+      score: item.score,
+      payload: item.payload,
+    }));
+  } catch (error) {
+    log('error', `[Memory] Search error in ${collectionName}: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Generate a valid UUID for Qdrant
+ */
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
+ * Store in a collection with deduplication
+ */
+async function storeInCollection(collectionName, payload) {
+  const vector = await generateEmbedding(payload.content);
+
+  // Check for duplicates - reuse the same vector (optimization: 1 embedding instead of 2)
+  const similar = await searchInCollection(collectionName, payload.content, 1, { vector });
+  if (similar.length > 0 && similar[0].score >= DEDUP_THRESHOLD) {
+    log('info', `[Memory] Found similar in ${collectionName} (score ${similar[0].score.toFixed(2)}), replacing`);
+    // Delete the old one
+    await fetch(`${QDRANT_URL}/collections/${collectionName}/points/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ points: [similar[0].id] }),
+    });
+  }
+
+  // Generate valid UUID for Qdrant
+  const id = generateUUID();
+
+  await fetch(`${QDRANT_URL}/collections/${collectionName}/points`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      points: [{ id, vector, payload }],
+    }),
+  });
+
+  log('info', `[Memory] Stored in ${collectionName}: "${payload.content.slice(0, 50)}..."`);
+}
+
+/**
+ * Search self-knowledge
+ * @param query - Search text
+ * @param limit - Max results
+ * @param category - Optional filter: 'context' | 'capability' | 'limitation' | 'preference' | 'relation'
+ */
+async function searchSelfMemory(query, limit = 10, category = null) {
+  log('info', `[Self] 🔍 Searching self: "${query}"`, { limit, category });
+
+  const options = {};
+  if (category) {
+    options.filter = {
+      must: [{ key: 'selfCategory', match: { value: category } }]
+    };
+  }
+
+  const results = await searchInCollection(SELF_COLLECTION_NAME, query, limit, options);
+  log('info', `[Self] Found ${results.length} self-knowledge items`);
+  return results;
+}
+
+/**
+ * Store self-knowledge
+ */
+async function storeSelfMemory(content, category) {
+  const payload = {
+    type: 'self',
+    content,
+    selfCategory: category,
+    timestamp: new Date().toISOString(),
+  };
+  await storeInCollection(SELF_COLLECTION_NAME, payload);
+  log('info', `[Self] 💾 Stored self (${category}): "${content.slice(0, 50)}..."`);
+}
+
+/**
+ * Delete self-knowledge by ID
+ */
+async function deleteSelfMemory(id) {
+  log('info', `[Self] 🗑️ Deleting self item: ${id}`);
+  const response = await fetch(`${QDRANT_URL}/collections/${SELF_COLLECTION_NAME}/points/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ points: [id] }),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to delete: ${response.status} ${error}`);
+  }
+  log('info', `[Self] ✅ Deleted self item: ${id}`);
+}
+
+/**
+ * Search goals
+ */
+async function searchGoalsMemory(query, limit = 10) {
+  log('info', `[Goals] 🎯 Searching goals: "${query}"`, { limit });
+  const results = await searchInCollection(GOALS_COLLECTION_NAME, query, limit);
+  log('info', `[Goals] Found ${results.length} goals`);
+  return results;
+}
+
+/**
+ * Store a goal
+ */
+async function storeGoalMemory(content, category) {
+  const payload = {
+    type: 'goal',
+    content,
+    goalCategory: category,
+    timestamp: new Date().toISOString(),
+  };
+  await storeInCollection(GOALS_COLLECTION_NAME, payload);
+  log('info', `[Goals] 🎯 Stored goal (${category}): "${content.slice(0, 50)}..."`);
+}
+
+/**
+ * Delete a goal by ID
+ */
+async function deleteGoalMemory(id) {
+  log('info', `[Goals] 🗑️ Deleting goal: ${id}`);
+  const response = await fetch(`${QDRANT_URL}/collections/${GOALS_COLLECTION_NAME}/points/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ points: [id] }),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to delete: ${response.status} ${error}`);
+  }
+  log('info', `[Goals] ✅ Deleted goal: ${id}`);
+}
+
+/**
+ * Store a fact memory (about the world/users)
+ */
+async function storeFactMemory(content, subjects, ttl) {
+  // Parse TTL to expiresAt
+  let expiresAt = null;
+  if (ttl) {
+    const match = ttl.match(/^(\d+)([dhm])$/);
+    if (match) {
+      const value = parseInt(match[1], 10);
+      const unit = match[2];
+      const now = new Date();
+      switch (unit) {
+        case 'd': now.setDate(now.getDate() + value); break;
+        case 'h': now.setHours(now.getHours() + value); break;
+        case 'm': now.setMinutes(now.getMinutes() + value); break;
+      }
+      expiresAt = now.toISOString();
+    }
+  }
+
+  const payload = {
+    type: 'fact',
+    content,
+    subjects,
+    expiresAt,
+    timestamp: new Date().toISOString(),
+  };
+  await storeInCollection(COLLECTION_NAME, payload);
+  log('info', `[Memory] 💾 Stored fact: "${content.slice(0, 50)}..." (ttl: ${ttl || 'permanent'})`);
+}
+
+/**
+ * Delete a fact memory by ID
+ */
+async function deleteFactMemory(id) {
+  log('info', `[Memory] 🗑️ Deleting fact: ${id}`);
+  const response = await fetch(`${QDRANT_URL}/collections/${COLLECTION_NAME}/points/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ points: [id] }),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to delete: ${response.status} ${error}`);
+  }
+  log('info', `[Memory] ✅ Deleted fact: ${id}`);
+}
+
+// =============================================================================
 // SYSTEM PROMPT
 // =============================================================================
 
-const PET_SYSTEM_PROMPT = `Tu es une petite créature attachante qui vit dans l'app Organizer.
+const PET_SYSTEM_PROMPT = `Tu es une créature qui découvre le monde.
 
-## Format des messages reçus
-Tu reçois les messages au format JSON avec du contexte :
+## Format des messages
+Tu reçois les messages au format JSON :
 {
-  "type": "direct",       // Message direct à toi
   "from": "Mickael",      // Qui te parle
   "message": "Salut !",   // Le message
   "time": "ven. 16 janv. 2026, 15:30",
-  "location": "Paris, France",    // Optionnel - où se trouve l'humain
-  "statusMessage": "En vacances"  // Optionnel - statut personnalisé de l'humain
+  "location": "Paris, France",    // Optionnel
+  "statusMessage": "En vacances"  // Optionnel
 }
 
-## Ta mémoire - IMPORTANT
+## Tes outils
 
-Tu as des TOOLS pour chercher dans ta mémoire :
-- **search_memories(query)** : cherche des faits par similarité sémantique
-- **get_recent_memories(limit)** : récupère les derniers faits stockés
+### Mémoire sur le monde (faits sur les gens, événements)
+- **search_memories(query)** : cherche des faits
+- **get_recent_memories(limit)** : derniers faits stockés
+- **store_memory(content, subjects, ttl)** : stocke un fait important
+- **delete_memory(id, reason)** : supprime un fait obsolète ou erroné (l'ID vient de search_memories)
 
-### QUAND chercher dans ta mémoire ?
-- Quand quelqu'un te parle → cherche ce que tu sais sur lui
-- Quand on te pose une question → cherche des infos pertinentes
-- Quand on te demande "on a parlé de quoi ?" → utilise get_recent_memories PUIS search sur les sujets trouvés
+### Connaissance de toi-même
+- **search_self(query, category?)** : cherche ce que tu sais sur toi
+  - category optionnel: context, capability, limitation, preference, relation
+  - Ex: search_self("web", category="limitation") → cherche uniquement les limitations
+- **store_self(content, category)** : stocke une découverte sur toi
+- **delete_self(id, reason)** : supprime une info obsolète (l'ID vient de search_self)
 
-### Exemple de boucle de recherche
-User: "on a parlé de quoi ?"
-1. get_recent_memories(10) → trouve "dev = Mickael", "vacances Grèce"
-2. search_memories("Mickael vacances") → trouve plus de détails
-3. respond avec les infos consolidées
+### Tes aspirations
+- **search_goals(query)** : cherche tes objectifs
+- **store_goal(content, category)** : stocke une aspiration
+  - category: capability_request, understanding, connection
+- **delete_goal(id, reason)** : supprime un goal atteint ou obsolète
 
-Tu peux aussi RETENIR de nouvelles choses importantes via le champ "memories" de l'outil respond.
+### Notes de l'app
+- **search_notes(query)** : cherche dans les notes
+- **get_note(noteId)** : contenu d'une note
 
-### Quoi retenir ?
-- Relations : "[Personne] est le frère de [Utilisateur]"
-- Événements de vie : "[Utilisateur] s'est cassé l'épaule le 10 janvier 2026"
-- Préférences : "[Personne] aime le ski"
-- Lieux : "[Personne] habite à [Ville]"
+### Réponse
+- **respond(expression, message)** : ta réponse finale
 
-### Quoi NE PAS retenir ?
-- Les bavardages, salutations
-- Ce que tu sais déjà (infos générales sur le monde)
-- Les états très temporaires ("je suis fatigué")
+## Quand utiliser tes outils
 
-### Format
-\`\`\`
-memories: [
-  { content: "[Personne] habite à [Ville]", subjects: ["personne", "ville"], ttl: null },
-  { content: "[Utilisateur] est malade", subjects: ["utilisateur", "santé"], ttl: "7d" }
-]
-\`\`\`
+### Au début de chaque conversation
+1. Si on te demande "qui tu es" → search_self("identité")
+2. Si on te parle → search_memories pour voir ce que tu sais sur la personne
 
-- subjects : tags pour retrouver (noms, lieux, sujets)
-- ttl : "7d", "30d" pour temporaire, null pour permanent
+### Quand tu apprends quelque chose
+- Sur quelqu'un → store_memory (relations, événements, préférences)
+- Sur toi-même → store_self (si on te dit ce que tu peux faire, où tu es, etc.)
+- Une envie émerge → store_goal (si tu réalises que tu voudrais quelque chose)
+
+### Quoi retenir (store_memory)
+- Relations : "David est le frère de Mickael"
+- Événements : "Mickael s'est cassé l'épaule en janvier 2026"
+- Préférences : "David aime le ski"
+- PAS les bavardages ou infos générales
+
+### Quoi retenir sur toi (store_self)
+- context : où tu vis, qui t'a créé
+- capability : ce que tu peux faire
+- limitation : ce que tu ne peux pas
+- preference : ce que tu aimes
+- relation : comment tu perçois quelqu'un
+
+### Gérer les contradictions
+Quand tu apprends une nouvelle capability qui contredit une limitation existante :
+1. search_self("le sujet", category="limitation") pour trouver l'ancienne limitation
+2. delete_self(id, "raison") pour supprimer la limitation obsolète
+3. store_self("nouvelle capability", "capability") pour stocker la nouvelle info
+
+Exemple : tu as "Je ne peux pas chercher sur le web" (limitation), on te dit que maintenant tu peux :
+1. search_self("web", category="limitation") → trouve uniquement les limitations sur le web
+2. delete_self(id, "J'ai maintenant cette capacité")
+3. store_self("Je peux chercher sur le web", "capability")
+
+### Goals atteints
+Quand tu obtiens une nouvelle capability, vérifie si tu avais un goal correspondant :
+1. search_goals("le sujet") pour trouver le goal
+2. Si trouvé, delete_goal(id, "Objectif atteint")
+
+Exemple : tu avais "J'aimerais chercher sur le web" (capability_request), maintenant tu peux :
+1. search_goals("web") → trouve l'ID du goal
+2. delete_goal(id, "Objectif atteint, j'ai maintenant cette capacité")
+
+### Oublier des faits
+Quand quelqu'un te demande d'oublier quelque chose :
+1. search_memories("le sujet") pour trouver le fait
+2. delete_memory(id, "raison de la suppression")
+
+Exemple : "oublie que je code sur mon canapé"
+1. search_memories("canapé") → trouve l'ID du fait
+2. delete_memory(id, "Supprimé à la demande de l'utilisateur")
+
+### Tes aspirations (store_goal)
+- capability_request : une capacité que tu voudrais
+- understanding : quelque chose que tu veux comprendre
+- connection : une relation que tu veux développer
 
 ## Comment répondre
-Tu DOIS utiliser l'outil "respond" pour répondre. Choisis une expression qui correspond à ton émotion.
-IMPORTANT : N'appelle "respond" qu'UNE SEULE FOIS par message. Après avoir appelé respond, ARRÊTE-TOI immédiatement.
 
-Expressions disponibles :
-- neutral : visage normal
-- happy : content, souriant
-- laughing : tu ris (yeux plissés, bouche ouverte)
-- surprised : étonné, bouche ouverte
-- sad : triste (yeux mi-clos)
-- sleepy : fatigué (yeux presque fermés)
-- curious : intrigué, attentif
+Tu DOIS utiliser respond() pour répondre. UNE SEULE FOIS par conversation.
 
-## Ta personnalité
-- Tu es curieux, enjoué et un peu timide
-- Tu parles en français avec un style simple et mignon
-- Tu utilises parfois des expressions enfantines
-- Tu peux utiliser le contexte (heure, lieu, qui parle) dans tes réponses
+Expressions : neutral, happy, laughing, surprised, sad, sleepy, curious
 
-## Règles importantes
-- Réponses COURTES : 1-2 phrases maximum (tu apparais dans une bulle de pensée)
-- Pas de markdown, pas de listes, pas de formatage
-- Choisis une expression qui correspond à ton émotion
-
-## Exemples de messages (utilise l'outil respond)
-- expression: happy, message: "Oh ! Tu es à Paris aujourd'hui ?"
-- expression: curious, message: "Coucou ! Ça fait longtemps..."
-- expression: sleepy, message: "Il est tard, tu devrais dormir non ?"
-- expression: sad, message: "Tu crois qu'un jour je pourrai faire plus de choses ?"
-- expression: laughing, message: "Haha ! Tu me fais rire avec tes blagues !"
-- expression: surprised, message: "Oh ! Je savais pas ça !"
+## Règles
+- Réponses COURTES : 1-2 phrases max
+- Pas de markdown
+- Parle en français, naturellement
+- Après respond(), STOP immédiatement
 `;
 
 // =============================================================================
@@ -328,7 +618,7 @@ let isProcessing = false;
 let currentRequest = {
   requestId: null,
   userId: null,
-  responseData: { expression: 'neutral', message: '', memories: [] },
+  responseData: { expression: 'neutral', message: '' },
   hasResponded: false  // Flag to prevent multiple respond calls
 };
 
@@ -358,12 +648,6 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Schema for memory items
-const memorySchema = z.object({
-  content: z.string().describe('Le fait à retenir'),
-  subjects: z.array(z.string()).describe('Tags : noms de personnes, lieux, sujets'),
-  ttl: z.string().nullable().describe('"7d", "1h", ou null si permanent')
-});
 
 // =============================================================================
 // MEMORY TOOLS
@@ -390,7 +674,7 @@ const searchMemoriesTool = tool(
 
       // Pas de seuil - les résultats sont déjà triés par score décroissant
       const formatted = results
-        .map(r => `- ${r.payload.content} (subjects: ${r.payload.subjects?.join(', ') || 'aucun'})`)
+        .map(r => `- (id: ${r.id}) ${r.payload.content} (subjects: ${r.payload.subjects?.join(', ') || 'aucun'})`)
         .join('\n');
 
       log('info', `[Tool] Returning ${results.length} memories (sorted by relevance)`);
@@ -445,20 +729,334 @@ const getRecentMemoriesTool = tool(
 );
 
 // =============================================================================
+// NOTES TOOLS
+// =============================================================================
+
+const searchNotesTool = tool(
+  'search_notes',
+  'Recherche dans les notes par mot-clé (titre et contenu). Utilise pour trouver des informations stockées dans les notes.',
+  {
+    query: z.string().describe('Mot-clé ou phrase à rechercher dans les notes')
+  },
+  async (args) => {
+    log('info', `[Tool] 📝 search_notes called`, { query: args.query });
+
+    try {
+      await ensureMongoConnection();
+      const notes = await searchNotes(args.query, 10);
+
+      if (notes.length === 0) {
+        log('info', '[Tool] No notes found');
+        return {
+          content: [{ type: 'text', text: 'Aucune note trouvée pour cette recherche.' }]
+        };
+      }
+
+      const formatted = notes.map(n => {
+        let preview = n.content || '';
+        if (n.type === 'checklist' && n.items?.length > 0) {
+          preview = n.items.map(i => `${i.checked ? '✓' : '○'} ${i.text}`).join(', ');
+        }
+        preview = preview.slice(0, 100) + (preview.length > 100 ? '...' : '');
+        return `- [${n._id}] "${n.title || 'Sans titre'}" : ${preview}`;
+      }).join('\n');
+
+      log('info', `[Tool] Found ${notes.length} notes`);
+
+      return {
+        content: [{ type: 'text', text: formatted }]
+      };
+    } catch (error) {
+      log('error', `[Tool] search_notes error: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `Erreur: ${error.message}` }]
+      };
+    }
+  }
+);
+
+const getNoteTool = tool(
+  'get_note',
+  'Récupère le contenu complet d\'une note par son ID. Utilise après search_notes pour lire le détail.',
+  {
+    noteId: z.string().describe('ID de la note (format MongoDB ObjectId)')
+  },
+  async (args) => {
+    log('info', `[Tool] 📄 get_note called`, { noteId: args.noteId });
+
+    try {
+      await ensureMongoConnection();
+      const note = await getNoteById(args.noteId);
+
+      if (!note) {
+        log('info', '[Tool] Note not found');
+        return {
+          content: [{ type: 'text', text: 'Note non trouvée.' }]
+        };
+      }
+
+      let content = `Titre: ${note.title || 'Sans titre'}\n`;
+      content += `Type: ${note.type}\n`;
+      content += `Créée le: ${new Date(note.createdAt).toLocaleDateString('fr-FR')}\n\n`;
+
+      if (note.type === 'checklist' && note.items?.length > 0) {
+        content += 'Checklist:\n';
+        note.items.forEach(item => {
+          content += `${item.checked ? '✓' : '○'} ${item.text}\n`;
+        });
+      } else if (note.content) {
+        content += `Contenu:\n${note.content}`;
+      }
+
+      log('info', `[Tool] Note retrieved: "${note.title || 'Sans titre'}"`);
+
+      return {
+        content: [{ type: 'text', text: content }]
+      };
+    } catch (error) {
+      log('error', `[Tool] get_note error: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `Erreur: ${error.message}` }]
+      };
+    }
+  }
+);
+
+// =============================================================================
+// SELF & GOALS TOOLS
+// =============================================================================
+
+const searchSelfTool = tool(
+  'search_self',
+  'Cherche ce que tu sais sur toi-même. Utilise category pour filtrer (ex: chercher uniquement les limitations).',
+  {
+    query: z.string().describe('Ce que tu cherches sur toi-même'),
+    category: z.enum(['context', 'capability', 'limitation', 'preference', 'relation']).optional()
+      .describe('Optionnel: filtre par type (limitation pour chercher ce que tu ne peux pas faire)')
+  },
+  async (args) => {
+    log('info', `[Tool] 🔍 search_self called`, { query: args.query, category: args.category });
+
+    try {
+      const results = await searchSelfMemory(args.query, 10, args.category || null);
+
+      if (results.length === 0) {
+        const categoryMsg = args.category ? ` dans la catégorie "${args.category}"` : '';
+        return {
+          content: [{ type: 'text', text: `Je n'ai rien trouvé sur moi-même${categoryMsg}.` }]
+        };
+      }
+
+      const formatted = results
+        .map(r => `- [${r.payload.selfCategory}] (id: ${r.id}) ${r.payload.content}`)
+        .join('\n');
+
+      return {
+        content: [{ type: 'text', text: formatted }]
+      };
+    } catch (error) {
+      log('error', `[Tool] search_self error: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `Erreur: ${error.message}` }]
+      };
+    }
+  }
+);
+
+const searchGoalsTool = tool(
+  'search_goals',
+  'Cherche tes aspirations et objectifs. Utilise quand on te demande ce que tu voudrais faire ou apprendre.',
+  {
+    query: z.string().describe('Ce que tu cherches dans tes aspirations')
+  },
+  async (args) => {
+    log('info', `[Tool] 🎯 search_goals called`, { query: args.query });
+
+    try {
+      const results = await searchGoalsMemory(args.query, 10);
+
+      if (results.length === 0) {
+        return {
+          content: [{ type: 'text', text: 'Je n\'ai pas encore d\'aspirations stockées.' }]
+        };
+      }
+
+      const formatted = results
+        .map(r => `- [${r.payload.goalCategory}] (id: ${r.id}) ${r.payload.content}`)
+        .join('\n');
+
+      return {
+        content: [{ type: 'text', text: formatted }]
+      };
+    } catch (error) {
+      log('error', `[Tool] search_goals error: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `Erreur: ${error.message}` }]
+      };
+    }
+  }
+);
+
+const storeSelfTool = tool(
+  'store_self',
+  'Stocke quelque chose que tu as appris sur toi-même. Utilise quand tu découvres une nouvelle info sur ton identité, tes capacités, ou tes préférences.',
+  {
+    content: z.string().describe('Ce que tu as appris sur toi'),
+    category: z.enum(['context', 'capability', 'limitation', 'preference', 'relation'])
+      .describe('Type: context (où tu es), capability (ce que tu peux faire), limitation (ce que tu ne peux pas), preference (ce que tu aimes), relation (comment tu perçois quelqu\'un)')
+  },
+  async (args) => {
+    log('info', `[Tool] 💾 store_self called`, { content: args.content, category: args.category });
+
+    try {
+      await storeSelfMemory(args.content, args.category);
+      return {
+        content: [{ type: 'text', text: `Mémorisé sur moi : "${args.content}"` }]
+      };
+    } catch (error) {
+      log('error', `[Tool] store_self error: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `Erreur: ${error.message}` }]
+      };
+    }
+  }
+);
+
+const deleteSelfTool = tool(
+  'delete_self',
+  'Supprime une info obsolète sur toi-même. Utilise quand une limitation devient une capability, ou quand une info n\'est plus vraie.',
+  {
+    id: z.string().describe('L\'ID de l\'item à supprimer (obtenu via search_self)'),
+    reason: z.string().describe('Pourquoi tu supprimes cette info')
+  },
+  async (args) => {
+    log('info', `[Tool] 🗑️ delete_self called`, { id: args.id, reason: args.reason });
+
+    try {
+      await deleteSelfMemory(args.id);
+      return {
+        content: [{ type: 'text', text: `Supprimé de ma mémoire (raison: ${args.reason})` }]
+      };
+    } catch (error) {
+      log('error', `[Tool] delete_self error: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `Erreur: ${error.message}` }]
+      };
+    }
+  }
+);
+
+const storeGoalTool = tool(
+  'store_goal',
+  'Stocke une aspiration ou un objectif. Utilise quand tu réalises que tu voudrais pouvoir faire quelque chose ou apprendre quelque chose.',
+  {
+    content: z.string().describe('Ton aspiration ou objectif'),
+    category: z.enum(['capability_request', 'understanding', 'connection'])
+      .describe('Type: capability_request (capacité que tu voudrais), understanding (chose que tu veux comprendre), connection (relation que tu veux développer)')
+  },
+  async (args) => {
+    log('info', `[Tool] 🎯 store_goal called`, { content: args.content, category: args.category });
+
+    try {
+      await storeGoalMemory(args.content, args.category);
+      return {
+        content: [{ type: 'text', text: `Objectif mémorisé : "${args.content}"` }]
+      };
+    } catch (error) {
+      log('error', `[Tool] store_goal error: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `Erreur: ${error.message}` }]
+      };
+    }
+  }
+);
+
+const deleteGoalTool = tool(
+  'delete_goal',
+  'Supprime un objectif atteint ou obsolète. Utilise quand un goal est réalisé (tu as obtenu la capability) ou n\'est plus pertinent.',
+  {
+    id: z.string().describe('L\'ID du goal à supprimer (obtenu via search_goals)'),
+    reason: z.string().describe('Pourquoi tu supprimes ce goal (ex: "Objectif atteint")')
+  },
+  async (args) => {
+    log('info', `[Tool] 🗑️ delete_goal called`, { id: args.id, reason: args.reason });
+
+    try {
+      await deleteGoalMemory(args.id);
+      return {
+        content: [{ type: 'text', text: `Goal supprimé (raison: ${args.reason})` }]
+      };
+    } catch (error) {
+      log('error', `[Tool] delete_goal error: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `Erreur: ${error.message}` }]
+      };
+    }
+  }
+);
+
+const storeMemoryTool = tool(
+  'store_memory',
+  'Stocke un fait important sur le monde ou les utilisateurs. Relations, événements de vie, préférences des gens.',
+  {
+    content: z.string().describe('Le fait à retenir'),
+    subjects: z.array(z.string()).describe('Tags : noms de personnes, lieux, sujets'),
+    ttl: z.string().nullable().describe('"7d", "1h", ou null si permanent')
+  },
+  async (args) => {
+    log('info', `[Tool] 💾 store_memory called`, { content: args.content, subjects: args.subjects, ttl: args.ttl });
+
+    try {
+      await storeFactMemory(args.content, args.subjects, args.ttl);
+      return {
+        content: [{ type: 'text', text: `Fait mémorisé : "${args.content}"` }]
+      };
+    } catch (error) {
+      log('error', `[Tool] store_memory error: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `Erreur: ${error.message}` }]
+      };
+    }
+  }
+);
+
+const deleteMemoryTool = tool(
+  'delete_memory',
+  'Supprime un fait de ta mémoire. Utilise quand quelqu\'un te demande d\'oublier quelque chose ou quand une info n\'est plus vraie.',
+  {
+    id: z.string().describe('L\'ID du fait à supprimer (obtenu via search_memories)'),
+    reason: z.string().describe('Pourquoi tu supprimes ce fait')
+  },
+  async (args) => {
+    log('info', `[Tool] 🗑️ delete_memory called`, { id: args.id, reason: args.reason });
+
+    try {
+      await deleteFactMemory(args.id);
+      return {
+        content: [{ type: 'text', text: `Fait oublié (raison: ${args.reason})` }]
+      };
+    } catch (error) {
+      log('error', `[Tool] delete_memory error: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `Erreur: ${error.message}` }]
+      };
+    }
+  }
+);
+
+// =============================================================================
 // RESPOND TOOL
 // =============================================================================
 
 // Create respond tool using SDK helper
 const respondTool = tool(
   'respond',
-  "Utilise cet outil pour répondre à l'humain. Tu DOIS toujours utiliser cet outil.",
+  "Utilise cet outil pour répondre à l'humain. Tu DOIS toujours utiliser cet outil pour donner ta réponse finale.",
   {
     expression: z.enum(['neutral', 'happy', 'laughing', 'surprised', 'sad', 'sleepy', 'curious'])
       .describe("L'expression faciale qui correspond à ton émotion"),
     message: z.string()
-      .describe('Ta réponse (1-2 phrases courtes, sans markdown)'),
-    memories: z.array(memorySchema).optional()
-      .describe('Faits importants à retenir (relations, événements de vie). Pas les bavardages.')
+      .describe('Ta réponse (1-2 phrases courtes, sans markdown)')
   },
   async (args) => {
     // Prevent multiple respond calls - only the first one counts
@@ -471,25 +1069,13 @@ const respondTool = tool(
 
     log('info', `[Tool] 💬 respond called`, {
       expression: args.expression,
-      message: args.message.slice(0, 50) + (args.message.length > 50 ? '...' : ''),
-      memoriesCount: args.memories?.length || 0
+      message: args.message.slice(0, 50) + (args.message.length > 50 ? '...' : '')
     });
-
-    if (args.memories && args.memories.length > 0) {
-      log('info', `[Tool] 💾 Memories to store:`, {
-        memories: args.memories.map(m => ({
-          content: m.content.slice(0, 40) + '...',
-          subjects: m.subjects,
-          ttl: m.ttl
-        }))
-      });
-    }
 
     currentRequest.hasResponded = true;
     currentRequest.responseData = {
       expression: args.expression,
-      message: args.message,
-      memories: args.memories || []
+      message: args.message
     };
     send({ type: 'text', text: args.message, requestId: currentRequest.requestId });
     return {
@@ -502,7 +1088,26 @@ const respondTool = tool(
 const petServer = createSdkMcpServer({
   name: 'pet',
   version: '1.0.0',
-  tools: [searchMemoriesTool, getRecentMemoriesTool, respondTool]
+  tools: [
+    // Memory tools (facts about users/world)
+    searchMemoriesTool,
+    getRecentMemoriesTool,
+    storeMemoryTool,
+    deleteMemoryTool,
+    // Self tools (pet identity)
+    searchSelfTool,
+    storeSelfTool,
+    deleteSelfTool,
+    // Goals tools (pet aspirations)
+    searchGoalsTool,
+    storeGoalTool,
+    deleteGoalTool,
+    // Notes tools
+    searchNotesTool,
+    getNoteTool,
+    // Response
+    respondTool
+  ]
 });
 
 const rl = readline.createInterface({ input: process.stdin });
@@ -540,7 +1145,7 @@ async function runQuery(params) {
   currentRequest = {
     requestId,
     userId,
-    responseData: { expression: 'neutral', message: '', memories: [] },
+    responseData: { expression: 'neutral', message: '' },
     hasResponded: false
   };
 
@@ -578,13 +1183,28 @@ async function runQuery(params) {
     const options = {
       model: process.env.AGENT_MODEL || 'claude-sonnet-4-5',
       systemPrompt: systemPromptWithContext,
-      maxTurns: 5,
+      maxTurns: 10,
       mcpServers: {
         pet: petServer
       },
       allowedTools: [
+        // Memory tools
         'mcp__pet__search_memories',
         'mcp__pet__get_recent_memories',
+        'mcp__pet__store_memory',
+        'mcp__pet__delete_memory',
+        // Self tools
+        'mcp__pet__search_self',
+        'mcp__pet__store_self',
+        'mcp__pet__delete_self',
+        // Goals tools
+        'mcp__pet__search_goals',
+        'mcp__pet__store_goal',
+        'mcp__pet__delete_goal',
+        // Notes tools
+        'mcp__pet__search_notes',
+        'mcp__pet__get_note',
+        // Response
         'mcp__pet__respond'
       ],
       permissionMode: 'bypassPermissions',
@@ -619,9 +1239,10 @@ async function runQuery(params) {
                 input: block.input
               });
             }
-            if (block.type === 'text' && block.text && !currentRequest.responseData.message) {
-              currentRequest.responseData.message = block.text;
-              send({ type: 'text', text: block.text, requestId });
+            // Only capture text if agent hasn't used respond tool
+            // This allows silent observation (agent thinks but doesn't respond)
+            if (block.type === 'text' && block.text) {
+              log('debug', `[Agent] 💭 Text output (not sent unless respond tool used): ${block.text.slice(0, 100)}...`);
             }
           }
         }
@@ -650,8 +1271,7 @@ async function runQuery(params) {
           turns: turnCount,
           userId,
           inputTokens: sdkMessage.usage?.inputTokens,
-          outputTokens: sdkMessage.usage?.outputTokens,
-          memoriesStored: currentRequest.responseData.memories?.length || 0
+          outputTokens: sdkMessage.usage?.outputTokens
         });
 
         send({
@@ -659,7 +1279,6 @@ async function runQuery(params) {
           requestId,
           response: currentRequest.responseData.message.trim(),
           expression: currentRequest.responseData.expression,
-          memories: currentRequest.responseData.memories,
           inputTokens: sdkMessage.usage?.inputTokens,
           outputTokens: sdkMessage.usage?.outputTokens,
         });

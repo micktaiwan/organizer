@@ -1,5 +1,7 @@
 import { Server } from 'socket.io';
-import { Room, Message, User } from '../../models/index.js';
+import { createMessage } from '../../services/messages.service.js';
+import { getRoomById, ensureUserInRoom, updateRoomLastMessage } from '../../services/rooms.service.js';
+import { getUserByUsername } from '../../services/users.service.js';
 import { IMcpToken } from '../../models/McpToken.js';
 import { IUser } from '../../models/User.js';
 import { McpToolDefinition, McpToolResult } from '../types.js';
@@ -55,7 +57,7 @@ export async function sendBotMessageHandler(
       };
     }
 
-    const room = await Room.findById(channelId);
+    const room = await getRoomById(channelId);
     if (!room) {
       return {
         content: [{ type: 'text', text: 'Channel not found' }],
@@ -63,7 +65,7 @@ export async function sendBotMessageHandler(
       };
     }
 
-    const botUser = await User.findOne({ username: 'testbot' });
+    const botUser = await getUserByUsername('testbot');
     if (!botUser) {
       return {
         content: [{ type: 'text', text: 'Test Bot user not found in the system' }],
@@ -71,29 +73,16 @@ export async function sendBotMessageHandler(
       };
     }
 
-    const botIsMember = room.members.some(m => m.userId.toString() === botUser._id.toString());
-    if (!botIsMember) {
-      room.members.push({
-        userId: botUser._id as any,
-        joinedAt: new Date(),
-        lastReadAt: null,
-      });
-      await room.save();
-    }
+    await ensureUserInRoom(channelId, botUser._id as any);
 
-    const message = new Message({
+    const message = await createMessage({
       roomId: channelId,
-      senderId: botUser._id,
-      type: 'text',
-      content: messageContent.trim(),
-      status: 'sent',
-      readBy: [],
+      senderId: botUser._id as any,
+      content: messageContent,
+      clientSource: 'mcp-bot',
     });
 
-    await message.save();
-    await message.populate('senderId', 'username displayName status statusMessage');
-
-    await Room.findByIdAndUpdate(channelId, { lastMessageAt: new Date() });
+    await updateRoomLastMessage(channelId);
 
     if (io) {
       await emitNewMessage({

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useAuth } from '../../contexts/AuthContext';
 import './LogPanel.css';
 
@@ -108,6 +109,13 @@ export function LogPanel({ useLocalServer, onClose }: LogPanelProps) {
 
   const clearLogs = () => setLogs([]);
 
+  const copyLogs = async () => {
+    const text = logs
+      .map((log) => `[${formatTime(log.timestamp)}] [${log.level.toUpperCase()}] ${log.message}`)
+      .join('\n');
+    await writeText(text);
+  };
+
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString('fr-FR', {
       hour: '2-digit',
@@ -124,6 +132,9 @@ export function LogPanel({ useLocalServer, onClose }: LogPanelProps) {
           <span>{serverName} Logs</span>
         </div>
         <div className="log-panel-actions">
+          <button onClick={copyLogs} title="Copy logs to clipboard">
+            Copy
+          </button>
           <button onClick={clearLogs} title="Clear logs">
             Clear
           </button>

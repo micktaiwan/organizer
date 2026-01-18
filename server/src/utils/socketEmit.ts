@@ -1,7 +1,8 @@
 import { Server, Socket } from 'socket.io';
 import { Types } from 'mongoose';
-import { Room, Message } from '../models/index.js';
+import { Room, Message, User } from '../models/index.js';
 import { indexLiveMessage } from '../memory/live.service.js';
+import { handleEkoMention } from './eko-handler.js';
 
 interface MessageEmitData {
   io: Server;
@@ -78,7 +79,9 @@ export async function emitNewMessage({ io, socket, roomId, userId, message }: Me
     }
 
     // Observer: index Lobby messages for pet's live context (text only, skip media)
-    if (room.isLobby && message.type === 'text' && message.content) {
+    // Skip messages mentioning Eko - they're already handled in real-time by the agent
+    const mentionsEko = /\beko\b/i.test(message.content || '');
+    if (room.isLobby && message.type === 'text' && message.content && !mentionsEko) {
       indexLiveMessage({
         messageId: message._id.toString(),
         content: message.content,
@@ -90,6 +93,29 @@ export async function emitNewMessage({ io, socket, roomId, userId, message }: Me
       }).catch((err) => {
         console.error('[Live] Failed to index message:', err.message);
       });
+    }
+
+    // Detect Eko mentions (case-insensitive, word boundary)
+    if (message.type === 'text' && message.content) {
+      const containsEko = /\beko\b/i.test(message.content);
+      // Don't trigger if Eko is the sender (avoid infinite loops)
+      const senderUsername = sender?.username?.toLowerCase();
+
+      if (containsEko && senderUsername !== 'eko') {
+        console.log(`[Eko] Mention detected in room ${room.name}`);
+
+        // Trigger Eko response asynchronously (don't block message emission)
+        handleEkoMention({
+          io,
+          roomId,
+          messageContent: message.content,
+          authorId: userId,
+          authorName: sender?.displayName || sender?.username || 'Unknown',
+          roomName: room.name,
+        }).catch((err) => {
+          console.error('[Eko] Failed to handle mention:', err.message);
+        });
+      }
     }
   }
 }

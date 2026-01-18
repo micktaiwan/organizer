@@ -1,4 +1,4 @@
-package com.organizer.chat.ui.screens.tamagotchi
+package com.organizer.chat.ui.screens.eko
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -33,19 +33,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.organizer.chat.ui.screens.tamagotchi.components.ThoughtBubble
-import com.organizer.chat.ui.screens.tamagotchi.components.drawCreature
-import com.organizer.chat.ui.screens.tamagotchi.components.getRandomThought
-import com.organizer.chat.ui.screens.tamagotchi.gestures.tamagotchiGestures
-import com.organizer.chat.ui.screens.tamagotchi.sensors.rememberGyroscopeState
-import com.organizer.chat.ui.screens.tamagotchi.sensors.rememberRotationVectorState
+import com.organizer.chat.ui.screens.eko.components.ThoughtBubble
+import com.organizer.chat.ui.screens.eko.components.drawCreature
+import com.organizer.chat.ui.screens.eko.components.getRandomThought
+import com.organizer.chat.ui.screens.eko.gestures.ekoGestures
+import com.organizer.chat.ui.screens.eko.sensors.rememberGyroscopeState
+import com.organizer.chat.ui.screens.eko.sensors.rememberRotationVectorState
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.Charcoal
 import com.organizer.chat.util.LockScreenOrientation
 
 @Composable
-fun TamagotchiScreen(
-    viewModel: TamagotchiViewModel = viewModel()
+fun EkoScreen(
+    viewModel: EkoViewModel = viewModel()
 ) {
     // Lock to portrait on this screen
     LockScreenOrientation()
@@ -60,7 +60,7 @@ fun TamagotchiScreen(
     // Expression: "thinking" during loading, API expression otherwise
     val currentExpression = if (uiState.isLoading) "thinking" else uiState.currentExpression
 
-    val animState = rememberTamagotchiAnimatedState(
+    val animState = rememberEkoAnimatedState(
         roll = rotationState.roll,
         pitch = rotationState.pitch,
         gyroZ = gyroState.rotationZ,
@@ -100,7 +100,7 @@ fun TamagotchiScreen(
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    .tamagotchiGestures(
+                    .ekoGestures(
                         state = animState.state,
                         getCanvasCenter = { canvasCenter },
                         onTap = onCreatureTapped

@@ -26,6 +26,11 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
 
   mongodb:
     image: mongo:5
@@ -35,6 +40,11 @@ services:
       - mongodb_data:/data/db
     networks:
       - organizer-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
 
   qdrant:
     image: qdrant/qdrant:v1.16.3
@@ -49,6 +59,11 @@ services:
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
       - QDRANT__SERVICE__HTTP_PORT=6333
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
 
 networks:
   organizer-network:

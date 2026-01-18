@@ -4,6 +4,11 @@ Cross-platform chat app: Tauri 2.0 (desktop), Android Kotlin, Node.js/Express/Mo
 
 ## Claude Code Rules
 
+### Git branches - CRITICAL
+**NEVER switch branches (`git checkout`, `git switch`) without explicit user confirmation.** Multiple Claude sessions may run in parallel on the same repo. Changing branch affects ALL sessions.
+
+If you need changes from another branch, use `git merge <branch>` or `git cherry-pick` while staying on the current branch.
+
 ### Absolute paths required
 Working directory may be a subfolder. Use absolute paths for scripts:
 ```bash
