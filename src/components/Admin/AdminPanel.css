@@ -1,0 +1,245 @@
+.admin-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: #ff9500;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-btn:hover:not(:disabled) {
+  background: #e08600;
+}
+
+.user-online-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34c759;
+  margin-right: 0.5rem;
+}
+
+.admin-panel {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.admin-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.admin-tabs {
+  display: flex;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.admin-tab {
+  flex: 1;
+  padding: 0.75rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #666;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.admin-tab:hover {
+  color: #333;
+  background: transparent;
+}
+
+.admin-tab.active {
+  color: #007aff;
+  border-bottom-color: #007aff;
+  background: transparent;
+}
+
+.admin-loading {
+  padding: 2rem;
+  text-align: center;
+  color: #999;
+}
+
+.admin-stats,
+.admin-users {
+  padding: 1rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.stat-value {
+  display: block;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #007aff;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.users-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.user-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-details .user-name {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-badge {
+  font-size: 0.7rem;
+  background: #007aff;
+  color: white;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.user-details .user-meta {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.user-details .user-date {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.user-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.toggle-admin-btn.is-admin {
+  background: #ffd700;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.pagination button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  background: #e0e0e0;
+  color: #333;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+}
+
+@media (prefers-color-scheme: dark) {
+.admin-panel {
+    background: #2a2a2a;
+  }
+
+.admin-header {
+    border-color: #444;
+  }
+
+.admin-tabs {
+    border-color: #444;
+  }
+
+.admin-tab {
+    color: #999;
+  }
+
+.admin-tab:hover {
+    color: #f5f5f5;
+  }
+
+.stat-card {
+    background: #333;
+  }
+
+.stat-label {
+    color: #999;
+  }
+
+.user-item {
+    background: #333;
+  }
+
+.user-details .user-meta {
+    color: #999;
+  }
+
+.user-details .user-date {
+    color: #777;
+  }
+
+.toggle-admin-btn,
+  .pagination button {
+    background: #444;
+    color: #f5f5f5;
+  }
+}
