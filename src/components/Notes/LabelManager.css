@@ -1,0 +1,277 @@
+.label-manager {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1a1a1a;
+  color: #f5f5f5;
+}
+
+.label-manager-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #333;
+}
+
+.label-manager-back {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.label-manager-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.label-manager-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.label-manager-add {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: #007aff;
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.label-manager-add:hover {
+  background: #0056b3;
+}
+
+.label-manager-form {
+  padding: 1rem;
+  border-bottom: 1px solid #333;
+  background: #222;
+}
+
+.label-manager-form input {
+  width: 100%;
+  padding: 0.75rem;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  color: #f5f5f5;
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.label-manager-colors {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.label-manager-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.label-manager-form-actions button {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  background: #333;
+  color: #f5f5f5;
+}
+
+.label-manager-form-actions button.primary {
+  background: #007aff;
+  color: white;
+}
+
+.label-manager-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+.label-manager-empty {
+  padding: 2rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.label-manager-empty p {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+.label-manager-empty span {
+  font-size: 0.85rem;
+}
+
+.label-manager-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.label-manager-item:hover {
+  background: #222;
+}
+
+.label-manager-item-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.label-manager-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.label-manager-name {
+  font-size: 0.95rem;
+}
+
+.label-manager-item-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.label-manager-item-actions button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.label-manager-item-actions button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.label-manager-item-actions button.danger:hover {
+  background: rgba(255, 59, 48, 0.1);
+  color: #ff3b30;
+}
+
+.label-manager-edit {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label-manager-edit input {
+  width: 100%;
+  padding: 0.5rem;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #f5f5f5;
+  font-size: 0.95rem;
+}
+
+.label-manager-edit-actions {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: flex-end;
+}
+
+.label-manager-edit-actions button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: #333;
+  border: none;
+  color: #f5f5f5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.label-manager-edit-actions button.primary {
+  background: #007aff;
+  color: white;
+}
+
+.label-manager-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.label-manager-dialog {
+  background: #2a2a2a;
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 320px;
+  text-align: center;
+}
+
+.label-manager-dialog h3 {
+  margin: 0 0 0.5rem 0;
+  color: #f5f5f5;
+}
+
+.label-manager-dialog p {
+  margin: 0 0 1.5rem 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9rem;
+}
+
+.label-manager-dialog-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.label-manager-dialog-actions button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  background: #444;
+  color: #f5f5f5;
+}
+
+.label-manager-dialog-actions button.danger {
+  background: #ff3b30;
+  color: white;
+}
