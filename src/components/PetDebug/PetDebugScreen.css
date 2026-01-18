@@ -460,3 +460,79 @@
   font-size: 12px;
   padding: 6px 12px;
 }
+
+/* Eko Login Form */
+.eko-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  margin: 16px;
+  background: #2d2d2d;
+  border-radius: 12px;
+  border: 1px solid #3d3d3d;
+}
+
+.eko-login-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #6B9FFF;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.eko-login-error {
+  color: #ff6b6b;
+  font-size: 13px;
+  padding: 8px 12px;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 6px;
+}
+
+.eko-login-form form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.eko-login-form input {
+  flex: 1;
+  padding: 10px 12px;
+  background: #1a1a1a;
+  border: 1px solid #3d3d3d;
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 14px;
+}
+
+.eko-login-form input:focus {
+  outline: none;
+  border-color: #6B9FFF;
+}
+
+.eko-login-form input::placeholder {
+  color: #666;
+}
+
+.eko-login-form button {
+  padding: 10px 20px;
+  background: #6B9FFF;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.eko-login-form button:hover:not(:disabled) {
+  background: #5a8fee;
+}
+
+.eko-login-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

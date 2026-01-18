@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Trash2, Database, Server, Laptop, Power, RefreshCw, Brain, Skull, ScrollText, MessageCircle } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { Send, Trash2, Database, Server, Laptop, Power, RefreshCw, Brain, Skull, ScrollText, MessageCircle, LogIn } from 'lucide-react';
 import { Command } from '@tauri-apps/plugin-shell';
 import { load, Store } from '@tauri-apps/plugin-store';
 import { getApiBaseUrl } from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
 import { useLocalServerControl } from '../../hooks/useLocalServerControl';
+import { loadEkoMessages, saveEkoMessage, clearEkoMessages, EkoServerId } from '../../hooks/useEkoMessageCache';
+import { useEkoAuth } from '../../hooks/useEkoAuth';
 import { BrainDashboard } from './BrainDashboard';
 import './PetDebugScreen.css';
 
@@ -37,14 +38,40 @@ interface PetDebugScreenProps {
 }
 
 export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer, onUseLocalServerChange, viewMode, onViewModeChange }: PetDebugScreenProps) {
-  const { token } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const debugStoreRef = useRef<Store | null>(null);
+
+  // Server URL and ID (needed early for auth hook)
+  const serverUrl = useLocalServer ? 'http://localhost:3001' : getApiBaseUrl();
+  const getServerId = useCallback((): EkoServerId => useLocalServer ? 'local' : 'prod', [useLocalServer]);
+
+  // Eko-specific auth (independent from main chat auth)
+  const ekoAuth = useEkoAuth(getServerId(), serverUrl);
 
   // Local server control via shared hook
   const localServer = useLocalServerControl();
+
+  // Load cached messages on mount and when server changes
+  useEffect(() => {
+    const loadCachedMessages = async () => {
+      const serverId = getServerId();
+      const cached = await loadEkoMessages(serverId);
+      // Convert cached messages to local Message format
+      const loadedMessages: Message[] = cached.map(msg => ({
+        id: msg.id,
+        role: msg.role === 'eko' ? 'pet' : msg.role, // Map 'eko' back to 'pet' for display
+        content: msg.content,
+        expression: msg.expression,
+        timestamp: new Date(msg.timestamp),
+      }));
+      setMessages(loadedMessages);
+    };
+    loadCachedMessages();
+  }, [getServerId]);
 
   // Save preference when it changes
   const setUseLocalServerPersisted = async (value: boolean) => {
@@ -118,8 +145,6 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
     return groups;
   }, [messages]);
 
-  const serverUrl = useLocalServer ? 'http://localhost:3001' : getApiBaseUrl();
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -178,9 +203,9 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
 
   const getAuthHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    // Skip auth for local server (dev mode only)
-    if (token && !useLocalServer) {
-      headers['Authorization'] = `Bearer ${token}`;
+    // Skip auth for local server (dev mode only), use Eko-specific token for prod
+    if (ekoAuth.token && !useLocalServer) {
+      headers['Authorization'] = `Bearer ${ekoAuth.token}`;
     }
     return headers;
   };
@@ -196,6 +221,14 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
     };
 
     setMessages(prev => [...prev, userMessage]);
+    // Cache user message
+    saveEkoMessage({
+      id: userMessage.id,
+      serverId: getServerId(),
+      role: 'user',
+      content: userMessage.content,
+      timestamp: userMessage.timestamp.getTime(),
+    });
     setInput('');
     setIsLoading(true);
 
@@ -212,7 +245,7 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
 
       const data: PetResponse = await response.json();
 
-      const petMessage: Message = {
+      const ekoMessage: Message = {
         id: crypto.randomUUID(),
         role: 'pet',
         content: data.response,
@@ -220,7 +253,16 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
         timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, petMessage]);
+      setMessages(prev => [...prev, ekoMessage]);
+      // Cache Eko response
+      saveEkoMessage({
+        id: ekoMessage.id,
+        serverId: getServerId(),
+        role: 'eko',
+        content: ekoMessage.content,
+        expression: ekoMessage.expression,
+        timestamp: ekoMessage.timestamp.getTime(),
+      });
     } catch (error) {
       let errorText: string;
       if (error instanceof TypeError && error.message.includes('Load failed')) {
@@ -244,8 +286,9 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
     }
   };
 
-  const clearMessages = () => {
+  const clearMessages = async () => {
     setMessages([]);
+    await clearEkoMessages(getServerId());
   };
 
   const resetSession = async () => {
@@ -438,8 +481,8 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
       }
 
       // 2. Check auth with token
-      if (token) {
-        results.push('✓ Token: Présent');
+      if (ekoAuth.token) {
+        results.push('✓ Token Eko: Présent');
         try {
           const testAuthRes = await fetch(`${serverUrl}/agent/memory/info`, {
             headers: getAuthHeaders(),
@@ -456,7 +499,7 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
           results.push('  ✗ Auth: Erreur réseau');
         }
       } else {
-        results.push('✗ Token: Absent (non connecté?)');
+        results.push('✗ Token Eko: Absent (login requis)');
       }
 
       // 3. Check agent endpoint (lightweight health check, no LLM call)
@@ -567,6 +610,46 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
           </div>
         )}
       </div>
+
+      {/* Login form for prod when not authenticated - shown in any mode */}
+      {!useLocalServer && !ekoAuth.isAuthenticated && !ekoAuth.isLoading && (
+        <div className="eko-login-form">
+          <div className="eko-login-header">
+            <LogIn size={20} />
+            <span>Login required for Prod</span>
+          </div>
+          {ekoAuth.error && (
+            <div className="eko-login-error">{ekoAuth.error}</div>
+          )}
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await ekoAuth.login(loginUsername, loginPassword);
+              setLoginPassword('');
+            } catch {
+              // Error is handled by ekoAuth.error
+            }
+          }}>
+            <input
+              type="text"
+              placeholder="Username"
+              value={loginUsername}
+              onChange={(e) => setLoginUsername(e.target.value)}
+              autoComplete="username"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+            <button type="submit" disabled={ekoAuth.isLoading || !loginUsername || !loginPassword}>
+              {ekoAuth.isLoading ? 'Logging in...' : 'Login'}
+            </button>
+          </form>
+        </div>
+      )}
 
       {viewMode === 'chat' ? (
         <>
