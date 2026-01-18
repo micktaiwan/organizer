@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "organizer": {
+      "type": "http",
+      "url": "http://51.210.150.25:3001/mcp",
+      "headers": {
+        "Authorization": "Bearer mcp_2efe72bd35f03b1cd44c686a4acbcd16ab4ad7177b36a624cc54afcf941842a1"
+      }
+    }
+  }
+}

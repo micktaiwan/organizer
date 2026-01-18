@@ -24,13 +24,13 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _connectionState = MutableSharedFlow<ConnectionState>(replay = 1)
     val connectionState: SharedFlow<ConnectionState> = _connectionState.asSharedFlow()
 
-    private val _newMessage = MutableSharedFlow<NewMessageEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _newMessage = MutableSharedFlow<NewMessageEvent>(extraBufferCapacity = 10)
     val newMessage: SharedFlow<NewMessageEvent> = _newMessage.asSharedFlow()
 
-    private val _userOnline = MutableSharedFlow<UserStatusEvent>(replay = 1, extraBufferCapacity = 5)
+    private val _userOnline = MutableSharedFlow<UserStatusEvent>(extraBufferCapacity = 5)
     val userOnline: SharedFlow<UserStatusEvent> = _userOnline.asSharedFlow()
 
-    private val _userStatusChanged = MutableSharedFlow<UserStatusEvent>(replay = 1, extraBufferCapacity = 5)
+    private val _userStatusChanged = MutableSharedFlow<UserStatusEvent>(extraBufferCapacity = 5)
     val userStatusChanged: SharedFlow<UserStatusEvent> = _userStatusChanged.asSharedFlow()
 
     private val _userOffline = MutableSharedFlow<UserOfflineEvent>()
@@ -42,40 +42,40 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _typingStop = MutableSharedFlow<TypingEvent>(extraBufferCapacity = 5)
     val typingStop: SharedFlow<TypingEvent> = _typingStop.asSharedFlow()
 
-    private val _messageRead = MutableSharedFlow<MessageReadEvent>()
+    private val _messageRead = MutableSharedFlow<MessageReadEvent>(extraBufferCapacity = 10)
     val messageRead: SharedFlow<MessageReadEvent> = _messageRead.asSharedFlow()
 
-    private val _messageDeleted = MutableSharedFlow<MessageDeletedEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _messageDeleted = MutableSharedFlow<MessageDeletedEvent>(extraBufferCapacity = 10)
     val messageDeleted: SharedFlow<MessageDeletedEvent> = _messageDeleted.asSharedFlow()
 
-    private val _messageReacted = MutableSharedFlow<MessageReactedEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _messageReacted = MutableSharedFlow<MessageReactedEvent>(extraBufferCapacity = 10)
     val messageReacted: SharedFlow<MessageReactedEvent> = _messageReacted.asSharedFlow()
 
     // Notes events
-    private val _noteCreated = MutableSharedFlow<NoteEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _noteCreated = MutableSharedFlow<NoteEvent>(extraBufferCapacity = 10)
     val noteCreated: SharedFlow<NoteEvent> = _noteCreated.asSharedFlow()
 
-    private val _noteUpdated = MutableSharedFlow<NoteEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _noteUpdated = MutableSharedFlow<NoteEvent>(extraBufferCapacity = 10)
     val noteUpdated: SharedFlow<NoteEvent> = _noteUpdated.asSharedFlow()
 
-    private val _noteDeleted = MutableSharedFlow<NoteDeletedEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _noteDeleted = MutableSharedFlow<NoteDeletedEvent>(extraBufferCapacity = 10)
     val noteDeleted: SharedFlow<NoteDeletedEvent> = _noteDeleted.asSharedFlow()
 
-    private val _labelCreated = MutableSharedFlow<LabelEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _labelCreated = MutableSharedFlow<LabelEvent>(extraBufferCapacity = 10)
     val labelCreated: SharedFlow<LabelEvent> = _labelCreated.asSharedFlow()
 
-    private val _labelUpdated = MutableSharedFlow<LabelEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _labelUpdated = MutableSharedFlow<LabelEvent>(extraBufferCapacity = 10)
     val labelUpdated: SharedFlow<LabelEvent> = _labelUpdated.asSharedFlow()
 
-    private val _labelDeleted = MutableSharedFlow<LabelDeletedEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _labelDeleted = MutableSharedFlow<LabelDeletedEvent>(extraBufferCapacity = 10)
     val labelDeleted: SharedFlow<LabelDeletedEvent> = _labelDeleted.asSharedFlow()
 
     // Location events
-    private val _userLocationUpdated = MutableSharedFlow<UserLocationUpdatedEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _userLocationUpdated = MutableSharedFlow<UserLocationUpdatedEvent>(extraBufferCapacity = 10)
     val userLocationUpdated: SharedFlow<UserLocationUpdatedEvent> = _userLocationUpdated.asSharedFlow()
 
     // Tracking events
-    private val _userTrackingChanged = MutableSharedFlow<UserTrackingChangedEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _userTrackingChanged = MutableSharedFlow<UserTrackingChangedEvent>(extraBufferCapacity = 10)
     val userTrackingChanged: SharedFlow<UserTrackingChangedEvent> = _userTrackingChanged.asSharedFlow()
 
     private val _userTrackPoint = MutableSharedFlow<UserTrackPointEvent>(replay = 0, extraBufferCapacity = 50)
@@ -92,7 +92,7 @@ class SocketManager(private val tokenManager: TokenManager) {
     val roomDeleted: SharedFlow<RoomDeletedEvent> = _roomDeleted.asSharedFlow()
 
     // Unread count events
-    private val _unreadUpdated = MutableSharedFlow<UnreadUpdatedEvent>(replay = 1, extraBufferCapacity = 10)
+    private val _unreadUpdated = MutableSharedFlow<UnreadUpdatedEvent>(extraBufferCapacity = 10)
     val unreadUpdated: SharedFlow<UnreadUpdatedEvent> = _unreadUpdated.asSharedFlow()
 
     fun connect(versionName: String? = null, versionCode: Int? = null) {
@@ -151,16 +151,14 @@ class SocketManager(private val tokenManager: TokenManager) {
             on("message:new") { args ->
                 try {
                     val data = args[0] as JSONObject
+                    // Lightweight payload: only notification data, full message fetched via API
                     val event = NewMessageEvent(
                         from = data.getString("from"),
                         fromName = data.optString("fromName", "Utilisateur"),
                         roomName = data.optString("roomName", "Chat"),
                         roomId = data.getString("roomId"),
                         messageId = data.getString("messageId"),
-                        content = data.optString("content", ""),
-                        type = data.optString("type", "text"),
-                        audioUrl = if (data.isNull("audioUrl")) null else data.optString("audioUrl"),
-                        imageUrl = if (data.isNull("imageUrl")) null else data.optString("imageUrl")
+                        preview = data.optString("preview", "Nouveau message")
                     )
                     _newMessage.tryEmit(event)
                 } catch (e: Exception) {
@@ -260,6 +258,7 @@ class SocketManager(private val tokenManager: TokenManager) {
                         roomId = data.getString("roomId"),
                         messageIds = messageIds
                     )
+                    Log.d(TAG, "Message read by ${event.from}: ${event.messageIds.size} messages in room ${event.roomId}")
                     _messageRead.tryEmit(event)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error parsing message:read", e)
@@ -527,26 +526,12 @@ class SocketManager(private val tokenManager: TokenManager) {
         socket?.emit("room:leave", JSONObject().put("roomId", roomId))
     }
 
-    fun notifyNewMessage(roomId: String, messageId: String) {
-        socket?.emit("message:notify", JSONObject().apply {
-            put("roomId", roomId)
-            put("messageId", messageId)
-        })
-    }
-
     fun notifyTypingStart(roomId: String) {
         socket?.emit("typing:start", JSONObject().put("roomId", roomId))
     }
 
     fun notifyTypingStop(roomId: String) {
         socket?.emit("typing:stop", JSONObject().put("roomId", roomId))
-    }
-
-    fun notifyMessagesRead(roomId: String, messageIds: List<String>) {
-        socket?.emit("message:read", JSONObject().apply {
-            put("roomId", roomId)
-            put("messageIds", org.json.JSONArray(messageIds))
-        })
     }
 
     fun notifyReaction(roomId: String, messageId: String, emoji: String, action: String) {
@@ -595,16 +580,14 @@ sealed class ConnectionState {
     data class Error(val message: String) : ConnectionState()
 }
 
+// Lightweight event: only notification data, full message fetched via API
 data class NewMessageEvent(
     val from: String,
     val fromName: String = "Utilisateur",
     val roomName: String = "Chat",
     val roomId: String,
     val messageId: String,
-    val content: String = "",
-    val type: String = "text",
-    val audioUrl: String? = null,
-    val imageUrl: String? = null
+    val preview: String = "Nouveau message"
 )
 
 data class UserStatusEvent(

@@ -43,13 +43,15 @@ class TrackingService : Service() {
         const val ACTION_STOP = "com.organizer.chat.action.STOP_TRACKING"
 
         const val EXTRA_EXPIRES_AT = "expires_at"
+        const val EXTRA_DURATION_MINUTES = "duration_minutes"
 
-        private const val UPDATE_INTERVAL_MS = 30_000L // 30 seconds
+        private const val UPDATE_INTERVAL_MS = 10_000L // 10 seconds
 
-        fun startTracking(context: Context, expiresAtMillis: Long? = null) {
+        fun startTracking(context: Context, expiresAtMillis: Long? = null, durationMinutes: Int? = null) {
             val intent = Intent(context, TrackingService::class.java).apply {
                 action = ACTION_START
                 expiresAtMillis?.let { putExtra(EXTRA_EXPIRES_AT, it) }
+                durationMinutes?.let { putExtra(EXTRA_DURATION_MINUTES, it) }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -70,11 +72,13 @@ class TrackingService : Service() {
     private val fusedLocationClient by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private var wakeLock: PowerManager.WakeLock? = null
     private var expiresAt: Long? = null
+    private var durationMinutes: Int? = null
     private var isTracking = false
     private lateinit var locationRepository: LocationRepository
     private lateinit var localTrackRepository: LocalTrackRepository
     private lateinit var trackSyncManager: TrackSyncManager
     private var currentLocalTrackId: String? = null
+    private var currentServerTrackId: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -92,6 +96,8 @@ class TrackingService : Service() {
             ACTION_START -> {
                 val expiresAtExtra = intent.getLongExtra(EXTRA_EXPIRES_AT, -1)
                 expiresAt = if (expiresAtExtra > 0) expiresAtExtra else null
+                val durationExtra = intent.getIntExtra(EXTRA_DURATION_MINUTES, -1)
+                durationMinutes = if (durationExtra > 0) durationExtra else null
                 startTracking()
             }
             ACTION_STOP -> {
@@ -122,6 +128,9 @@ class TrackingService : Service() {
             currentLocalTrackId = localTrackRepository.createTrack()
             Log.d(TAG, "Created local track: $currentLocalTrackId")
 
+            // Try to register with server (for real-time tracking)
+            tryRegisterServerTracking()
+
             while (isActive && isTracking) {
                 // Check expiration
                 expiresAt?.let { expiry ->
@@ -151,6 +160,18 @@ class TrackingService : Service() {
         Log.d(TAG, "Stopping tracking")
         isTracking = false
 
+        // Notify server that tracking stopped (if we had a server track)
+        if (currentServerTrackId != null) {
+            runBlocking {
+                try {
+                    locationRepository.setTracking(enabled = false)
+                    Log.d(TAG, "Server notified of tracking stop")
+                } catch (e: Exception) {
+                    Log.d(TAG, "Could not notify server of stop: ${e.message}")
+                }
+            }
+        }
+
         // Mark local track as finished (blocking to ensure it's done before service stops)
         currentLocalTrackId?.let { trackId ->
             runBlocking {
@@ -161,6 +182,7 @@ class TrackingService : Service() {
             trackSyncManager.syncPendingTracks()
         }
         currentLocalTrackId = null
+        currentServerTrackId = null
 
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -173,6 +195,11 @@ class TrackingService : Service() {
             val trackId = currentLocalTrackId ?: run {
                 Log.w(TAG, "No current track ID")
                 return
+            }
+
+            // If we don't have a server track yet, try to register again
+            if (currentServerTrackId == null) {
+                tryRegisterServerTracking()
             }
 
             val locationRequest = CurrentLocationRequest.Builder()
@@ -200,23 +227,24 @@ class TrackingService : Service() {
                 )
                 Log.d(TAG, "Point saved locally")
 
-                // 2. Try to send to server for live view (if network available)
-                // This allows other users to see the position in real-time
-                try {
-                    val result = locationRepository.updateLocation(
-                        lat = location.latitude,
-                        lng = location.longitude,
-                        accuracy = location.accuracy,
-                        street = address?.street,
-                        city = address?.city,
-                        country = address?.country
-                    )
-                    if (result.isSuccess) {
-                        Log.d(TAG, "Location also sent to server for live view")
+                // 2. Try to send to server for live view (if network available and registered)
+                if (currentServerTrackId != null) {
+                    try {
+                        val result = locationRepository.updateLocation(
+                            lat = location.latitude,
+                            lng = location.longitude,
+                            accuracy = location.accuracy,
+                            street = address?.street,
+                            city = address?.city,
+                            country = address?.country
+                        )
+                        if (result.isSuccess) {
+                            Log.d(TAG, "Location also sent to server for live view")
+                        }
+                    } catch (e: Exception) {
+                        // Not a problem if live send fails, we have the point locally
+                        Log.d(TAG, "Could not send live location (offline?): ${e.message}")
                     }
-                } catch (e: Exception) {
-                    // Not a problem if live send fails, we have the point locally
-                    Log.d(TAG, "Could not send live location (offline?): ${e.message}")
                 }
 
                 // Update notification with address
@@ -226,6 +254,27 @@ class TrackingService : Service() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error getting/saving location", e)
+        }
+    }
+
+    private suspend fun tryRegisterServerTracking() {
+        try {
+            val trackId = currentLocalTrackId ?: return
+            val result = locationRepository.setTracking(enabled = true, expiresInMinutes = durationMinutes)
+            result.fold(
+                onSuccess = { response ->
+                    if (response.success && response.trackId != null) {
+                        currentServerTrackId = response.trackId
+                        localTrackRepository.setServerTrackId(trackId, response.trackId)
+                        Log.d(TAG, "Registered with server, trackId: ${response.trackId}")
+                    }
+                },
+                onFailure = { error ->
+                    Log.d(TAG, "Could not register with server (offline?): ${error.message}")
+                }
+            )
+        } catch (e: Exception) {
+            Log.d(TAG, "Error registering with server: ${e.message}")
         }
     }
 

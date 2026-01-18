@@ -5,14 +5,21 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.remember
 import com.organizer.chat.util.MessageGroupingUtils
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.shape.CircleShape
@@ -49,9 +56,12 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import com.organizer.chat.data.repository.MessageRepository
 import com.organizer.chat.data.repository.RoomRepository
+import com.organizer.chat.data.socket.ConnectionState
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.ui.components.ConnectionStatusIcon
 import com.organizer.chat.ui.components.MessageBubble
+import com.organizer.chat.ui.components.OfflineBanner
 import com.organizer.chat.util.DocumentInfo
 import com.organizer.chat.util.DocumentPicker
 import com.organizer.chat.util.TokenManager
@@ -79,6 +89,15 @@ fun ChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    // Connection state - use current state as initial to avoid flicker
+    val initialConnectionState = remember {
+        if (chatService?.socketManager?.isConnected() == true) ConnectionState.Connected
+        else ConnectionState.Disconnected
+    }
+    val connectionState by chatService?.socketManager?.connectionState
+        ?.collectAsState(initial = initialConnectionState)
+        ?: remember { mutableStateOf(initialConnectionState) }
 
     // Permission handling
     var hasAudioPermission by remember {
@@ -186,33 +205,36 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(roomName)
-                        if (uiState.typingUsers.isNotEmpty()) {
-                            Text(
-                                text = "En train d'ecrire...",
-                                style = MaterialTheme.typography.bodySmall
+            Column {
+                TopAppBar(
+                    title = { Text(roomName) },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Retour"
                             )
                         }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Retour"
+                    },
+                    actions = {
+                        ConnectionStatusIcon(
+                            connectionState = connectionState,
+                            modifier = Modifier.padding(end = 8.dp)
                         )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                windowInsets = WindowInsets.statusBars
-            )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    windowInsets = WindowInsets.statusBars
+                )
+                OfflineBanner(
+                    connectionState = connectionState,
+                    onRetry = { chatService?.reconnectIfNeeded() }
+                )
+            }
         },
         bottomBar = {
             ChatInputBar(
@@ -304,6 +326,11 @@ fun ChatScreen(
                 }
 
                 else -> {
+                    // Group consecutive messages from same sender (outside LazyColumn)
+                    val messageGroups = remember(uiState.messages, uiState.currentUserId) {
+                        MessageGroupingUtils.groupConsecutiveMessages(uiState.messages, uiState.currentUserId)
+                    }
+
                     LazyColumn(
                         state = listState,
                         modifier = Modifier
@@ -334,24 +361,70 @@ fun ChatScreen(
                             }
                         }
 
-                        itemsIndexed(uiState.messages, key = { _, msg -> msg.id }) { index, message ->
-                            val groupingFlags = MessageGroupingUtils.getGroupingFlags(uiState.messages, index)
+                        items(
+                            items = messageGroups,
+                            key = { group -> group.messages.first().id }
+                        ) { group ->
+                            val lastMsg = group.messages.last()
                             MessageBubble(
-                                message = message,
-                                isMyMessage = viewModel.isMyMessage(message),
-                                isGroupedWithPrevious = groupingFlags.isGroupedWithPrevious,
-                                isLastInGroup = groupingFlags.isLastInGroup,
+                                messages = group.messages,
+                                isMyMessage = group.isMyMessage,
                                 currentUserId = uiState.currentUserId,
-                                roomMemberCount = uiState.roomMemberCount,
-                                onReact = { emoji -> viewModel.reactToMessage(message.id, emoji) },
-                                onDelete = if (viewModel.isMyMessage(message)) {
-                                    { viewModel.deleteMessage(message.id) }
+                                humanMemberIds = uiState.humanMemberIds,
+                                onReact = { emoji -> viewModel.reactToMessage(lastMsg.id, emoji) },
+                                onDelete = if (group.isMyMessage) {
+                                    { messageId -> viewModel.deleteMessage(messageId) }
                                 } else null
                             )
-                            Spacer(modifier = Modifier.height(if (groupingFlags.isGroupedWithPrevious) 0.dp else 4.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+
+                        // Typing indicator at the bottom of messages (always reserve space)
+                        item(key = "typing_indicator") {
+                            TypingIndicator(isVisible = uiState.typingUsers.isNotEmpty())
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TypingIndicator(isVisible: Boolean) {
+    // Keep animations alive outside conditional to avoid recreation
+    val infiniteTransition = rememberInfiniteTransition(label = "typing")
+    val alphas = (0..2).map { index ->
+        infiniteTransition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(600, delayMillis = index * 200),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "alpha$index"
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .padding(start = 16.dp),
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (isVisible) {
+            alphas.forEach { alpha ->
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 2.dp)
+                        .size(8.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha.value),
+                            shape = CircleShape
+                        )
+                )
             }
         }
     }

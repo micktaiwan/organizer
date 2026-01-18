@@ -78,8 +78,6 @@ import com.organizer.chat.data.model.TrackPoint
 import com.organizer.chat.data.model.TrackSummary
 import com.organizer.chat.data.model.TrackWithUserInfo
 import com.organizer.chat.data.model.UserWithLocation
-import com.organizer.chat.ui.screens.map.MapSettings
-import com.organizer.chat.ui.screens.map.MapTileSource
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.Charcoal
 import com.organizer.chat.ui.theme.CharcoalLight
@@ -117,7 +115,19 @@ fun MapScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Carte") },
+                title = {
+                    Column {
+                        Text("Carte")
+                        if (uiState.isMyTrackingActive) {
+                            val pointsCount = uiState.currentUserId?.let { uiState.tracks[it]?.size } ?: 0
+                            Text(
+                                text = "$pointsCount points",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
@@ -200,8 +210,8 @@ fun MapScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Legend (only in live mode and if enabled)
-                if (uiState.viewingHistoryTrack == null && uiState.trackingUsers.isNotEmpty() && uiState.mapSettings.showLegend) {
+                // Legend (only in live mode when tracks are shown)
+                if (uiState.viewingHistoryTrack == null && uiState.trackingUsers.isNotEmpty() && uiState.mapSettings.showTracks) {
                     Card(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -351,7 +361,10 @@ private fun OsmMapView(
                 map.setTileSource(getTileSource(mapSettings.tileSource))
             }
             // === Update polylines ===
-            val currentTrackIds = if (mapSettings.showTracks) tracks.keys.toSet() else emptySet()
+            val currentTrackIds = buildSet {
+                if (mapSettings.showTracks) addAll(tracks.keys)
+                historyTrackId?.let { add(it) } // Always show history track if viewing one
+            }
             val existingTrackIds = polylinesMap.keys.toSet()
 
             // Remove polylines for tracks that no longer exist or if tracks are hidden
@@ -874,12 +887,11 @@ private fun DeleteTrackDialog(
 private fun getTileSource(source: MapTileSource): org.osmdroid.tileprovider.tilesource.ITileSource {
     return when (source) {
         MapTileSource.MAPNIK -> TileSourceFactory.MAPNIK
-        MapTileSource.CYCLEMAP -> TileSourceFactory.CYCLEMAP
-        MapTileSource.PUBLIC_TRANSPORT -> TileSourceFactory.PUBLIC_TRANSPORT
-        MapTileSource.WIKIMEDIA -> TileSourceFactory.WIKIMEDIA
+        MapTileSource.OPEN_TOPO -> TileSourceFactory.OpenTopo
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MapSettingsBottomSheet(
     settings: MapSettings,
@@ -990,31 +1002,6 @@ private fun MapSettingsBottomSheet(
                 Switch(
                     checked = settings.showMarkers,
                     onCheckedChange = { onSettingsChange(settings.copy(showMarkers = it)) },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = AccentBlue,
-                        checkedTrackColor = AccentBlue.copy(alpha = 0.5f),
-                        uncheckedThumbColor = Color.White.copy(alpha = 0.6f),
-                        uncheckedTrackColor = Color.White.copy(alpha = 0.3f)
-                    )
-                )
-            }
-
-            // Show legend toggle
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Afficher la légende",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White
-                )
-                Switch(
-                    checked = settings.showLegend,
-                    onCheckedChange = { onSettingsChange(settings.copy(showLegend = it)) },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = AccentBlue,
                         checkedTrackColor = AccentBlue.copy(alpha = 0.5f),

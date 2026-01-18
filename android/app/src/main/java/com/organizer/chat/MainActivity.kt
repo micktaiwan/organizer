@@ -158,6 +158,40 @@ class MainActivity : ComponentActivity() {
                 // Observer for download state (auto-update progress)
                 val downloadState by updateManager.downloadState.collectAsState()
 
+                // Session expired message
+                var sessionExpiredMessage by remember { mutableStateOf<String?>(null) }
+
+                // Listen for session expired events
+                LaunchedEffect(Unit) {
+                    tokenManager.sessionExpired.collect { reason ->
+                        Log.d(TAG, "Session expired: $reason")
+                        sessionExpiredMessage = reason
+                        // Clear auth and navigate to login
+                        authRepository.logout()
+                        stopChatService()
+                        navController.navigate(Routes.LOGIN) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                }
+
+                // Show session expired dialog
+                sessionExpiredMessage?.let { message ->
+                    AlertDialog(
+                        onDismissRequest = { sessionExpiredMessage = null },
+                        title = { Text("Session expirée") },
+                        text = { Text(message) },
+                        confirmButton = {
+                            TextButton(
+                                onClick = { sessionExpiredMessage = null },
+                                colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+                            ) {
+                                Text("OK")
+                            }
+                        }
+                    )
+                }
+
                 // Store reference for onNewIntent
                 LaunchedEffect(navController) {
                     navControllerRef = navController

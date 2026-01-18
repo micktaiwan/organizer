@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import { Message } from "../../types";
 import { MessageItem } from "./MessageItem";
-import { getMessageGroupingFlags } from "../../utils/messageGrouping";
+import { groupConsecutiveMessages } from "../../utils/messageGrouping";
+import { useUserStatus } from "../../contexts/UserStatusContext";
 
 interface MessageListProps {
   messages: Message[];
@@ -9,10 +10,15 @@ interface MessageListProps {
   onDeleteMessage?: (messageId: string) => void;
   onReactMessage?: (messageId: string, emoji: string) => void;
   currentUserId?: string;
+  humanMemberIds?: string[]; // IDs of human (non-bot) members
 }
 
-export const MessageList: React.FC<MessageListProps> = ({ messages, isRemoteTyping, onDeleteMessage, onReactMessage, currentUserId }) => {
+export const MessageList: React.FC<MessageListProps> = ({ messages, isRemoteTyping, onDeleteMessage, onReactMessage, currentUserId, humanMemberIds }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { getStatus } = useUserStatus();
+
+  // Group consecutive messages from same sender (< 1 min)
+  const messageGroups = useMemo(() => groupConsecutiveMessages(messages), [messages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -20,17 +26,23 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isRemoteTypi
 
   return (
     <div className="messages">
-      {messages.map((msg, index) => {
-        const { isGroupedWithPrevious, isLastInGroup } = getMessageGroupingFlags(messages, index);
+      {messageGroups.map((group, groupIndex) => {
+        const firstMsg = group.messages[0];
+        // Get sender status
+        const senderId = firstMsg.sender === 'them' ? firstMsg.senderId : currentUserId;
+        const senderStatusData = senderId ? getStatus(senderId) : undefined;
+
         return (
           <MessageItem
-            key={msg.id}
-            msg={msg}
-            isGroupedWithPrevious={isGroupedWithPrevious}
-            isLastInGroup={isLastInGroup}
+            key={`group-${groupIndex}-${firstMsg.id}`}
+            messages={group.messages}
             onDelete={onDeleteMessage}
             onReact={onReactMessage}
             currentUserId={currentUserId}
+            senderStatus={senderStatusData?.status}
+            senderIsOnline={senderStatusData?.isOnline}
+            senderStatusMessage={senderStatusData?.statusMessage}
+            humanMemberIds={humanMemberIds}
           />
         );
       })}

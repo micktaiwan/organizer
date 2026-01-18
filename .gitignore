@@ -29,3 +29,7 @@ release.sh
 
 # APK files
 server/public/apk/*.apk
+
+# Environment files
+.env
+server/.env

@@ -24,6 +24,15 @@ class MessageRepository {
         }
     }
 
+    suspend fun getMessage(messageId: String): Result<Message> {
+        return try {
+            val response = api.getMessage(messageId)
+            Result.success(response.message)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun sendMessage(roomId: String, content: String, type: String = "text"): Result<Message> {
         return try {
             val request = SendMessageRequest(roomId = roomId, content = content, type = type)
@@ -43,10 +52,10 @@ class MessageRepository {
         }
     }
 
-    suspend fun markMessagesAsRead(messageIds: List<String>): Result<Boolean> {
+    suspend fun markMessagesAsRead(messageIds: List<String>, roomId: String? = null): Result<Boolean> {
         return try {
             if (messageIds.isEmpty()) return Result.success(true)
-            api.markMessagesAsRead(MarkMessagesReadRequest(messageIds))
+            api.markMessagesAsRead(MarkMessagesReadRequest(messageIds, roomId))
             Result.success(true)
         } catch (e: Exception) {
             Result.failure(e)
@@ -69,8 +78,9 @@ class MessageRepository {
             val imagePart = MultipartBody.Part.createFormData("image", imageFile.name, requestBody)
             val roomIdPart = roomId.toRequestBody("text/plain".toMediaTypeOrNull())
             val captionPart = caption?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val clientSourcePart = "android".toRequestBody("text/plain".toMediaTypeOrNull())
 
-            val response = api.uploadImageMessage(imagePart, roomIdPart, captionPart)
+            val response = api.uploadImageMessage(imagePart, roomIdPart, captionPart, clientSourcePart)
             Result.success(response.message)
         } catch (e: Exception) {
             Result.failure(e)
@@ -83,8 +93,9 @@ class MessageRepository {
             val filePart = MultipartBody.Part.createFormData("file", file.name, requestBody)
             val roomIdPart = roomId.toRequestBody("text/plain".toMediaTypeOrNull())
             val captionPart = caption?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val clientSourcePart = "android".toRequestBody("text/plain".toMediaTypeOrNull())
 
-            val response = api.uploadFileMessage(filePart, roomIdPart, captionPart)
+            val response = api.uploadFileMessage(filePart, roomIdPart, captionPart, clientSourcePart)
             Result.success(response.message)
         } catch (e: Exception) {
             Result.failure(e)

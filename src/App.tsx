@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { MessageCircle, StickyNote } from "lucide-react";
+import { load } from "@tauri-apps/plugin-store";
+import { MessageCircle, StickyNote, Bug } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { compressImage, blobToDataUrl, isImageFile, formatFileSize } from "./utils/imageCompression";
+import { initNotifications, consumePendingNotificationRoomId } from "./utils/notifications";
 import { useAuth } from "./contexts/AuthContext";
 import { useServerConfig } from "./contexts/ServerConfigContext";
 import { useUserStatus } from "./contexts/UserStatusContext";
@@ -12,6 +14,7 @@ import { useWebRTCCall } from "./hooks/useWebRTCCall";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder";
 import { useRooms } from "./hooks/useRooms";
 import { useNotes } from "./hooks/useNotes";
+import { useWindowState } from "./hooks/useWindowState";
 import { UserStatus } from "./types";
 import { UpdateNoteRequest } from "./services/api";
 // TODO: Restore Contact-related features in room context
@@ -31,10 +34,16 @@ import { IncomingCallModal } from "./components/Call/IncomingCallModal";
 import { AdminPanel } from "./components/Admin/AdminPanel";
 import { NotesList, NoteEditor, LabelManager } from "./components/Notes";
 import { ConnectionBanner } from "./components/ui/ConnectionBanner";
+import { PetDebugScreen } from "./components/PetDebug";
+import { LogPanel } from "./components/LogPanel";
+import { ErrorIndicator } from "./components/ErrorIndicator";
 
 import "./App.css";
 
 function App() {
+  // Persist and restore window position/size
+  useWindowState();
+
   const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
   const { isLoading: serverLoading, isConfigured, resetConfig, selectedServer } = useServerConfig();
   const [inputMessage, setInputMessage] = useState("");
@@ -55,8 +64,39 @@ function App() {
   // const [newContactInitialName, setNewContactInitialName] = useState("");
   // const [newContactInitialUserId, setNewContactInitialUserId] = useState("");
 
-  // App tabs state
-  const [activeTab, setActiveTab] = useState<'chat' | 'notes'>('chat');
+  // App tabs state - persist last visited tab
+  const [activeTab, setActiveTab] = useState<'chat' | 'notes' | 'pet'>(() => {
+    const saved = localStorage.getItem('organizer-active-tab');
+    if (saved === 'chat' || saved === 'notes' || saved === 'pet') {
+      return saved;
+    }
+    return 'chat';
+  });
+
+  // Persist active tab when it changes
+  useEffect(() => {
+    localStorage.setItem('organizer-active-tab', activeTab);
+  }, [activeTab]);
+
+  // Dev tools state
+  const [showLogPanel, setShowLogPanel] = useState(false);
+  const [debugUseLocalServer, setDebugUseLocalServer] = useState(false);
+
+  // Load debug server preference on mount
+  useEffect(() => {
+    const loadDebugPreference = async () => {
+      try {
+        const store = await load('pet-debug.json', { autoSave: false, defaults: {} });
+        const saved = await store.get<boolean>('useLocalServer');
+        if (saved !== null && saved !== undefined) {
+          setDebugUseLocalServer(saved);
+        }
+      } catch (error) {
+        console.error('[App] Failed to load debug server preference:', error);
+      }
+    };
+    loadDebugPreference();
+  }, []);
 
   // Notes view state
   const [notesView, setNotesView] = useState<'list' | 'editor' | 'labels'>('list');
@@ -125,6 +165,9 @@ function App() {
     createRoom,
     deleteRoom,
     leaveRoom,
+    typingUsers,
+    notifyTypingStart,
+    notifyTypingStop,
   } = useRooms({ userId: user?.id, username });
 
   const addCallSystemMessage = (type: "missed-call" | "rejected-call" | "ended-call") => {
@@ -247,6 +290,9 @@ function App() {
     const title = import.meta.env.DEV ? "Organizer - Dev mode" : "Organizer";
     getCurrentWindow().setTitle(title);
 
+    // Initialize desktop notifications
+    initNotifications();
+
     // Add welcome message with build info
     const welcomeMessage = {
       id: "welcome-system-msg",
@@ -259,8 +305,27 @@ function App() {
     setMessages([welcomeMessage]);
   }, []);
 
+  // Handle notification clicks via window focus
+  // On macOS, clicking a notification brings the window to focus.
+  // We store the roomId when showing the notification and navigate when focus is gained.
   useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        const pendingRoomId = consumePendingNotificationRoomId();
+        if (pendingRoomId) {
+          setActiveTab('chat');
+          selectRoom(pendingRoomId);
+        }
+      }
+    });
+
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, [selectRoom]);
+
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
       for (const item of items) {
@@ -268,9 +333,20 @@ function App() {
           e.preventDefault();
           const file = item.getAsFile();
           if (!file) continue;
-          const reader = new FileReader();
-          reader.onload = (event) => setPendingImage(event.target?.result as string);
-          reader.readAsDataURL(file);
+
+          setIsCompressing(true);
+          try {
+            // Compress image like file picker
+            const { compressedFile } = await compressImage(file);
+            const dataUrl = await blobToDataUrl(compressedFile);
+
+            setPendingImage(dataUrl);
+            setPendingImageBlob(compressedFile);
+          } catch (error) {
+            console.error('Clipboard image compression error:', error);
+          } finally {
+            setIsCompressing(false);
+          }
           break;
         }
       }
@@ -356,12 +432,6 @@ function App() {
       const filePath = await open({
         multiple: false,
         directory: false,
-        filters: [
-          {
-            name: 'All Files',
-            extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'zip', 'rar', '7z', 'mp4', 'mov', 'mp3', 'wav']
-          }
-        ]
       });
 
       if (!filePath) return; // User cancelled
@@ -442,8 +512,10 @@ function App() {
   }
 
   return (
+    <div className={`app-root ${showLogPanel ? 'with-log-panel' : ''}`}>
     <main className="chat-container">
       <ConnectionBanner />
+      <ErrorIndicator />
 
       {isCompressing && (
         <div className="loading-overlay">
@@ -467,6 +539,13 @@ function App() {
         >
           <StickyNote size={18} />
           <span>Notes</span>
+        </button>
+        <button
+          className={`app-tab ${activeTab === 'pet' ? 'active' : ''}`}
+          onClick={() => setActiveTab('pet')}
+        >
+          <Bug size={18} />
+          <span>Pet</span>
         </button>
       </div>
 
@@ -530,6 +609,9 @@ function App() {
             cancelRecording={cancelRecording}
             onSelectImageFile={handleSelectImageFile}
             onSelectFile={handleSelectFile}
+            typingUsers={typingUsers}
+            onTypingStart={notifyTypingStart}
+            onTypingStop={notifyTypingStop}
           />
         </div>
       </div>
@@ -579,6 +661,18 @@ function App() {
               onClose={() => setNotesView('list')}
             />
           )}
+        </div>
+      )}
+
+      {/* Pet Debug Tab Content */}
+      {activeTab === 'pet' && (
+        <div className="pet-tab-content">
+          <PetDebugScreen
+            showLogPanel={showLogPanel}
+            onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
+            useLocalServer={debugUseLocalServer}
+            onUseLocalServerChange={setDebugUseLocalServer}
+          />
         </div>
       )}
 
@@ -635,6 +729,10 @@ function App() {
         />
       )}
     </main>
+
+    {/* Dev: Log Panel */}
+    {showLogPanel && <LogPanel useLocalServer={debugUseLocalServer} onClose={() => setShowLogPanel(false)} />}
+    </div>
   );
 }
 

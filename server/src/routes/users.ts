@@ -44,7 +44,7 @@ router.get('/search', async (req: AuthRequest, res: Response): Promise<void> => 
 router.get('/locations', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const users = await User.find({ 'location.lat': { $exists: true } })
-      .select('username displayName isOnline location appVersion status statusMessage statusExpiresAt isTracking trackingExpiresAt currentTrackId')
+      .select('username displayName isOnline location appVersion lastClient status statusMessage statusExpiresAt isTracking trackingExpiresAt currentTrackId')
       .sort({ 'location.updatedAt': -1 });
 
     const now = new Date();
@@ -600,6 +600,26 @@ router.post('/tracks/sync', async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
+    // Check for duplicate: track with same user and startedAt within 5 seconds
+    const startedAtDate = new Date(startedAt);
+    const existingTrack = await Track.findOne({
+      userId: req.userId,
+      startedAt: {
+        $gte: new Date(startedAtDate.getTime() - 5000),
+        $lte: new Date(startedAtDate.getTime() + 5000)
+      }
+    });
+
+    if (existingTrack) {
+      console.log(`Track sync skipped: duplicate found (existing: ${existingTrack._id}, local: ${localTrackId})`);
+      res.json({
+        success: true,
+        trackId: existingTrack._id,
+        duplicate: true
+      });
+      return;
+    }
+
     // Create track with all its points
     const trackPoints = points.map((p: { lat: number; lng: number; accuracy?: number; timestamp: number; street?: string; city?: string; country?: string }) => ({
       lat: p.lat,
@@ -630,6 +650,66 @@ router.post('/tracks/sync', async (req: AuthRequest, res: Response): Promise<voi
     res.status(500).json({
       success: false,
       error: 'Erreur lors de la synchronisation du track'
+    });
+  }
+});
+
+// PUT /users/tracks/:trackId - Update a track with final points from local DB (source of truth)
+router.put('/tracks/:trackId', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { trackId } = req.params;
+    const { points, endedAt } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(trackId)) {
+      res.status(400).json({ success: false, error: 'ID track invalide' });
+      return;
+    }
+
+    if (!Array.isArray(points) || points.length === 0) {
+      res.status(400).json({ success: false, error: 'Points requis' });
+      return;
+    }
+
+    const track = await Track.findById(trackId);
+    if (!track) {
+      res.status(404).json({ success: false, error: 'Track non trouvé' });
+      return;
+    }
+
+    // Check ownership
+    if (track.userId.toString() !== req.userId) {
+      res.status(403).json({ success: false, error: 'Non autorisé' });
+      return;
+    }
+
+    // Replace points with local DB points (source of truth)
+    const trackPoints = points.map((p: { lat: number; lng: number; accuracy?: number; timestamp: number; street?: string; city?: string; country?: string }) => ({
+      lat: p.lat,
+      lng: p.lng,
+      accuracy: p.accuracy,
+      timestamp: new Date(p.timestamp),
+      street: p.street,
+      city: p.city,
+      country: p.country,
+    }));
+
+    await Track.findByIdAndUpdate(trackId, {
+      points: trackPoints,
+      endedAt: endedAt ? new Date(endedAt) : new Date(),
+      isActive: false,
+    });
+
+    console.log(`Updated track ${trackId} with ${points.length} points from local DB`);
+
+    res.json({
+      success: true,
+      trackId: trackId,
+    });
+  } catch (error) {
+    console.error('Update track error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la mise à jour du track'
     });
   }
 });

@@ -8,9 +8,9 @@ import androidx.compose.foundation.text.input.clearText
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.organizer.chat.data.model.Message
-import com.organizer.chat.data.model.MessageSender
 import com.organizer.chat.data.model.Reaction
 import com.organizer.chat.data.repository.MessageRepository
+import com.organizer.chat.data.socket.ConnectionState
 import com.organizer.chat.data.repository.RoomRepository
 import java.time.Instant
 import com.organizer.chat.service.ChatService
@@ -25,7 +25,6 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
@@ -47,7 +46,7 @@ data class ChatUiState(
     val hasMoreMessages: Boolean = true,
     val isLoadingMore: Boolean = false,
     val shouldScrollToBottom: Boolean = true,
-    val roomMemberCount: Int = 0
+    val humanMemberIds: List<String> = emptyList()
 )
 
 class ChatViewModel(
@@ -81,25 +80,69 @@ class ChatViewModel(
         loadRoomInfo()
         loadMessages()
         observeServiceMessages()
-        observeMessageReadEvents()
         observeTypingState()
+        observeMessageReadEvents()
+        observeConnectionState()
+        observeForegroundState()
         joinRoom()
-        markRoomAsRead()
     }
 
     private fun observeTypingState() {
         viewModelScope.launch {
-            snapshotFlow { textFieldState.text.isNotEmpty() }
-                .distinctUntilChanged()
-                .collect { isTyping ->
+            // Emit typing:start on every text change (server handles timeout/debounce)
+            snapshotFlow { textFieldState.text.toString() }
+                .collect { text ->
                     chatService?.socketManager?.let { socketManager ->
-                        if (isTyping) {
+                        if (text.isNotEmpty()) {
                             socketManager.notifyTypingStart(roomId)
                         } else {
                             socketManager.notifyTypingStop(roomId)
                         }
                     }
                 }
+        }
+    }
+
+    private fun observeConnectionState() {
+        chatService?.socketManager?.let { socketManager ->
+            viewModelScope.launch {
+                var wasConnected = socketManager.isConnected()
+                socketManager.connectionState.collect { state ->
+                    when (state) {
+                        is ConnectionState.Connected -> {
+                            if (!wasConnected) {
+                                Log.d(TAG, "Socket reconnected, reloading messages and rejoining room")
+                                loadMessages()
+                                joinRoom()
+                            }
+                            wasConnected = true
+                        }
+                        is ConnectionState.Disconnected,
+                        is ConnectionState.Error -> {
+                            wasConnected = false
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Observe foreground state to mark messages as read when app comes to foreground.
+     */
+    private fun observeForegroundState() {
+        chatService?.let { service ->
+            viewModelScope.launch {
+                var wasInForeground = service.isAppInForeground.value
+                service.isAppInForeground.collect { inForeground ->
+                    if (inForeground && !wasInForeground) {
+                        // App just came to foreground - mark unread messages as read
+                        Log.d(TAG, "App came to foreground, marking unread messages as read")
+                        markUnreadMessagesAsRead(_uiState.value.messages)
+                    }
+                    wasInForeground = inForeground
+                }
+            }
         }
     }
 
@@ -122,19 +165,6 @@ class ChatViewModel(
         chatService?.socketManager?.joinRoom(roomId)
     }
 
-    private fun markRoomAsRead() {
-        viewModelScope.launch {
-            roomRepository.markRoomAsRead(roomId).fold(
-                onSuccess = {
-                    Log.d(TAG, "Room $roomId marked as read")
-                },
-                onFailure = { error ->
-                    Log.e(TAG, "Failed to mark room as read: ${error.message}")
-                }
-            )
-        }
-    }
-
     private fun loadCurrentUser() {
         viewModelScope.launch {
             val userId = tokenManager.userId.first()
@@ -146,13 +176,12 @@ class ChatViewModel(
         viewModelScope.launch {
             roomRepository.getRoom(roomId).fold(
                 onSuccess = { room ->
-                    // Only count human members (exclude bots)
-                    val humanMemberCount = room.members.count { !it.userId.isBot }
-                    Log.d(TAG, "Room ${room.name}: ${room.members.size} members, $humanMemberCount humans")
-                    room.members.forEach { member ->
-                        Log.d(TAG, "  - ${member.userId.username}: isBot=${member.userId.isBot}")
-                    }
-                    _uiState.value = _uiState.value.copy(roomMemberCount = humanMemberCount)
+                    // Get IDs of human (non-bot) members for read status calculation
+                    val humanIds = room.members
+                        .filter { !it.userId.isBot }
+                        .map { it.userId.id }
+                    Log.d(TAG, "Room ${room.name}: ${humanIds.size} human members")
+                    _uiState.value = _uiState.value.copy(humanMemberIds = humanIds)
                 },
                 onFailure = { error ->
                     Log.e(TAG, "Failed to load room info: ${error.message}")
@@ -176,8 +205,10 @@ class ChatViewModel(
                         hasMoreMessages = messages.size == MESSAGE_PAGE_SIZE,
                         shouldScrollToBottom = true
                     )
-                    // Mark unread messages as read
-                    markUnreadMessagesAsRead(messages)
+                    // Mark unread messages as read only if app is in foreground
+                    if (chatService?.isAppInForeground?.value == true) {
+                        markUnreadMessagesAsRead(messages)
+                    }
                 },
                 onFailure = { error ->
                     Log.e(TAG, "Failed to load messages: ${error.message}")
@@ -199,9 +230,16 @@ class ChatViewModel(
 
             if (unreadIds.isNotEmpty()) {
                 Log.d(TAG, "Marking ${unreadIds.size} messages as read")
-                messageRepository.markMessagesAsRead(unreadIds).fold(
+                // Server will broadcast socket event to other clients
+                messageRepository.markMessagesAsRead(unreadIds, roomId).fold(
                     onSuccess = {
-                        chatService?.socketManager?.notifyMessagesRead(roomId, unreadIds)
+                        // Update local state with current user in readBy
+                        val updatedMessages = _uiState.value.messages.map { msg ->
+                            if (unreadIds.contains(msg.id)) {
+                                msg.copy(readBy = msg.readBy + currentUserId)
+                            } else msg
+                        }
+                        _uiState.value = _uiState.value.copy(messages = updatedMessages)
                     },
                     onFailure = { error ->
                         Log.e(TAG, "Failed to mark messages as read: ${error.message}")
@@ -251,45 +289,30 @@ class ChatViewModel(
                 service.messages.collect { event ->
                     Log.d(TAG, "Received message event: roomId=${event.roomId}, current=$roomId")
                     if (event.roomId == roomId) {
-                        // Use type from event, fallback to detection from URLs
-                        val messageType = event.type.ifEmpty {
-                            when {
-                                !event.audioUrl.isNullOrEmpty() -> "audio"
-                                !event.imageUrl.isNullOrEmpty() -> "image"
-                                else -> "text"
+                        // Fetch full message from API (uniformized pattern with Desktop)
+                        messageRepository.getMessage(event.messageId).fold(
+                            onSuccess = { message ->
+                                if (addMessageIfNotExists(message)) {
+                                    Log.d(TAG, "Added new message from API: ${event.messageId}")
+                                    // Mark as read only if app is in foreground (user is actually viewing)
+                                    if (message.senderId.id != _uiState.value.currentUserId &&
+                                        service.isAppInForeground.value) {
+                                        markUnreadMessagesAsRead(listOf(message))
+                                    }
+                                }
+                            },
+                            onFailure = { error ->
+                                Log.e(TAG, "Failed to fetch message ${event.messageId}: ${error.message}")
                             }
-                        }
-
-                        val newMessage = Message(
-                            id = event.messageId,
-                            roomId = event.roomId,
-                            senderId = MessageSender(
-                                id = event.from,
-                                username = event.fromName,
-                                displayName = event.fromName
-                            ),
-                            type = messageType,
-                            content = event.content,
-                            status = "sent",
-                            readBy = emptyList(),
-                            reactions = emptyList(),
-                            createdAt = Instant.now().toString()
                         )
-
-                        if (addMessageIfNotExists(newMessage)) {
-                            Log.d(TAG, "Added new message from socket: ${event.messageId}")
-                            // Mark as read immediately since we're viewing the room
-                            if (event.from != _uiState.value.currentUserId) {
-                                markUnreadMessagesAsRead(listOf(newMessage))
-                            }
-                        }
                     }
                 }
             }
 
             viewModelScope.launch {
                 service.socketManager.typingStart.collect { event ->
-                    if (event.roomId == roomId && event.from != _uiState.value.currentUserId) {
+                    // Don't filter out currentUserId - useful for testing with same account across platforms
+                    if (event.roomId == roomId) {
                         _uiState.value = _uiState.value.copy(
                             typingUsers = _uiState.value.typingUsers + event.from
                         )
@@ -370,7 +393,9 @@ class ChatViewModel(
         chatService?.let { service ->
             viewModelScope.launch {
                 service.socketManager.messageRead.collect { event ->
-                    if (event.roomId == roomId) {
+                    val currentUserId = _uiState.value.currentUserId
+                    // Skip self-broadcasts (local state already updated in markUnreadMessagesAsRead)
+                    if (event.roomId == roomId && event.from != currentUserId) {
                         Log.d(TAG, "Messages read by ${event.from}: ${event.messageIds}")
                         // Update readBy for affected messages
                         val updatedMessages = _uiState.value.messages.map { msg ->
@@ -421,7 +446,6 @@ class ChatViewModel(
                     Log.d(TAG, "Message sent successfully: ${message.id}")
                     addMessageIfNotExists(message)
                     _uiState.value = _uiState.value.copy(isSending = false)
-                    chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                 },
                 onFailure = { error ->
                     Log.e(TAG, "Failed to send message: ${error.message}")
@@ -550,7 +574,6 @@ class ChatViewModel(
                     Log.d(TAG, "Audio message sent successfully: ${message.id}")
                     addMessageIfNotExists(message)
                     _uiState.value = _uiState.value.copy(isSending = false)
-                    chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                 },
                 onFailure = { error ->
                     Log.e(TAG, "Failed to send audio message: ${error.message}")
@@ -627,7 +650,6 @@ class ChatViewModel(
                         Log.d(TAG, "File uploaded successfully: ${message.id}")
                         addMessageIfNotExists(message)
                         _uiState.value = _uiState.value.copy(isUploadingFile = false)
-                        chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                         clearSelectedFile()
                     },
                     onFailure = { error ->
@@ -692,7 +714,6 @@ class ChatViewModel(
                         Log.d(TAG, "Image uploaded successfully: ${message.id}")
                         addMessageIfNotExists(message)
                         _uiState.value = _uiState.value.copy(isUploadingImage = false)
-                        chatService?.socketManager?.notifyNewMessage(roomId, message.id)
                         clearSelectedImage()
                     },
                     onFailure = { error ->

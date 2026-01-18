@@ -173,29 +173,43 @@ class TrackSyncManager private constructor(context: Context) {
             return
         }
 
-        Log.d(TAG, "Syncing track $trackId with ${points.size} points")
+        val syncPoints = points.map { point ->
+            SyncTrackPoint(
+                lat = point.lat,
+                lng = point.lng,
+                accuracy = point.accuracy,
+                timestamp = point.timestamp,
+                street = point.street,
+                city = point.city,
+                country = point.country
+            )
+        }
 
         try {
             localTrackRepository.updateSyncStatus(trackId, SyncStatus.SYNCING)
 
-            val response = api.syncTrack(
-                SyncTrackRequest(
-                    localTrackId = trackId,
-                    startedAt = track.startedAt,
-                    stoppedAt = track.stoppedAt,
-                    points = points.map { point ->
-                        SyncTrackPoint(
-                            lat = point.lat,
-                            lng = point.lng,
-                            accuracy = point.accuracy,
-                            timestamp = point.timestamp,
-                            street = point.street,
-                            city = point.city,
-                            country = point.country
-                        )
-                    }
+            val response = if (track.serverTrackId != null) {
+                // UPDATE existing server track with local points (source of truth)
+                Log.d(TAG, "Updating server track ${track.serverTrackId} with ${points.size} local points")
+                api.updateTrack(
+                    track.serverTrackId,
+                    UpdateTrackRequest(
+                        points = syncPoints,
+                        endedAt = track.stoppedAt
+                    )
                 )
-            )
+            } else {
+                // CREATE new track (was offline when tracking started)
+                Log.d(TAG, "Creating new server track with ${points.size} points")
+                api.syncTrack(
+                    SyncTrackRequest(
+                        localTrackId = trackId,
+                        startedAt = track.startedAt,
+                        stoppedAt = track.stoppedAt,
+                        points = syncPoints
+                    )
+                )
+            }
 
             if (response.success && response.trackId != null) {
                 localTrackRepository.markAsSynced(trackId, response.trackId)
@@ -237,4 +251,9 @@ data class SyncTrackResponse(
     val success: Boolean,
     val trackId: String? = null,
     val error: String? = null
+)
+
+data class UpdateTrackRequest(
+    val points: List<SyncTrackPoint>,
+    val endedAt: Long
 )

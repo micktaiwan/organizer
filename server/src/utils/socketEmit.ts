@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import { Types } from 'mongoose';
 import { Room, Message } from '../models/index.js';
+import { indexLiveMessage } from '../memory/live.service.js';
 
 interface MessageEmitData {
   io: Server;
@@ -10,8 +11,8 @@ interface MessageEmitData {
   message: {
     _id: any;
     senderId: any;
-    content: string;
-    type: string;
+    type?: string;
+    content?: string;
   };
 }
 
@@ -26,16 +27,31 @@ export async function emitNewMessage({ io, socket, roomId, userId, message }: Me
   const sender = message.senderId as any;
   const room = await Room.findById(roomId);
 
+  // Generate preview for notifications
+  let preview: string;
+  switch (message.type) {
+    case 'audio':
+      preview = '🎤 Message audio';
+      break;
+    case 'image':
+      preview = '🖼️ Image';
+      break;
+    case 'file':
+      preview = '📎 Fichier';
+      break;
+    default:
+      preview = message.content?.substring(0, 100) || 'Nouveau message';
+  }
+
+  // Lightweight payload: clients should fetch full message via API
+  // Only include data needed for notifications
   const payload = {
     from: userId,
     fromName: sender?.displayName || sender?.username || 'Utilisateur',
     roomName: room?.name || 'Chat',
     roomId: roomId,
     messageId: message._id.toString(),
-    content: message.content || '',
-    type: message.type,
-    audioUrl: message.type === 'audio' ? message.content : null,
-    imageUrl: message.type === 'image' ? message.content : null,
+    preview,
   };
 
   // Use socket.to() to exclude sender, or io.to() to include all
@@ -59,6 +75,21 @@ export async function emitNewMessage({ io, socket, roomId, userId, message }: Me
           unreadCount,
         });
       }
+    }
+
+    // Observer: index Lobby messages for pet's live context (text only, skip media)
+    if (room.isLobby && message.type === 'text' && message.content) {
+      indexLiveMessage({
+        messageId: message._id.toString(),
+        content: message.content,
+        author: sender?.displayName || sender?.username || 'Unknown',
+        authorId: userId,
+        room: room.name,
+        roomId: roomId,
+        timestamp: new Date().toISOString(),
+      }).catch((err) => {
+        console.error('[Live] Failed to index message:', err.message);
+      });
     }
   }
 }

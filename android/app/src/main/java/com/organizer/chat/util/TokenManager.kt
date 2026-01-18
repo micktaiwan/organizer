@@ -7,6 +7,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
@@ -20,6 +23,13 @@ class TokenManager(private val context: Context) {
         private val USER_ID_KEY = stringPreferencesKey("user_id")
         private val USERNAME_KEY = stringPreferencesKey("username")
         private val DISPLAY_NAME_KEY = stringPreferencesKey("display_name")
+    }
+
+    private val _sessionExpired = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val sessionExpired: SharedFlow<String> = _sessionExpired.asSharedFlow()
+
+    fun notifySessionExpired(reason: String = "Session expirée") {
+        _sessionExpired.tryEmit(reason)
     }
 
     val token: Flow<String?> = context.dataStore.data.map { preferences ->

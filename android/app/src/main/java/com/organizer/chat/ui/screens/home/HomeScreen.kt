@@ -1,5 +1,7 @@
 package com.organizer.chat.ui.screens.home
 
+import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -9,6 +11,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import com.organizer.chat.data.model.Room
 import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.NoteRepository
@@ -18,13 +21,18 @@ import com.organizer.chat.ui.screens.users.UsersScreen
 import com.organizer.chat.ui.screens.users.UsersViewModel
 import com.organizer.chat.ui.screens.notes.NotesScreen
 import com.organizer.chat.ui.screens.rooms.RoomsContent
+import com.organizer.chat.ui.screens.tamagotchi.TamagotchiScreen
+import com.organizer.chat.ui.screens.gallery.GalleryScreen
+import com.organizer.chat.ui.screens.gallery.GalleryViewModel
 import com.organizer.chat.util.AppPreferences
 import com.organizer.chat.util.TokenManager
 
 enum class HomeTab {
-    CONVERSATIONS,
+    CHATS,
+    GALLERY,
     NOTES,
-    USERS
+    USERS,
+    TAMAGOTCHI
 }
 
 @Composable
@@ -46,8 +54,9 @@ fun HomeScreen(
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
     val selectedTab = HomeTab.entries[selectedTabIndex]
 
-    // Create ViewModel at HomeScreen level so it persists across tab switches
+    // Create ViewModels at HomeScreen level so they persist across tab switches
     val usersViewModel = remember { UsersViewModel(context) }
+    val galleryViewModel = remember { GalleryViewModel(context) }
 
     // Initialize socket manager when it becomes available
     LaunchedEffect(chatService?.socketManager) {
@@ -56,20 +65,59 @@ fun HomeScreen(
         }
     }
 
+    // Double-tap to exit logic
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var lastBackPressTime by remember { mutableLongStateOf(0L) }
+
+    BackHandler {
+        if (selectedTab != HomeTab.CHATS) {
+            // Not on CHATS tab -> go back to CHATS
+            selectedTabIndex = HomeTab.CHATS.ordinal
+        } else {
+            // On CHATS tab -> double-tap to exit
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastBackPressTime < 2000) {
+                // Exit app
+                (context as? Activity)?.finish()
+            } else {
+                lastBackPressTime = currentTime
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Appuyez encore pour quitter",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        }
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
-                    selected = selectedTab == HomeTab.CONVERSATIONS,
-                    onClick = { selectedTabIndex = HomeTab.CONVERSATIONS.ordinal },
+                    selected = selectedTab == HomeTab.CHATS,
+                    onClick = { selectedTabIndex = HomeTab.CHATS.ordinal },
                     icon = {
                         Icon(
                             imageVector = Icons.Default.Chat,
-                            contentDescription = "Conversations"
+                            contentDescription = "Chats"
                         )
                     },
-                    label = { Text("Conversations") }
+                    label = { Text("Chats") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == HomeTab.GALLERY,
+                    onClick = { selectedTabIndex = HomeTab.GALLERY.ordinal },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = "Gallery"
+                        )
+                    },
+                    label = { Text("Gallery") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == HomeTab.NOTES,
@@ -93,6 +141,17 @@ fun HomeScreen(
                     },
                     label = { Text("Users") }
                 )
+                NavigationBarItem(
+                    selected = selectedTab == HomeTab.TAMAGOTCHI,
+                    onClick = { selectedTabIndex = HomeTab.TAMAGOTCHI.ordinal },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Pets,
+                            contentDescription = "Pet"
+                        )
+                    },
+                    label = { Text("Pet") }
+                )
             }
         }
     ) { paddingValues ->
@@ -102,7 +161,7 @@ fun HomeScreen(
                 .padding(paddingValues)
         ) {
             when (selectedTab) {
-                HomeTab.CONVERSATIONS -> {
+                HomeTab.CHATS -> {
                     RoomsContent(
                         roomRepository = roomRepository,
                         tokenManager = tokenManager,
@@ -112,6 +171,12 @@ fun HomeScreen(
                         onRoomClick = onRoomClick,
                         onSettingsClick = onSettingsClick,
                         onLogout = onLogout
+                    )
+                }
+                HomeTab.GALLERY -> {
+                    GalleryScreen(
+                        viewModel = galleryViewModel,
+                        onSettingsClick = onSettingsClick
                     )
                 }
                 HomeTab.NOTES -> {
@@ -130,6 +195,9 @@ fun HomeScreen(
                         onSettingsClick = onSettingsClick,
                         onMapClick = onMapClick
                     )
+                }
+                HomeTab.TAMAGOTCHI -> {
+                    TamagotchiScreen()
                 }
             }
         }
