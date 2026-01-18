@@ -21,8 +21,11 @@ import com.organizer.chat.data.model.ApkVersionInfo
 import com.organizer.chat.data.model.Room
 import com.organizer.chat.data.repository.AuthRepository
 import com.organizer.chat.data.repository.RoomRepository
+import com.organizer.chat.data.socket.ConnectionState
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.ui.components.ConnectionStatusIcon
 import com.organizer.chat.ui.components.CreateRoomDialog
+import com.organizer.chat.ui.components.OfflineBanner
 import com.organizer.chat.ui.theme.CharcoalLight
 import com.organizer.chat.ui.theme.OnlineGreen
 import com.organizer.chat.util.AppPreferences
@@ -68,6 +71,15 @@ fun RoomsContent(
 ) {
     val viewModel = remember { RoomsViewModel(roomRepository, tokenManager, authRepository) }
     val uiState by viewModel.uiState.collectAsState()
+
+    // Connection state - use current state as initial to avoid flicker
+    val initialConnectionState = remember {
+        if (chatService?.socketManager?.isConnected() == true) ConnectionState.Connected
+        else ConnectionState.Disconnected
+    }
+    val connectionState by chatService?.socketManager?.connectionState
+        ?.collectAsState(initial = initialConnectionState)
+        ?: remember { mutableStateOf(initialConnectionState) }
 
     // Observe new messages to refresh room list (for updated sorting)
     LaunchedEffect(chatService) {
@@ -131,22 +143,32 @@ fun RoomsContent(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Conversations") },
-                actions = {
-                    IconButton(onClick = { viewModel.loadRooms() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Rafraichir")
-                    }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Parametres")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+            Column {
+                TopAppBar(
+                    title = { Text("Conversations") },
+                    actions = {
+                        ConnectionStatusIcon(
+                            connectionState = connectionState,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                        IconButton(onClick = { viewModel.loadRooms() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Rafraichir")
+                        }
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Default.Settings, contentDescription = "Parametres")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 )
-            )
+                OfflineBanner(
+                    connectionState = connectionState,
+                    onRetry = { chatService?.reconnectIfNeeded() }
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(

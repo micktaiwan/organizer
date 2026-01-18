@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { User, Contact, Message } from '../models/index.js';
 import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth.js';
+import { runDigest, getLiveCollectionStats } from '../memory/index.js';
 
 const router = Router();
 
@@ -193,6 +194,39 @@ router.get('/messages/stats', async (_req: AuthRequest, res: Response): Promise<
     });
   } catch (error) {
     console.error('Admin messages stats error:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// ===== Pet Memory Digest =====
+
+// GET /admin/live/stats - Get live collection stats with time span
+router.get('/live/stats', async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const stats = await getLiveCollectionStats();
+    res.json({
+      collection: 'organizer_live',
+      count: stats.count,
+      oldestTimestamp: stats.oldestTimestamp,
+      newestTimestamp: stats.newestTimestamp,
+    });
+  } catch (error) {
+    console.error('Admin live/stats error:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /admin/digest - Force a digest run
+router.post('/digest', async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const result = await runDigest();
+    res.json({
+      success: true,
+      factsExtracted: result.factsExtracted,
+      messagesProcessed: result.messagesProcessed,
+    });
+  } catch (error) {
+    console.error('Admin digest error:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });

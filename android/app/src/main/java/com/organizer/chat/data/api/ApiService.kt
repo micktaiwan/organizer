@@ -3,8 +3,11 @@ package com.organizer.chat.data.api
 import com.organizer.chat.data.model.*
 import com.organizer.chat.data.model.AppUpdateInfo
 import com.organizer.chat.data.model.ApkVersionsResponse
+import com.organizer.chat.data.model.AskAgentRequest
+import com.organizer.chat.data.model.AskAgentResponse
 import com.organizer.chat.service.SyncTrackRequest
 import com.organizer.chat.service.SyncTrackResponse
+import com.organizer.chat.service.UpdateTrackRequest
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.http.*
@@ -48,6 +51,9 @@ interface ApiService {
     suspend fun createRoom(@Body request: CreateRoomRequest): RoomResponse
 
     // Messages
+    @GET("messages/{messageId}")
+    suspend fun getMessage(@Path("messageId") messageId: String): MessageResponse
+
     @POST("messages")
     suspend fun sendMessage(@Body request: SendMessageRequest): MessageResponse
 
@@ -56,7 +62,8 @@ interface ApiService {
     suspend fun uploadImageMessage(
         @Part image: MultipartBody.Part,
         @Part("roomId") roomId: RequestBody,
-        @Part("caption") caption: RequestBody?
+        @Part("caption") caption: RequestBody?,
+        @Part("clientSource") clientSource: RequestBody
     ): MessageResponse
 
     @Multipart
@@ -64,7 +71,8 @@ interface ApiService {
     suspend fun uploadFileMessage(
         @Part file: MultipartBody.Part,
         @Part("roomId") roomId: RequestBody,
-        @Part("caption") caption: RequestBody?
+        @Part("caption") caption: RequestBody?,
+        @Part("clientSource") clientSource: RequestBody
     ): MessageResponse
 
     @PATCH("messages/{messageId}/read")
@@ -200,9 +208,33 @@ interface ApiService {
     @POST("users/tracks/sync")
     suspend fun syncTrack(@Body request: SyncTrackRequest): SyncTrackResponse
 
+    @PUT("users/tracks/{trackId}")
+    suspend fun updateTrack(@Path("trackId") trackId: String, @Body request: UpdateTrackRequest): SyncTrackResponse
+
     @DELETE("users/tracks/{trackId}")
     suspend fun deleteTrack(@Path("trackId") trackId: String): SuccessResponse
+
+    // Agent
+    @POST("agent/ask")
+    suspend fun askAgent(@Body request: AskAgentRequest): AskAgentResponse
+
+    // Files (Gallery)
+    @GET("files")
+    suspend fun getFiles(
+        @Query("limit") limit: Int? = null,
+        @Query("before") before: String? = null,
+        @Query("after") after: String? = null,
+        @Query("type") type: String? = null
+    ): GalleryFilesResponse
+
+    @DELETE("files/{fileId}")
+    suspend fun deleteFile(@Path("fileId") fileId: String): DeleteFileResponse
 }
+
+data class DeleteFileResponse(
+    val success: Boolean,
+    val messageId: String
+)
 
 data class UsersSearchResponse(
     val users: List<User>
@@ -228,5 +260,6 @@ data class StatusUser(
 )
 
 data class MarkMessagesReadRequest(
-    val messageIds: List<String>
+    val messageIds: List<String>,
+    val roomId: String? = null
 )

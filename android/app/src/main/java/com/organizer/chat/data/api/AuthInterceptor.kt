@@ -18,7 +18,7 @@ class AuthInterceptor(
 
         val token = tokenManager.getTokenSync()
 
-        return if (token != null) {
+        val response = if (token != null) {
             val newRequest = originalRequest.newBuilder()
                 .header("Authorization", "Bearer $token")
                 .build()
@@ -26,5 +26,18 @@ class AuthInterceptor(
         } else {
             chain.proceed(originalRequest)
         }
+
+        // Detect 401 responses and notify session expired
+        if (response.code == 401) {
+            val body = response.peekBody(1024).string()
+            val reason = when {
+                body.contains("Token expiré") -> "Ton token a expiré, reconnecte-toi"
+                body.contains("Token invalide") -> "Token invalide, reconnecte-toi"
+                else -> "Session expirée, reconnecte-toi"
+            }
+            tokenManager.notifySessionExpired(reason)
+        }
+
+        return response
     }
 }

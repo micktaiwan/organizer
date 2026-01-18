@@ -23,16 +23,13 @@ import kotlinx.coroutines.launch
 
 enum class MapTileSource(val displayName: String) {
     MAPNIK("Standard"),
-    CYCLEMAP("Cyclable"),
-    PUBLIC_TRANSPORT("Transport"),
-    WIKIMEDIA("Wikimedia")
+    OPEN_TOPO("Topographique")
 }
 
 data class MapSettings(
     val tileSource: MapTileSource = MapTileSource.MAPNIK,
     val showTracks: Boolean = true,
-    val showMarkers: Boolean = true,
-    val showLegend: Boolean = true
+    val showMarkers: Boolean = true
 )
 
 data class MapUiState(
@@ -175,16 +172,23 @@ class MapViewModel(
 
                     val tracks = _uiState.value.tracks.toMutableMap()
                     val userTrack = tracks[event.userId]?.toMutableList() ?: mutableListOf()
-                    userTrack.add(
-                        TrackPoint(
-                            lat = event.point.lat,
-                            lng = event.point.lng,
-                            accuracy = event.point.accuracy,
-                            timestamp = event.point.timestamp ?: ""
+
+                    // Avoid duplicates by checking timestamp
+                    val newTimestamp = event.point.timestamp ?: ""
+                    val alreadyExists = userTrack.any { it.timestamp == newTimestamp && newTimestamp.isNotEmpty() }
+
+                    if (!alreadyExists) {
+                        userTrack.add(
+                            TrackPoint(
+                                lat = event.point.lat,
+                                lng = event.point.lng,
+                                accuracy = event.point.accuracy,
+                                timestamp = newTimestamp
+                            )
                         )
-                    )
-                    tracks[event.userId] = userTrack
-                    _uiState.value = _uiState.value.copy(tracks = tracks)
+                        tracks[event.userId] = userTrack
+                        _uiState.value = _uiState.value.copy(tracks = tracks)
+                    }
                 }
             }
         }
@@ -260,51 +264,27 @@ class MapViewModel(
 
             val expiresAtMillis = System.currentTimeMillis() + durationMinutes * 60 * 1000L
 
-            // Try to notify server (but don't block if offline)
-            val result = locationRepository.setTracking(enabled = true, expiresInMinutes = durationMinutes)
-            result.fold(
-                onSuccess = { response ->
-                    if (response.success) {
-                        Log.d(TAG, "Tracking started on server, expires at: ${response.trackingExpiresAt}")
-                    }
-                },
-                onFailure = { error ->
-                    // Not a problem if offline - we track locally
-                    Log.w(TAG, "Could not notify server (offline?): ${error.message}")
-                }
-            )
-
-            // Always start local tracking
+            // Update UI state
             _uiState.update { it.copy(
                 isMyTrackingActive = true,
                 myTrackingExpiresAt = expiresAtMillis
             ) }
-            TrackingService.startTracking(context, expiresAtMillis)
-            Log.d(TAG, "Local tracking started")
+
+            // Start TrackingService (handles local storage + server registration)
+            TrackingService.startTracking(context, expiresAtMillis, durationMinutes)
+            Log.d(TAG, "Tracking started")
         }
     }
 
     fun stopTracking() {
         viewModelScope.launch {
-            // Try to notify server (but don't block if offline)
-            val result = locationRepository.setTracking(enabled = false)
-            result.fold(
-                onSuccess = { response ->
-                    if (response.success) {
-                        Log.d(TAG, "Tracking stopped on server")
-                    }
-                },
-                onFailure = { error ->
-                    // Not a problem if offline - track will be synced later
-                    Log.w(TAG, "Could not notify server (offline?): ${error.message}")
-                }
-            )
-
-            // Always stop local tracking
+            // Update UI state
             _uiState.value = _uiState.value.copy(
                 isMyTrackingActive = false,
                 myTrackingExpiresAt = null
             )
+
+            // Stop TrackingService (handles server notification + sync)
             TrackingService.stopTracking(context)
 
             // Remove our track from the map
@@ -313,7 +293,7 @@ class MapViewModel(
                 tracks.remove(userId)
                 _uiState.value = _uiState.value.copy(tracks = tracks)
             }
-            Log.d(TAG, "Local tracking stopped")
+            Log.d(TAG, "Tracking stopped")
         }
     }
 

@@ -12,8 +12,9 @@ router.use(authMiddleware);
 
 const sendMessageSchema = z.object({
   roomId: z.string(),
-  type: z.enum(['text', 'image', 'audio', 'system']).default('text'),
+  type: z.enum(['text', 'audio', 'system']).default('text'),
   content: z.string().min(1),
+  clientSource: z.enum(['desktop', 'android', 'api']).optional(),
 });
 
 // POST /messages - Send message to room
@@ -62,6 +63,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       content: data.content,
       status: 'sent',
       readBy: [],
+      clientSource: data.clientSource,
     });
 
     await message.save();
@@ -92,6 +94,40 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
+// GET /messages/:id - Get a single message by ID
+router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const message = await Message.findById(req.params.id)
+      .populate('senderId', 'username displayName status statusMessage')
+      .populate('reactions.userId', 'username displayName');
+
+    if (!message) {
+      res.status(404).json({ error: 'Message non trouvé' });
+      return;
+    }
+
+    // Verify user has access to this message's room
+    const room = await Room.findById(message.roomId);
+    if (!room) {
+      res.status(404).json({ error: 'Salon non trouvé' });
+      return;
+    }
+
+    const isMember = room.members.some(m => m.userId.toString() === req.userId);
+    const isPublic = room.type === 'public' || room.type === 'lobby';
+
+    if (!isMember && !isPublic) {
+      res.status(403).json({ error: 'Accès non autorisé' });
+      return;
+    }
+
+    res.json({ message });
+  } catch (error) {
+    console.error('Get message error:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // PATCH /messages/:id/read - Mark message as read
 router.patch('/:id/read', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -112,6 +148,16 @@ router.patch('/:id/read', async (req: AuthRequest, res: Response): Promise<void>
     if (!message.readBy.some(id => id.toString() === req.userId)) {
       message.readBy.push(req.userId as any);
       await message.save();
+
+      // Broadcast read status to room via socket
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`room:${message.roomId}`).emit('message:read', {
+          from: req.userId,
+          roomId: message.roomId.toString(),
+          messageIds: [message._id.toString()],
+        });
+      }
     }
 
     res.json({ message });
@@ -186,7 +232,7 @@ router.post('/:id/react', async (req: AuthRequest, res: Response): Promise<void>
 // POST /messages/read-bulk - Mark multiple messages as read
 router.post('/read-bulk', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { messageIds } = req.body;
+    const { messageIds, roomId } = req.body;
 
     if (!Array.isArray(messageIds)) {
       res.status(400).json({ error: 'messageIds doit être un tableau' });
@@ -202,6 +248,18 @@ router.post('/read-bulk', async (req: AuthRequest, res: Response): Promise<void>
         $addToSet: { readBy: req.userId },
       }
     );
+
+    // Broadcast read status to room via socket
+    if (roomId) {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`room:${roomId}`).emit('message:read', {
+          from: req.userId,
+          roomId,
+          messageIds,
+        });
+      }
+    }
 
     res.json({ success: true });
   } catch (error) {

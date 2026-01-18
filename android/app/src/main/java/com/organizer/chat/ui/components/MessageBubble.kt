@@ -75,6 +75,9 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.CircularProgressIndicator
 import com.organizer.chat.util.ImageDownloader
 import androidx.compose.ui.text.style.TextAlign
@@ -95,21 +98,24 @@ val ALLOWED_EMOJIS = listOf("👍", "❤️", "😂", "😮", "😢", "😡", "�
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
-    message: Message,
+    messages: List<Message>,
     isMyMessage: Boolean,
-    isGroupedWithPrevious: Boolean = false,
-    isLastInGroup: Boolean = true,
     currentUserId: String? = null,
-    roomMemberCount: Int = 0,
+    humanMemberIds: List<String> = emptyList(),
     onReact: ((String) -> Unit)? = null,
-    onDelete: (() -> Unit)? = null
+    onDelete: ((String) -> Unit)? = null
 ) {
+    if (messages.isEmpty()) return
+
+    val firstMsg = messages.first()
+    val lastMsg = messages.last()
+
     // System messages get special rendering
-    if (message.type == "system") {
+    if (firstMsg.type == "system") {
         SystemMessageContent(
-            content = message.content,
-            createdAt = message.createdAt,
-            reactions = message.reactions,
+            content = firstMsg.content,
+            createdAt = firstMsg.createdAt,
+            reactions = firstMsg.reactions,
             currentUserId = currentUserId,
             onReact = onReact
         )
@@ -127,131 +133,171 @@ fun MessageBubble(
 
     val bubbleColor = if (isMyMessage) MessageSent else MessageReceived
 
+    // Callback for long press - will be passed to content components
+    val onLongPress: (() -> Unit)? = if (isMyMessage && onDelete != null) {
+        { showDeleteDialog = true }
+    } else null
+
+    // Get the "best" status across all messages in the group
+    val groupStatus = if (isMyMessage) {
+        val statusOrder = listOf("failed", "sending", "sent", "delivered", "read")
+        messages.maxByOrNull { statusOrder.indexOf(it.status) }?.status ?: lastMsg.status
+    } else null
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = if (isGroupedWithPrevious) 0.dp else 2.dp),
+            .padding(horizontal = 8.dp, vertical = 2.dp),
         horizontalAlignment = if (isMyMessage) Alignment.End else Alignment.Start
     ) {
-        // Show sender name with status indicator only if NOT grouped with previous
-        if (!isGroupedWithPrevious) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(
-                    start = if (isMyMessage) 0.dp else 8.dp,
-                    end = if (isMyMessage) 8.dp else 0.dp,
-                    bottom = 2.dp
-                )
-            ) {
-                // Status indicator dot
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(
-                            color = getStatusColor(message.senderId.status),
-                            shape = CircleShape
-                        )
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                // Sender name
-                Text(
-                    text = message.senderId.displayName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AccentBlue
-                )
-                // Status message if present
-                message.senderId.statusMessage?.let { statusMsg ->
-                    Text(
-                        text = " · $statusMsg",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray,
-                        maxLines = 1
+        // Sender name with status indicator
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(
+                start = if (isMyMessage) 0.dp else 8.dp,
+                end = if (isMyMessage) 8.dp else 0.dp,
+                bottom = 2.dp
+            )
+        ) {
+            // Status indicator dot
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(
+                        color = getStatusColor(firstMsg.senderId.status),
+                        shape = CircleShape
                     )
-                }
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            // Sender name
+            Text(
+                text = firstMsg.senderId.displayName,
+                style = MaterialTheme.typography.labelSmall,
+                color = AccentBlue
+            )
+            // Status message if present
+            firstMsg.senderId.statusMessage?.let { statusMsg ->
+                Text(
+                    text = " · $statusMsg",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    maxLines = 1
+                )
             }
         }
 
-        // Callback for long press - will be passed to content components
-        val onLongPress: (() -> Unit)? = if (isMyMessage && onDelete != null) {
-            { showDeleteDialog = true }
-        } else null
-
         Box {
+            // Long press on bubble padding (content components handle their own long press)
             Surface(
                 shape = bubbleShape,
                 color = bubbleColor,
                 shadowElevation = 1.dp,
-                modifier = Modifier.widthIn(max = 280.dp)
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .pointerInput(onLongPress) {
+                        detectTapGestures(
+                            onLongPress = { onLongPress?.invoke() }
+                        )
+                    }
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
-                    // Content based on message type
-                    // Each component handles its own tap AND long press via combinedClickable
-                    when (message.type) {
-                        "audio" -> AudioMessageContent(
-                            base64Content = message.content,
-                            messageId = message.id,
-                            onLongPress = onLongPress
-                        )
-                        "image" -> ImageMessageContent(
-                            imageUrl = message.content,
-                            caption = message.caption,
-                            onLongPress = onLongPress
-                        )
-                        "file" -> FileMessageContent(
-                            fileUrl = message.content,
-                            fileName = message.fileName,
-                            fileSize = message.fileSize,
-                            mimeType = message.mimeType,
-                            caption = message.caption,
-                            onLongPress = onLongPress
-                        )
-                        else -> TextMessageContent(
-                            content = message.content,
-                            onLongPress = onLongPress
-                        )
+                    // Render all messages in the group
+                    messages.forEachIndexed { index, message ->
+                        when (message.type) {
+                            "audio" -> AudioMessageContent(
+                                base64Content = message.content,
+                                messageId = message.id,
+                                onLongPress = onLongPress
+                            )
+                            "image" -> {
+                                if (message.fileDeleted) {
+                                    DeletedFileContent(caption = message.caption)
+                                } else {
+                                    ImageMessageContent(
+                                        imageUrl = message.content,
+                                        caption = message.caption,
+                                        onLongPress = onLongPress
+                                    )
+                                }
+                            }
+                            "file" -> {
+                                if (message.fileDeleted) {
+                                    DeletedFileContent(caption = message.caption)
+                                } else {
+                                    FileMessageContent(
+                                        fileUrl = message.content,
+                                        fileName = message.fileName,
+                                        fileSize = message.fileSize,
+                                        mimeType = message.mimeType,
+                                        caption = message.caption,
+                                        onLongPress = onLongPress
+                                    )
+                                }
+                            }
+                            else -> {
+                                TextMessageContent(
+                                    content = message.content,
+                                    onLongPress = onLongPress
+                                )
+                                // Add line break between text messages (not after the last one)
+                                if (index < messages.size - 1 && messages[index + 1].type == "text") {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                }
+                            }
+                        }
                     }
 
-                    // Timestamp and read receipt - only show if last in group
-                    if (isLastInGroup) {
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Row(
-                            modifier = Modifier.align(Alignment.End),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = formatTime(message.createdAt),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MessageSecondaryColor
+                    // Timestamp and read receipt
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.align(Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = formatTime(lastMsg.createdAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MessageSecondaryColor
+                        )
+                        // Show read receipt only for own messages
+                        if (isMyMessage && groupStatus != null) {
+                            ReadReceiptForStatus(
+                                status = groupStatus,
+                                readBy = lastMsg.readBy,
+                                humanMemberIds = humanMemberIds,
+                                currentUserId = currentUserId
                             )
-                            // Show read receipt only for own messages
-                            if (isMyMessage) {
-                                ReadReceipt(
-                                    message = message,
-                                    roomMemberCount = roomMemberCount
-                                )
-                            }
+                        }
+                        // Client source icon
+                        lastMsg.clientSource?.let { source ->
+                            Icon(
+                                imageVector = when (source) {
+                                    "desktop" -> Icons.Default.Computer
+                                    "android" -> Icons.Default.PhoneAndroid
+                                    else -> Icons.Default.SmartToy
+                                },
+                                contentDescription = source,
+                                modifier = Modifier.size(12.dp),
+                                tint = MessageSecondaryColor.copy(alpha = 0.5f)
+                            )
                         }
                     }
                 }
             }
         }
 
-        // Reaction bar - show on last message of group or if there are reactions
-        if (message.reactions.isNotEmpty() || isLastInGroup) {
-            ReactionBar(
-                reactions = message.reactions,
-                currentUserId = currentUserId,
-                onReact = { emoji ->
-                    onReact?.invoke(emoji)
-                },
-                onShowPicker = { showReactionPicker = true },
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
+        // Reaction bar - always show for last message
+        ReactionBar(
+            reactions = lastMsg.reactions,
+            currentUserId = currentUserId,
+            onReact = { emoji ->
+                onReact?.invoke(emoji)
+            },
+            onShowPicker = { showReactionPicker = true },
+            modifier = Modifier.padding(top = 4.dp)
+        )
     }
 
     // Reaction picker dialog
@@ -265,7 +311,7 @@ fun MessageBubble(
         )
     }
 
-    // Delete confirmation dialog
+    // Delete confirmation dialog - deletes the LAST message in the group
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -275,7 +321,7 @@ fun MessageBubble(
                 TextButton(
                     onClick = {
                         showDeleteDialog = false
-                        onDelete?.invoke()
+                        onDelete?.invoke(lastMsg.id)
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -346,7 +392,10 @@ private fun TextMessageContent(
         }
     }
 
-    // Use Text with pointerInput to handle both tap (URLs) and long press (delete)
+    // NOTE: Long press is handled BOTH here and on the parent Surface bubble.
+    // This is intentional: the Text captures gestures on its area (for URLs + long press),
+    // while the Surface captures long press on padding areas outside the text.
+    // Without this duplication, long press wouldn't work on small messages or text areas.
     Text(
         text = annotatedString,
         style = MaterialTheme.typography.bodyMedium,
@@ -519,6 +568,50 @@ private fun AudioMessageContent(
             style = MaterialTheme.typography.bodyMedium,
             color = MessageTextColor
         )
+    }
+}
+
+@Composable
+private fun DeletedFileContent(
+    caption: String?
+) {
+    Column {
+        // Deleted file placeholder
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = CharcoalLight.copy(alpha = 0.5f),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Image,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = Color.Gray
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Fichier supprimé",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    ),
+                    color = Color.Gray
+                )
+            }
+        }
+
+        // Show caption if present
+        if (!caption.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = caption,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MessageTextColor
+            )
+        }
     }
 }
 
@@ -800,163 +893,32 @@ private fun performImageDownload(context: Context, imageUrl: String) {
 }
 
 @Composable
-private fun FullscreenImageDialog(
-    imageUrl: String,
-    onDismiss: () -> Unit,
-    onDownload: () -> Unit
+private fun ReadReceiptForStatus(
+    status: String,
+    readBy: List<String>,
+    humanMemberIds: List<String>,
+    currentUserId: String?
 ) {
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onDoubleTap = {
-                            // Double tap to reset zoom or zoom in
-                            if (scale > 1f) {
-                                scale = 1f
-                                offset = Offset.Zero
-                            } else {
-                                scale = 2.5f
-                            }
-                        },
-                        onTap = {
-                            // Single tap to close only if not zoomed
-                            if (scale <= 1f) {
-                                onDismiss()
-                            }
-                        }
-                    )
-                }
-        ) {
-            val imageModifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(1f, 5f)
-                        if (scale > 1f) {
-                            val maxOffset = (scale - 1f) * size.width / 2
-                            offset = Offset(
-                                x = (offset.x + pan.x).coerceIn(-maxOffset, maxOffset),
-                                y = (offset.y + pan.y).coerceIn(-maxOffset, maxOffset)
-                            )
-                        } else {
-                            offset = Offset.Zero
-                        }
-                    }
-                }
-                .graphicsLayer(
-                    scaleX = scale,
-                    scaleY = scale,
-                    translationX = offset.x,
-                    translationY = offset.y
-                )
-
-            if (imageUrl.startsWith("data:")) {
-                // Base64 data URL
-                val base64Data = imageUrl.substringAfter(",")
-                val imageBytes = try {
-                    Base64.decode(base64Data, Base64.DEFAULT)
-                } catch (e: Exception) {
-                    null
-                }
-
-                if (imageBytes != null) {
-                    val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                    if (bitmap != null) {
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = "Image fullscreen",
-                            modifier = imageModifier,
-                            contentScale = ContentScale.Fit
-                        )
-                    }
-                }
-            } else {
-                // HTTP URL
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = "Image fullscreen",
-                    modifier = imageModifier,
-                    contentScale = ContentScale.Fit
-                )
-            }
-
-            // Download button (top-left)
-            IconButton(
-                onClick = onDownload,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp)
-                    .background(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        shape = CircleShape
-                    )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Download,
-                    contentDescription = "Telecharger l'image",
-                    tint = Color.White
-                )
-            }
-
-            // Close button (top-right)
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .background(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        shape = CircleShape
-                    )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color.White
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReadReceipt(
-    message: Message,
-    roomMemberCount: Int
-) {
-    // Calculate if all other members have read
-    // For a message to be "fully read", readBy should contain all members except sender
-    // roomMemberCount includes the sender, so we need (roomMemberCount - 1) readers
-    val isAllRead = if (roomMemberCount > 1) {
-        message.readBy.size >= roomMemberCount - 1
+    // Calculate if ALL other human members have read the message
+    val isAllRead = if (currentUserId != null && humanMemberIds.isNotEmpty()) {
+        val otherHumanMembers = humanMemberIds.filter { it != currentUserId }
+        otherHumanMembers.isNotEmpty() && otherHumanMembers.all { readBy.contains(it) }
     } else {
-        // Fallback for unknown member count: any read = green
-        message.readBy.isNotEmpty()
+        false
     }
 
+    // Use group status for icon selection
     val icon = when {
-        message.status == "sending" -> Icons.Default.Done  // Single checkmark for pending
-        isAllRead -> Icons.Default.CheckCircle  // Filled circle with check for read
-        else -> Icons.Default.DoneAll  // Double checkmark for sent
+        status == "sending" -> Icons.Default.Done
+        status == "read" || isAllRead -> Icons.Default.CheckCircle
+        else -> Icons.Default.DoneAll
     }
 
-    val tint = if (isAllRead) OnlineGreen else OfflineGray
+    val tint = if (status == "read" || isAllRead) OnlineGreen else OfflineGray
 
     Icon(
         imageVector = icon,
-        contentDescription = if (isAllRead) "Lu" else "Envoyé",
+        contentDescription = if (status == "read" || isAllRead) "Lu" else "Envoyé",
         modifier = Modifier.size(14.dp),
         tint = tint
     )

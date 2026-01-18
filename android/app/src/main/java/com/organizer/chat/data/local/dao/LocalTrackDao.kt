@@ -39,6 +39,9 @@ interface LocalTrackDao {
     @Query("UPDATE local_tracks SET serverTrackId = :serverTrackId, syncStatus = :status WHERE id = :trackId")
     suspend fun markAsSynced(trackId: String, serverTrackId: String, status: SyncStatus = SyncStatus.SYNCED)
 
+    @Query("UPDATE local_tracks SET serverTrackId = :serverTrackId WHERE id = :trackId")
+    suspend fun setServerTrackId(trackId: String, serverTrackId: String)
+
     @Query("UPDATE local_tracks SET stoppedAt = :stoppedAt WHERE id = :trackId")
     suspend fun setStoppedAt(trackId: String, stoppedAt: Long)
 

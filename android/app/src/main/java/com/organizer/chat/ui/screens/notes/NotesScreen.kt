@@ -21,7 +21,10 @@ import com.organizer.chat.data.model.ChecklistItem
 import com.organizer.chat.data.model.Label
 import com.organizer.chat.data.model.Note
 import com.organizer.chat.data.repository.NoteRepository
+import com.organizer.chat.data.socket.ConnectionState
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.ui.components.ConnectionStatusIcon
+import com.organizer.chat.ui.components.OfflineBanner
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -39,24 +42,43 @@ fun NotesScreen(
     }
     val uiState by viewModel.uiState.collectAsState()
 
+    // Connection state - use current state as initial to avoid flicker
+    val initialConnectionState = remember {
+        if (chatService?.socketManager?.isConnected() == true) ConnectionState.Connected
+        else ConnectionState.Disconnected
+    }
+    val connectionState by chatService?.socketManager?.connectionState
+        ?.collectAsState(initial = initialConnectionState)
+        ?: remember { mutableStateOf(initialConnectionState) }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Notes") },
-                actions = {
-                    IconButton(onClick = { viewModel.loadNotes() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Rafraichir")
-                    }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Parametres")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+            Column {
+                TopAppBar(
+                    title = { Text("Notes") },
+                    actions = {
+                        ConnectionStatusIcon(
+                            connectionState = connectionState,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                        IconButton(onClick = { viewModel.loadNotes() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Rafraichir")
+                        }
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Default.Settings, contentDescription = "Parametres")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 )
-            )
+                OfflineBanner(
+                    connectionState = connectionState,
+                    onRetry = { chatService?.reconnectIfNeeded() }
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(

@@ -6,9 +6,16 @@ import path from 'path';
 import fs from 'fs';
 import { connectDB } from './config/db.js';
 import { setupSocket } from './socket/index.js';
-import { authRoutes, usersRoutes, contactsRoutes, messagesRoutes, roomsRoutes, adminRoutes, apkRoutes, notesRoutes, labelsRoutes } from './routes/index.js';
+import { setupLogStreamer } from './utils/logStreamer.js';
+import { authRoutes, usersRoutes, contactsRoutes, messagesRoutes, roomsRoutes, adminRoutes, apkRoutes, notesRoutes, labelsRoutes, filesRoutes } from './routes/index.js';
 import uploadRoutes from './routes/upload.js';
+import mcpRoutes from './mcp/index.js';
+import mcpAdminRoutes from './routes/mcp-admin.js';
+import agentRoutes from './routes/agent.js';
 import { Room, User } from './models/index.js';
+import { getCollectionInfo } from './memory/qdrant.service.js';
+import { ensureLiveCollection } from './memory/live.service.js';
+import { scheduleDigest } from './memory/digest.service.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -38,10 +45,57 @@ app.use('/apk', apkRoutes);
 app.use('/upload', uploadRoutes);
 app.use('/notes', notesRoutes);
 app.use('/labels', labelsRoutes);
+app.use('/files', filesRoutes);
+app.use('/mcp', mcpRoutes);
+app.use('/mcp-admin', mcpAdminRoutes);
+app.use('/agent', agentRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Detailed health check (for diagnostics)
+app.get('/health/detailed', async (_req, res) => {
+  const result: {
+    status: string;
+    timestamp: string;
+    qdrant: { status: string; points?: number; vector_size?: number; distance?: string; error?: string };
+    mongodb: { status: string; users?: number; rooms?: number; error?: string };
+  } = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    qdrant: { status: 'unknown' },
+    mongodb: { status: 'unknown' },
+  };
+
+  // Check Qdrant
+  try {
+    const qdrantInfo = await getCollectionInfo();
+    result.qdrant = {
+      status: 'ok',
+      points: qdrantInfo.result?.points_count,
+      vector_size: qdrantInfo.result?.config?.params?.vectors?.size,
+      distance: qdrantInfo.result?.config?.params?.vectors?.distance,
+    };
+  } catch (error) {
+    result.qdrant = { status: 'error', error: error instanceof Error ? error.message : 'Unknown error' };
+    result.status = 'degraded';
+  }
+
+  // Check MongoDB
+  try {
+    const [usersCount, roomsCount] = await Promise.all([
+      User.countDocuments(),
+      Room.countDocuments(),
+    ]);
+    result.mongodb = { status: 'ok', users: usersCount, rooms: roomsCount };
+  } catch (error) {
+    result.mongodb = { status: 'error', error: error instanceof Error ? error.message : 'Unknown error' };
+    result.status = 'degraded';
+  }
+
+  res.json(result);
 });
 
 // 404 handler
@@ -58,6 +112,9 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 // Setup Socket.io
 const io = setupSocket(httpServer);
 app.set('io', io);
+
+// Setup log streamer (admin-only, protected by auth)
+setupLogStreamer(io);
 
 // Start server
 const PORT = process.env.PORT || 3001;
@@ -131,10 +188,24 @@ async function start() {
     ensureUploadDirectories();
     await connectDB();
     await ensureLobby();
+    await ensureLiveCollection();
+
+    // Start the digest cron (fixed hours: 2h, 6h, 10h, 14h, 18h, 22h + catch-up on startup)
+    const digestTask = await scheduleDigest();
 
     httpServer.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`Socket.io ready`);
+
+      // Cleanup on shutdown
+      const shutdown = () => {
+        console.log('Shutting down...');
+        digestTask.stop();
+        httpServer.close();
+        process.exit(0);
+      };
+      process.on('SIGTERM', shutdown);
+      process.on('SIGINT', shutdown);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

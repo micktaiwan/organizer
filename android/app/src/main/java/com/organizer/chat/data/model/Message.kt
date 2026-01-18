@@ -13,9 +13,11 @@ data class Message(
     val fileName: String? = null,  // Original filename for file messages
     val fileSize: Long? = null,  // File size in bytes
     val mimeType: String? = null,  // MIME type (application/pdf, etc.)
+    val fileDeleted: Boolean = false,  // True if the file was soft-deleted
     val status: String = "sent",  // "sent", "delivered", "read"
     val readBy: List<String> = emptyList(),
     val reactions: List<Reaction> = emptyList(),
+    val clientSource: String? = null,  // "desktop", "android", "api"
     val createdAt: String,
     val updatedAt: String? = null
 )
@@ -42,7 +44,8 @@ data class MessagesResponse(
 data class SendMessageRequest(
     val roomId: String,
     val type: String = "text",
-    val content: String
+    val content: String,
+    val clientSource: String = "android"
 )
 
 data class MessageResponse(

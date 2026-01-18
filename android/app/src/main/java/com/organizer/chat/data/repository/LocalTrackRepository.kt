@@ -87,6 +87,11 @@ class LocalTrackRepository(context: Context) {
         Log.d(TAG, "Track $trackId synced as $serverTrackId")
     }
 
+    suspend fun setServerTrackId(trackId: String, serverTrackId: String) {
+        dao.setServerTrackId(trackId, serverTrackId)
+        Log.d(TAG, "Track $trackId linked to server track $serverTrackId")
+    }
+
     suspend fun deleteTrack(trackId: String) {
         dao.deleteTrackWithPoints(trackId)
         Log.d(TAG, "Deleted track: $trackId")

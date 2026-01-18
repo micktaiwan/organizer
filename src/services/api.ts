@@ -20,6 +20,7 @@ interface User {
   email: string;
   isOnline?: boolean;
   isAdmin?: boolean;
+  isBot?: boolean;
   lastSeen?: string;
   peerId?: string | null;
   status?: 'available' | 'busy' | 'away' | 'dnd';
@@ -143,6 +144,7 @@ interface Message {
   status: 'sent' | 'delivered' | 'read';
   readBy: string[];
   reactions?: Reaction[];
+  clientSource?: 'desktop' | 'android' | 'api';
   createdAt: string;
 }
 
@@ -337,21 +339,29 @@ class ApiService {
     return this.request<{ messages: Message[] }>(url);
   }
 
+  async getMessage(messageId: string): Promise<{ message: Message }> {
+    return this.request<{ message: Message }>(`/messages/${messageId}`);
+  }
+
   // Messages
-  async sendMessage(roomId: string, type: string, content: string, imageBlob?: Blob | null): Promise<{ message: Message }> {
-    // If we have an image blob, upload via multipart first
+  async sendMessage(roomId: string, type: string, text?: string, audio?: string, imageBlob?: Blob | null, caption?: string): Promise<{ message: Message }> {
+    // Images always use multipart upload
     if (type === 'image' && imageBlob) {
       const formData = new FormData();
       formData.append('roomId', roomId);
       formData.append('image', imageBlob, 'image.jpg');
-
+      formData.append('clientSource', 'desktop');
+      if (caption) {
+        formData.append('caption', caption);
+      }
       return this.uploadRequest<{ message: Message }>('/upload/image', formData);
     }
 
-    // Otherwise, use JSON (for text, audio, or clipboard paste Base64 images)
+    // Text and audio use JSON
+    const content = audio || text || '';
     return this.request<{ message: Message }>('/messages', {
       method: 'POST',
-      body: JSON.stringify({ roomId, type, content }),
+      body: JSON.stringify({ roomId, type, content, clientSource: 'desktop' }),
     });
   }
 
@@ -359,6 +369,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('roomId', roomId);
     formData.append('file', file, file.name);
+    formData.append('clientSource', 'desktop');
     if (caption) {
       formData.append('caption', caption);
     }
@@ -372,10 +383,10 @@ class ApiService {
     });
   }
 
-  async markMessagesAsRead(messageIds: string[]): Promise<{ success: boolean }> {
+  async markMessagesAsRead(messageIds: string[], roomId?: string): Promise<{ success: boolean }> {
     return this.request<{ success: boolean }>('/messages/read-bulk', {
       method: 'POST',
-      body: JSON.stringify({ messageIds }),
+      body: JSON.stringify({ messageIds, roomId }),
     });
   }
 

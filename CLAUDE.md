@@ -13,11 +13,47 @@ Working directory may be a subfolder. Use absolute paths for scripts:
 ### Android versioning
 **DO NOT** increment `versionCode`/`versionName` unless explicitly requested for a release.
 
+### Bash commands (macOS)
+
+**Chain commands with `&&` or `;`** - never use newlines to separate commands:
+```bash
+# WRONG - will fail
+command1
+sleep 2
+command2
+
+# CORRECT
+command1 && sleep 2 && command2
+```
+
+**No `timeout` on macOS** - use background process + sleep + kill instead.
+
+**Check dependencies FIRST** - before testing a server, verify its dependencies:
+```bash
+# Server needs MongoDB? Check it first
+lsof -i :27017 || echo "MongoDB not running"
+
+# Server needs another service? Check the port
+lsof -i :3001
+```
+
+**Process detection - use specific paths** to avoid matching wrong processes:
+```bash
+# WRONG - matches client AND server
+ps aux | grep "tsx.*index"
+
+# CORRECT - specific to server path
+ps aux | grep "organizer/server.*tsx"
+```
+
 ## Specific Commands
 
 ```bash
 # SSH server
 ssh ubuntu@51.210.150.25 "docker logs organizer-api --tail 50"
+
+# MongoDB (container name: organizer-mongodb)
+ssh ubuntu@51.210.150.25 "docker exec organizer-mongodb mongosh organizer --quiet --eval '<query>'"
 
 # Build Android
 JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
@@ -30,7 +66,25 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 /Users/mickaelfm/projects/perso/organizer/server/deploy.sh
 /Users/mickaelfm/projects/perso/organizer/server/upload-apk.sh <apk> <version> <versionCode> "notes"
 /Users/mickaelfm/projects/perso/organizer/server/send-announcement.sh "message"
+/Users/mickaelfm/projects/perso/organizer/server/send-bot-message.sh <room-name> "message"
 ```
+
+## Desktop (Tauri) - CRITICAL
+
+**Two independent server connections** - do NOT confuse them:
+
+1. **Main app connection** (`AuthContext` + `socketService`)
+   - Always connected to PROD (`51.210.150.25:3001`)
+   - Used for: chat, rooms, notes, user status
+   - Controlled by: `ServerConfigContext.selectedServer`
+
+2. **Pet Debug panel** (`PetDebugScreen` + `LogPanel`)
+   - Independent Local/Prod toggle in the debug UI
+   - Used for: agent testing, server logs viewing
+   - Controlled by: `debugUseLocalServer` state in `App.tsx`
+   - Persisted in: `pet-debug.json` store
+
+When debugging the LogPanel or Pet agent, check `debugUseLocalServer`, NOT `selectedServer`.
 
 ## Android UI - CRITICAL
 

@@ -3,14 +3,19 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { User, Room, Message } from '../models/index.js';
 import { JwtPayload } from '../middleware/auth.js';
-import { emitNewMessage } from '../utils/socketEmit.js';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
   username?: string;
   appVersionName?: string;
   appVersionCode?: string;
+  clientType?: 'desktop' | 'android';
 }
+
+// Track typing timeouts: `${userId}:${roomId}` -> timeout handle
+// Module-level singleton state (intentional - shared across all connections)
+const typingTimeouts = new Map<string, NodeJS.Timeout>();
+const TYPING_TIMEOUT_MS = 3000;
 
 export function setupSocket(httpServer: HttpServer): Server {
   const io = new Server(httpServer, {
@@ -42,6 +47,13 @@ export function setupSocket(httpServer: HttpServer): Server {
       socket.appVersionName = socket.handshake.auth.appVersionName;
       socket.appVersionCode = socket.handshake.auth.appVersionCode;
 
+      // Detect client type: desktop sends clientType, Android sends appVersionCode
+      if (socket.handshake.auth.clientType === 'desktop') {
+        socket.clientType = 'desktop';
+      } else if (socket.appVersionCode) {
+        socket.clientType = 'android';
+      }
+
       next();
     } catch (error) {
       next(new Error('Token invalide'));
@@ -68,6 +80,12 @@ export function setupSocket(httpServer: HttpServer): Server {
       console.log(`User ${socket.username} app version: ${socket.appVersionName} (${socket.appVersionCode})`);
     }
 
+    // Update lastClient if detected
+    if (socket.clientType) {
+      updateData.lastClient = socket.clientType;
+      console.log(`User ${socket.username} client type: ${socket.clientType}`);
+    }
+
     // Mettre à jour le statut online et récupérer le user avec ses infos de statut
     const user = await User.findByIdAndUpdate(
       userId,
@@ -82,7 +100,6 @@ export function setupSocket(httpServer: HttpServer): Server {
     const userRooms = await Room.find({ 'members.userId': userId });
     for (const room of userRooms) {
       socket.join(`room:${room._id}`);
-      console.log(`User ${socket.username} joined room: ${room.name}`);
     }
 
     // Préparer les données de statut
@@ -93,6 +110,7 @@ export function setupSocket(httpServer: HttpServer): Server {
       statusExpiresAt: user?.statusExpiresAt,
       isMuted: user?.isMuted,
       appVersion: user?.appVersion,
+      lastClient: user?.lastClient,
     };
 
     // Notifier les autres utilisateurs du statut online
@@ -109,7 +127,7 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     const usersInSameRooms = await User.find({
       _id: { $in: uniqueUserIds }
-    }).select('_id username displayName status statusMessage statusExpiresAt isMuted isOnline appVersion');
+    }).select('_id username displayName status statusMessage statusExpiresAt isMuted isOnline appVersion lastClient');
 
     socket.emit('users:init', {
       users: usersInSameRooms.map(u => ({
@@ -122,6 +140,7 @@ export function setupSocket(httpServer: HttpServer): Server {
         isMuted: u.isMuted,
         isOnline: u.isOnline,
         appVersion: u.appVersion,
+        lastClient: u.lastClient,
       }))
     });
 
@@ -145,39 +164,38 @@ export function setupSocket(httpServer: HttpServer): Server {
       });
     });
 
-    // MODIFIED: Typing indicators dans les rooms
+    // Typing indicators with auto-timeout after 3s of inactivity
     socket.on('typing:start', (data: { roomId: string }) => {
+      const key = `${userId}:${data.roomId}`;
+
+      // Clear existing timeout if any
+      const existing = typingTimeouts.get(key);
+      if (existing) clearTimeout(existing);
+
+      // Emit to others in room
       socket.to(`room:${data.roomId}`).emit('typing:start', { from: userId, roomId: data.roomId });
+
+      // Auto-stop after timeout (user stopped typing but didn't clear input)
+      typingTimeouts.set(key, setTimeout(() => {
+        socket.to(`room:${data.roomId}`).emit('typing:stop', { from: userId, roomId: data.roomId });
+        typingTimeouts.delete(key);
+      }, TYPING_TIMEOUT_MS));
     });
 
     socket.on('typing:stop', (data: { roomId: string }) => {
+      const key = `${userId}:${data.roomId}`;
+
+      // Clear timeout
+      const existing = typingTimeouts.get(key);
+      if (existing) {
+        clearTimeout(existing);
+        typingTimeouts.delete(key);
+      }
+
       socket.to(`room:${data.roomId}`).emit('typing:stop', { from: userId, roomId: data.roomId });
     });
 
-    // MODIFIED: Notification de nouveau message (broadcast à la room)
-    socket.on('message:notify', async (data: { roomId: string; messageId: string }) => {
-      try {
-        // Fetch message to include content in notification
-        const message = await Message.findById(data.messageId).populate('senderId', 'username displayName status statusMessage');
-
-        if (!message) {
-          console.error(`Message ${data.messageId} not found for notification`);
-          return;
-        }
-
-        await emitNewMessage({
-          io,
-          socket,
-          roomId: data.roomId,
-          userId,
-          message: message as any,
-        });
-      } catch (error) {
-        console.error('Error notifying message:', error);
-      }
-    });
-
-    // MODIFIED: Notification de message lu (broadcast à la room)
+    // Message read notification (broadcast to room)
     socket.on('message:read', (data: { roomId: string; messageIds: string[] }) => {
       socket.to(`room:${data.roomId}`).emit('message:read', {
         from: userId,
@@ -288,13 +306,11 @@ export function setupSocket(httpServer: HttpServer): Server {
     // Subscribe to notes updates
     socket.on('note:subscribe', () => {
       socket.join('notes');
-      console.log(`User ${socket.username} subscribed to notes`);
     });
 
     // Unsubscribe from notes updates
     socket.on('note:unsubscribe', () => {
       socket.leave('notes');
-      console.log(`User ${socket.username} unsubscribed from notes`);
     });
 
     // ===== End Notes Events =====
@@ -330,6 +346,14 @@ export function setupSocket(httpServer: HttpServer): Server {
       userRooms.forEach(room => {
         socket.to(`room:${room._id}`).emit('user:offline', { userId, roomId: room._id });
       });
+
+      // Clean up typing timeouts for this user
+      for (const [key, timeout] of typingTimeouts.entries()) {
+        if (key.startsWith(`${userId}:`)) {
+          clearTimeout(timeout);
+          typingTimeouts.delete(key);
+        }
+      }
     });
   });
 

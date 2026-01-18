@@ -17,7 +17,7 @@ class SocketService {
     console.log('Socket connecting to:', baseUrl);
 
     this.socket = io(baseUrl, {
-      auth: { token },
+      auth: { token, clientType: 'desktop' },
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 10,
@@ -77,6 +77,8 @@ class SocketService {
       'room:created',
       'room:updated',
       'room:deleted',
+      // Unread count updates
+      'unread:updated',
     ];
 
     events.forEach((event) => {
@@ -117,14 +119,6 @@ class SocketService {
 
   stopTyping(roomId: string) {
     this.socket?.emit('typing:stop', { roomId });
-  }
-
-  notifyMessage(roomId: string, messageId: string) {
-    this.socket?.emit('message:notify', { roomId, messageId });
-  }
-
-  notifyRead(roomId: string, messageIds: string[]) {
-    this.socket?.emit('message:read', { roomId, messageIds });
   }
 
   notifyDelete(roomId: string, messageId: string) {

@@ -362,6 +362,10 @@ Marquer plusieurs messages comme lus.
 }
 ```
 
+### MCP (Model Context Protocol)
+
+Un serveur MCP est disponible sur `POST /mcp` pour permettre aux assistants IA (Claude Code, etc.) d'interagir avec Organizer. Voir `src/mcp/` pour l'implémentation.
+
 ## Socket.io Events
 
 ### Connexion

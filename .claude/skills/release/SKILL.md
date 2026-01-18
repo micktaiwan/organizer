@@ -37,7 +37,7 @@ When arguments are provided:
 
 ### Step 1: Analyze Uncommitted Changes
 
-1. Get list of modified files: `git diff HEAD --name-only`
+1. Get list of modified files: `git diff HEAD --name-only` (include untracked files with `git status --short | grep "^??"`)
 2. Get current version from `android/app/build.gradle.kts`
 3. **Read the diff of ALL modified files** - do not skip any file:
    - Use `git diff HEAD` to get the complete diff
@@ -46,6 +46,38 @@ When arguments are provided:
 4. Before generating release notes, list what changed in EACH modified file
 
 If there are no uncommitted changes, inform the user and stop.
+
+### Step 1.5: Detect Impacted Platforms
+
+Categorize modified files by platform:
+
+| File Pattern | Platform |
+|--------------|----------|
+| `android/**` | 🤖 Android |
+| `src/**`, `src-tauri/**` | 🖥️ Desktop |
+| `server/**` | ⚙️ Server |
+| `docs/**`, `*.md` (root) | 📄 Docs only |
+
+Display a summary:
+```
+Plateformes impactées :
+• 🤖 Android : 3 fichiers
+• ⚙️ Server : 5 fichiers
+```
+
+**If NO Android changes detected:**
+
+Ask the user with `AskUserQuestion`:
+- Question: "Pas de modifications Android détectées. Une release crée un APK et incrémente la version. Pourquoi veux-tu release ?"
+- Options:
+  1. "Continuer quand même" → Proceed with full release (APK + version bump)
+  2. "Commit sans release" → Just commit changes, no version bump, no APK, no announcement
+  3. "Annuler" → Stop and let user decide
+
+If user chooses "Commit sans release", skip Steps 5-9 (version bump, APK, upload, announcement) and only do:
+- Code review (Step 2)
+- Commit with descriptive message (not "release: vX.X.X")
+- Push to remote
 
 ### Step 2: Code Review
 
@@ -160,12 +192,15 @@ Ask for confirmation before proceeding.
 
 ### Step 5: Update Version
 
+> **Skip if user chose "Commit sans release" in Step 1.5**
+
 Edit `android/app/build.gradle.kts` and increment:
 - `versionCode` by 1
 - `versionName` patch version (e.g., 1.2.0 -> 1.2.1)
 
 ### Step 6: Commit and Tag
 
+**For full release:**
 ```bash
 git add -A
 git commit -m "release: v<version>
@@ -177,7 +212,21 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
 git tag "v<version>"
 ```
 
+**For "Commit sans release" (no Android changes):**
+```bash
+git add -A
+git commit -m "<type>(<scope>): <description>
+
+<release-notes>
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
+# NO tag
+```
+Use conventional commit format: `feat`, `fix`, `refactor`, `docs`, `chore`, etc.
+
 ### Step 7: Build APK
+
+> **Skip if user chose "Commit sans release" in Step 1.5**
 
 ```bash
 cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
@@ -185,12 +234,16 @@ cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Content
 
 ### Step 8: Upload APK
 
+> **Skip if user chose "Commit sans release" in Step 1.5**
+
 Use the upload script:
 ```bash
 cd server && ./upload-apk.sh ../android/app/build/outputs/apk/debug/app-debug.apk <version> <versionCode> "<release-notes>"
 ```
 
 ### Step 9: Send Announcement to Lobby
+
+> **Skip if user chose "Commit sans release" in Step 1.5**
 
 Use the dedicated script that handles JSON encoding properly:
 

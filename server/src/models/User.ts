@@ -31,6 +31,7 @@ export interface IUser extends Document {
   lastSeen: Date;
   location?: IUserLocation | null;
   appVersion?: IAppVersion | null;
+  lastClient?: 'desktop' | 'android' | null;
   // Tracking mode
   isTracking: boolean;
   trackingExpiresAt: Date | null;
@@ -122,6 +123,11 @@ const UserSchema = new Schema<IUser>(
         versionCode: { type: Number, required: true },
         updatedAt: { type: Date, default: Date.now },
       },
+      default: null,
+    },
+    lastClient: {
+      type: String,
+      enum: ['desktop', 'android'],
       default: null,
     },
     // Tracking mode

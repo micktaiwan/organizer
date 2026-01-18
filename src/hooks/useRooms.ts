@@ -1,13 +1,89 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Room, Message as ServerMessage, getApiBaseUrl } from '../services/api';
 import { Message, Reaction } from '../types';
 import { api } from '../services/api';
 import { socketService } from '../services/socket';
+import { showMessageNotification } from '../utils/notifications';
+
+// Helper to update tray badge
+const setTrayBadge = async (hasBadge: boolean) => {
+  try {
+    await invoke('set_tray_badge', { hasBadge });
+  } catch (error) {
+    console.error('Failed to set tray badge:', error);
+  }
+};
 
 interface UseRoomsOptions {
   userId: string | undefined;
   username: string;
 }
+
+// Helper to convert server message to client message
+const convertServerMessage = (msg: ServerMessage, currentUserId: string | undefined): Message => {
+  let actualSenderId: string;
+  let senderName: string | undefined;
+
+  if (typeof msg.senderId === 'string') {
+    actualSenderId = msg.senderId;
+  } else {
+    actualSenderId = (msg.senderId as any)._id || (msg.senderId as any).id || '';
+    senderName = (msg.senderId as any).displayName;
+  }
+
+  const isSender = actualSenderId === currentUserId;
+
+  let text: string | undefined;
+  let image: string | undefined;
+  let audio: string | undefined;
+  let fileUrl: string | undefined;
+  let fileName: string | undefined;
+  let fileSize: number | undefined;
+  let mimeType: string | undefined;
+
+  if (msg.type === 'image') {
+    image = msg.content;
+  } else if (msg.type === 'audio') {
+    audio = msg.content;
+  } else if (msg.type === 'file') {
+    fileUrl = msg.content;
+    fileName = msg.fileName;
+    fileSize = msg.fileSize;
+    mimeType = msg.mimeType;
+  } else {
+    text = msg.content;
+  }
+
+  const reactions: Reaction[] | undefined = msg.reactions?.map((r: any) => ({
+    userId: typeof r.userId === 'string' ? r.userId : r.userId._id || r.userId.id,
+    emoji: r.emoji,
+    createdAt: new Date(r.createdAt),
+  }));
+
+  return {
+    id: msg._id,
+    serverMessageId: msg._id,
+    text,
+    image,
+    caption: msg.caption,
+    audio,
+    fileUrl,
+    fileName,
+    fileSize,
+    mimeType,
+    sender: isSender ? 'me' : 'them',
+    senderName,
+    senderId: actualSenderId,
+    timestamp: new Date(msg.createdAt),
+    status: msg.status as 'sent' | 'delivered' | 'read',
+    readBy: msg.readBy,
+    reactions,
+    type: msg.type,
+    clientSource: msg.clientSource,
+  };
+};
 
 export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Rooms state
@@ -19,6 +95,15 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+
+  // Typing indicator state
+  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+
+  // Track unread messages in other rooms for tray badge
+  const hasUnreadRef = useRef(false);
+
+  // Track message IDs already marked as read to prevent duplicate requests
+  const markedAsReadRef = useRef<Set<string>>(new Set());
 
   // Reload data when API server changes (even if userId stays the same)
   useEffect(() => {
@@ -73,70 +158,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
         // Load message history
         const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
-        const convertedMessages = serverMessages.map((msg: ServerMessage): Message => {
-          let actualSenderId: string;
-          let senderName: string | undefined;
-
-          if (typeof msg.senderId === 'string') {
-            actualSenderId = msg.senderId;
-          } else {
-            // senderId is an object with _id (MongoDB) or id
-            actualSenderId = (msg.senderId as any)._id || (msg.senderId as any).id || '';
-            senderName = (msg.senderId as any).displayName;
-          }
-
-          const isSender = actualSenderId === userId;
-
-          // Map content based on message type
-          let text: string | undefined;
-          let image: string | undefined;
-          let audio: string | undefined;
-          let fileUrl: string | undefined;
-          let fileName: string | undefined;
-          let fileSize: number | undefined;
-          let mimeType: string | undefined;
-
-          if (msg.type === 'image') {
-            image = msg.content;
-          } else if (msg.type === 'audio') {
-            audio = msg.content;
-          } else if (msg.type === 'file') {
-            fileUrl = msg.content;
-            fileName = msg.fileName;
-            fileSize = msg.fileSize;
-            mimeType = msg.mimeType;
-          } else {
-            text = msg.content;
-          }
-
-          // Convert reactions
-          const reactions: Reaction[] | undefined = msg.reactions?.map((r: any) => ({
-            userId: typeof r.userId === 'string' ? r.userId : r.userId._id || r.userId.id,
-            emoji: r.emoji,
-            createdAt: new Date(r.createdAt),
-          }));
-
-          return {
-            id: msg._id,
-            serverMessageId: msg._id,
-            text,
-            image,
-            caption: msg.caption,
-            audio,
-            fileUrl,
-            fileName,
-            fileSize,
-            mimeType,
-            sender: isSender ? 'me' : 'them',
-            senderName,
-            senderId: actualSenderId,
-            timestamp: new Date(msg.createdAt),
-            status: msg.status as 'sent' | 'delivered' | 'read',
-            readBy: msg.readBy,
-            reactions,
-            type: msg.type,
-          };
-        });
+        const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
         setMessages(convertedMessages);
       } catch (error) {
         console.error('Failed to load room:', error);
@@ -156,17 +178,123 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
   // Listen for new messages in current room
   useEffect(() => {
-    if (!currentRoomId) return;
+    if (!currentRoomId || !userId) return;
 
-    const unsubNewMessage = socketService.on('message:new', (data: any) => {
-      if (data.roomId === currentRoomId) {
-        // New message in current room - reload message history
-        loadMessages();
+    const unsubNewMessage = socketService.on('message:new', async (data: any) => {
+      if (data.roomId === currentRoomId && data.messageId) {
+        // Retry logic for transient failures
+        const maxRetries = 3;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const { message: serverMsg } = await api.getMessage(data.messageId);
+            const converted = convertServerMessage(serverMsg, userId);
+            setMessages(current => {
+              // Check if message already exists (avoid duplicates from optimistic updates)
+              if (current.some(m => m.serverMessageId === data.messageId || m.id === data.messageId)) {
+                return current;
+              }
+              return [...current, converted];
+            });
+            break; // Success, exit retry loop
+          } catch (err) {
+            if (attempt === maxRetries) {
+              console.error(`Failed to fetch new message after ${maxRetries} attempts:`, err);
+            } else {
+              // Wait before retrying (exponential backoff: 500ms, 1000ms)
+              await new Promise(resolve => setTimeout(resolve, attempt * 500));
+            }
+          }
+        }
       }
     });
 
     return () => unsubNewMessage();
+  }, [currentRoomId, userId]);
+
+  // Listen for typing indicators in current room
+  useEffect(() => {
+    if (!currentRoomId || !userId) return;
+
+    const unsubTypingStart = socketService.on('typing:start', (data: any) => {
+      if (data.roomId === currentRoomId) {
+        setTypingUsers(prev => new Set(prev).add(data.from));
+      }
+    });
+
+    const unsubTypingStop = socketService.on('typing:stop', (data: any) => {
+      if (data.roomId === currentRoomId) {
+        setTypingUsers(prev => {
+          const next = new Set(prev);
+          next.delete(data.from);
+          return next;
+        });
+      }
+    });
+
+    // Clear typing users when changing rooms
+    return () => {
+      unsubTypingStart();
+      unsubTypingStop();
+      setTypingUsers(new Set());
+    };
   }, [currentRoomId]);
+
+  // Listen for unread updates to show tray badge
+  useEffect(() => {
+    if (!userId) return;
+
+    const handleUnreadUpdate = async (data: unknown) => {
+      const { unreadCount } = data as { roomId: string; unreadCount: number };
+      console.log('unread:updated', data);
+
+      // Only show badge if window is not focused
+      const isFocused = await getCurrentWindow().isFocused();
+      if (unreadCount > 0 && !isFocused) {
+        hasUnreadRef.current = true;
+        setTrayBadge(true);
+      }
+    };
+
+    const unsubUnread = socketService.on('unread:updated', handleUnreadUpdate);
+
+    // Clear badge when window gets focus
+    const handleFocus = () => {
+      if (hasUnreadRef.current) {
+        hasUnreadRef.current = false;
+        setTrayBadge(false);
+      }
+    };
+
+    // Listen for window focus
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        handleFocus();
+      }
+    });
+
+    return () => {
+      unsubUnread();
+      unlisten.then(fn => fn());
+    };
+  }, [userId]);
+
+  // Show desktop notifications for new messages when window is not focused
+  useEffect(() => {
+    if (!userId) return;
+
+    const unsubNotification = socketService.on('message:new', async (data: any) => {
+      // Don't notify for own messages
+      if (data.from === userId) return;
+
+      // Only notify when window is not focused
+      const isFocused = await getCurrentWindow().isFocused();
+      if (!isFocused && data.fromName && data.preview) {
+        showMessageNotification(data.fromName, data.roomName || 'Chat', data.preview, data.roomId);
+      }
+    });
+
+    return () => unsubNotification();
+  }, [userId]);
 
   // Listen for deleted messages in current room
   useEffect(() => {
@@ -197,6 +325,29 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
     return () => unsubReacted();
   }, [currentRoomId]);
+
+  // Listen for message read status updates in current room (from OTHER users only)
+  useEffect(() => {
+    if (!currentRoomId || !userId) return;
+
+    const unsubMessageRead = socketService.on('message:read', (data: any) => {
+      // Skip self-broadcasts (local state already updated in markAsRead)
+      if (data.roomId === currentRoomId && data.from !== userId) {
+        setMessages(prev => prev.map(m => {
+          if (data.messageIds.includes(m.serverMessageId || m.id) &&
+              !m.readBy?.includes(data.from)) {
+            return {
+              ...m,
+              readBy: [...(m.readBy || []), data.from],
+            };
+          }
+          return m;
+        }));
+      }
+    });
+
+    return () => unsubMessageRead();
+  }, [currentRoomId, userId]);
 
   // Note: user:status-changed is now handled by UserStatusContext
 
@@ -246,70 +397,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     if (!currentRoomId) return;
     try {
       const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
-      const convertedMessages = serverMessages.map((msg: ServerMessage): Message => {
-        let actualSenderId: string;
-        let senderName: string | undefined;
-
-        if (typeof msg.senderId === 'string') {
-          actualSenderId = msg.senderId;
-        } else {
-          // senderId is an object with _id (MongoDB) or id
-          actualSenderId = (msg.senderId as any)._id || (msg.senderId as any).id || '';
-          senderName = (msg.senderId as any).displayName;
-        }
-
-        const isSender = actualSenderId === userId;
-
-        // Map content based on message type
-        let text: string | undefined;
-        let image: string | undefined;
-        let audio: string | undefined;
-        let fileUrl: string | undefined;
-        let fileName: string | undefined;
-        let fileSize: number | undefined;
-        let mimeType: string | undefined;
-
-        if (msg.type === 'image') {
-          image = msg.content;
-        } else if (msg.type === 'audio') {
-          audio = msg.content;
-        } else if (msg.type === 'file') {
-          fileUrl = msg.content;
-          fileName = msg.fileName;
-          fileSize = msg.fileSize;
-          mimeType = msg.mimeType;
-        } else {
-          text = msg.content;
-        }
-
-        // Convert reactions
-        const reactions: Reaction[] | undefined = msg.reactions?.map((r: any) => ({
-          userId: typeof r.userId === 'string' ? r.userId : r.userId._id || r.userId.id,
-          emoji: r.emoji,
-          createdAt: new Date(r.createdAt),
-        }));
-
-        return {
-          id: msg._id,
-          serverMessageId: msg._id,
-          text,
-          image,
-          caption: msg.caption,
-          audio,
-          fileUrl,
-          fileName,
-          fileSize,
-          mimeType,
-          sender: isSender ? 'me' : 'them',
-          senderName,
-          senderId: actualSenderId,
-          timestamp: new Date(msg.createdAt),
-          status: msg.status as 'sent' | 'delivered' | 'read',
-          readBy: msg.readBy,
-          reactions,
-          type: msg.type,
-        };
-      });
+      const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
       setMessages(convertedMessages);
     } catch (error) {
       console.error('Failed to load messages:', error);
@@ -318,31 +406,29 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
   // Send message to current room
   const sendMessage = useCallback(async (text?: string, image?: string, audio?: string, imageBlob?: Blob | null) => {
-    if (!currentRoomId || (!text?.trim() && !image && !audio)) return;
+    if (!currentRoomId || (!text?.trim() && !imageBlob && !audio)) return;
 
     const messageId = crypto.randomUUID();
-    const content = text || image || audio || '';
-    const type = audio ? 'audio' : image ? 'image' : 'text';
+    const type = audio ? 'audio' : imageBlob ? 'image' : 'text';
+    const caption = imageBlob ? text : undefined;
 
     // Add optimistic message
     const optimisticMessage: Message = {
       id: messageId,
-      text,
+      text: type === 'text' ? text : undefined,
       image, // Show preview (Data URL)
       audio,
+      caption,
       sender: 'me',
       senderName: username,
       timestamp: new Date(),
       status: 'sending',
+      clientSource: 'desktop',
     };
     setMessages(prev => [...prev, optimisticMessage]);
 
     try {
-      const response = await api.sendMessage(currentRoomId, type, content, imageBlob);
-
-      // Update message with server response
-      // If uploaded via multipart, backend returns image URL in content
-      const finalImage = imageBlob && type === 'image' ? response.message.content : image;
+      const response = await api.sendMessage(currentRoomId, type, text, audio, imageBlob, caption);
 
       setMessages(prev => prev.map(m =>
         m.id === messageId
@@ -350,13 +436,11 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
               ...m,
               serverMessageId: response.message._id,
               status: 'sent',
-              image: finalImage // Update with server URL if multipart
+              image: type === 'image' ? response.message.content : image,
+              clientSource: response.message.clientSource,
             }
           : m
       ));
-
-      // Notify room of new message
-      socketService.notifyMessage(currentRoomId, response.message._id);
     } catch (error) {
       console.error('Failed to send message:', error);
       setMessages(prev => prev.map(m =>
@@ -383,6 +467,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       senderName: username,
       timestamp: new Date(),
       status: 'sending',
+      clientSource: 'desktop',
     };
     setMessages(prev => [...prev, optimisticMessage]);
 
@@ -397,12 +482,10 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
               serverMessageId: response.message._id,
               fileUrl: response.message.content,
               status: 'sent',
+              clientSource: response.message.clientSource,
             }
           : m
       ));
-
-      // Notify room of new message
-      socketService.notifyMessage(currentRoomId, response.message._id);
     } catch (error) {
       console.error('Failed to send file:', error);
       setMessages(prev => prev.map(m =>
@@ -416,19 +499,40 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     if (!currentRoomId || messageIds.length === 0) return;
 
     try {
-      await api.markMessagesAsRead(messageIds);
-      socketService.notifyRead(currentRoomId, messageIds);
+      // Server will broadcast socket event to other clients
+      await api.markMessagesAsRead(messageIds, currentRoomId);
 
-      // Update local messages
+      // Update local messages with current user in readBy
       setMessages(prev => prev.map(m =>
         messageIds.includes(m.serverMessageId || m.id)
-          ? { ...m, status: 'read' }
+          ? { ...m, readBy: [...(m.readBy || []), userId || ''] }
           : m
       ));
     } catch (error) {
       console.error('Failed to mark messages as read:', error);
     }
-  }, [currentRoomId]);
+  }, [currentRoomId, userId]);
+
+  // Auto-mark messages as read when viewing a room
+  useEffect(() => {
+    if (!currentRoomId || !userId || messages.length === 0) return;
+
+    // Find unread messages from other users (excluding already-requested IDs)
+    const unreadMessageIds = messages
+      .filter(m =>
+        m.sender === 'them' &&
+        m.serverMessageId &&
+        !m.readBy?.includes(userId) &&
+        !markedAsReadRef.current.has(m.serverMessageId)
+      )
+      .map(m => m.serverMessageId as string);
+
+    if (unreadMessageIds.length > 0) {
+      // Track these IDs immediately to prevent duplicate requests
+      unreadMessageIds.forEach(id => markedAsReadRef.current.add(id));
+      markAsRead(unreadMessageIds);
+    }
+  }, [currentRoomId, userId, messages, markAsRead]);
 
   // Delete a message
   const deleteMessage = useCallback(async (messageId: string) => {
@@ -509,6 +613,13 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Select a room
   const selectRoom = useCallback((roomId: string) => {
     setCurrentRoomId(roomId);
+    // Clear tracked read IDs when switching rooms
+    markedAsReadRef.current.clear();
+    // Clear badge when user selects a room (they're actively looking at the app)
+    if (hasUnreadRef.current) {
+      hasUnreadRef.current = false;
+      setTrayBadge(false);
+    }
   }, []);
 
   // Create a new public room
@@ -541,6 +652,20 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     }
   }, [currentRoomId]);
 
+  // Notify typing start
+  const notifyTypingStart = useCallback(() => {
+    if (currentRoomId) {
+      socketService.startTyping(currentRoomId);
+    }
+  }, [currentRoomId]);
+
+  // Notify typing stop
+  const notifyTypingStop = useCallback(() => {
+    if (currentRoomId) {
+      socketService.stopTyping(currentRoomId);
+    }
+  }, [currentRoomId]);
+
   return {
     // Rooms
     rooms,
@@ -558,6 +683,11 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     deleteMessage,
     reactToMessage,
     loadMessages,
+
+    // Typing indicators
+    typingUsers,
+    notifyTypingStart,
+    notifyTypingStop,
 
     // Room management
     selectRoom,

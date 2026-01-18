@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -71,7 +73,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.organizer.chat.data.model.LocationHistoryEntry
 import com.organizer.chat.data.model.UserWithLocation
+import com.organizer.chat.data.socket.ConnectionState
 import com.organizer.chat.service.ChatService
+import com.organizer.chat.ui.components.ConnectionStatusIcon
+import com.organizer.chat.ui.components.OfflineBanner
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.worker.LocationUpdateWorker
 import java.text.SimpleDateFormat
@@ -113,6 +118,15 @@ fun UsersScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     var showStatusDialog by remember { mutableStateOf(false) }
+
+    // Connection state - use current state as initial to avoid flicker
+    val initialConnectionState = remember {
+        if (chatService?.socketManager?.isConnected() == true) ConnectionState.Connected
+        else ConnectionState.Disconnected
+    }
+    val connectionState by chatService?.socketManager?.connectionState
+        ?.collectAsState(initial = initialConnectionState)
+        ?: remember { mutableStateOf(initialConnectionState) }
 
     // Permission state
     var hasLocationPermission by remember {
@@ -183,22 +197,32 @@ fun UsersScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Users") },
-                actions = {
-                    IconButton(onClick = onMapClick) {
-                        Icon(Icons.Default.Map, contentDescription = "Carte")
-                    }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Parametres")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+            Column {
+                TopAppBar(
+                    title = { Text("Users") },
+                    actions = {
+                        ConnectionStatusIcon(
+                            connectionState = connectionState,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                        IconButton(onClick = onMapClick) {
+                            Icon(Icons.Default.Map, contentDescription = "Carte")
+                        }
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Default.Settings, contentDescription = "Parametres")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 )
-            )
+                OfflineBanner(
+                    connectionState = connectionState,
+                    onRetry = { chatService?.reconnectIfNeeded() }
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -416,6 +440,20 @@ fun UserLocationCard(
                                     shape = RoundedCornerShape(4.dp)
                                 )
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    // Last client icon
+                    user.lastClient?.let { client ->
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = when (client) {
+                                "desktop" -> Icons.Default.Computer
+                                else -> Icons.Default.PhoneAndroid
+                            },
+                            contentDescription = client,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     }
                 }

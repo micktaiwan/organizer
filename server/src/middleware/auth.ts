@@ -18,6 +18,25 @@ export async function authMiddleware(
   next: NextFunction
 ): Promise<void> {
   try {
+    // Dev mode: skip auth for local testing (NEVER in production)
+    if (process.env.DEV_SKIP_AUTH === 'true' && process.env.NODE_ENV !== 'production') {
+      let devUser = await User.findOne().select('-passwordHash');
+      if (!devUser) {
+        // Create a dev user if none exists
+        devUser = await User.create({
+          username: 'dev',
+          displayName: 'Dev User',
+          passwordHash: 'not-a-real-hash',
+          isAdmin: true,
+        });
+        console.log('[Auth] Created dev user for local testing');
+      }
+      req.user = devUser;
+      req.userId = devUser._id.toString();
+      next();
+      return;
+    }
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
