@@ -299,6 +299,7 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
       });
       if (response.ok) {
         setMessages([]);
+        await clearEkoMessages(getServerId());
         addSystemMessage('Session reset OK');
       } else {
         addSystemMessage(`Reset failed: HTTP ${response.status}`);
