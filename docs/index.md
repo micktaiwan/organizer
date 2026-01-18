@@ -5,7 +5,7 @@
 | Document | Description |
 |----------|-------------|
 | [index.md](agent/index.md) | Vision, architecture, roadmap, capacités évolutives |
-| [memory-architecture.md](agent/memory-architecture.md) | Stratégie mémoire : quand chercher, quoi stocker, déduplication |
+| [memory-architecture.md](agent/memory-architecture.md) | Stratégie mémoire : collections, stockage, conscience émergente |
 
 ### À venir
 
@@ -23,9 +23,17 @@
 | [sensors.md](android/sensors.md) | Capteurs (accéléromètre, gyroscope, rotation vector) |
 | [long_press_debug.md](android/long_press_debug.md) | Notes de debug pour les gestes long press |
 
+## Desktop (Tauri)
+
+| Document | Description |
+|----------|-------------|
+| [notifications.md](desktop/notifications.md) | Système de notifications macOS, limitation dev vs prod |
+
 ## Server
 
-*(À venir)*
+| Document | Description |
+|----------|-------------|
+| [https.md](server/https.md) | TODO: Migration vers HTTPS |
 
 ## Archive
 

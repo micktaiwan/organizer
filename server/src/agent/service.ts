@@ -245,6 +245,16 @@ export class AgentService {
     console.log('[Agent] Session reset');
   }
 
+  async ping(): Promise<boolean> {
+    try {
+      await this.ensureWorker();
+      // Worker is spawned and ready - that's enough for health check
+      return this.isReady;
+    } catch {
+      return false;
+    }
+  }
+
   private async storeMemories(memories: FactMemoryInput[]): Promise<void> {
     console.log(`[Agent] 💾 Storing ${memories.length} memories from agent response`);
     for (const memory of memories) {

@@ -33,11 +33,11 @@ Le projet a deux facettes :
 │                    AGENT ENGINE (Backend)                   │
 │                                                             │
 │  ┌──────────────────┐  ┌──────────────────────────────┐    │
-│  │ Passive Observers │  │ Memory System                │    │
-│  │ • salon_observer  │  │ • Qdrant (self-hosted)       │    │
-│  │ • note_observer   │  │ • Context window             │    │
-│  │ • task_observer   │  │ • Consolidated insights      │    │
-│  │ • gps_observer    │  │ • Compression algo (TBD)     │    │
+│  │ Passive Observers │  │ Memory System (Qdrant)       │    │
+│  │ • salon_observer  │  │ • organizer_memory (facts)   │    │
+│  │ • note_observer   │  │ • organizer_live (context)   │    │
+│  │ • task_observer   │  │ • organizer_self (identity)  │    │
+│  │ • gps_observer    │  │ • organizer_goals (desires)  │    │
 │  └──────────────────┘  └──────────────────────────────┘    │
 │                            ↓                                │
 │  ┌──────────────────────────────────────────────────────┐  │
@@ -133,9 +133,10 @@ Cycle :
 | 2 | Premier dialogue (Claude Agent SDK, RAG) | ✅ |
 | 1.5 | Mémoire persistante → [memory-architecture.md](memory-architecture.md) | ✅ |
 | 2.5 | Boucle agentique avec tools → [memory-architecture.md](memory-architecture.md) | ✅ |
-| 3 | Vitals et personnalité | ⏳ |
-| 4 | Système de capacités | ⏳ |
-| 5 | Boucle agentique autonome | ⏳ |
+| 3 | Conscience émergente (self + goals) → [memory-architecture.md](memory-architecture.md#conscience-émergente-à-venir) | ⏳ |
+| 4 | Vitals et personnalité | ⏳ |
+| 5 | Système de capacités | ⏳ |
+| 6 | Boucle agentique autonome | ⏳ |
 
 ## Documentation
 

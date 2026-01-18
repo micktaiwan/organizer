@@ -9,3 +9,4 @@ export { LocationHistory, type ILocationHistory } from './LocationHistory.js';
 export { Track, type ITrack, type ITrackPoint } from './Track.js';
 export { McpToken, type IMcpToken } from './McpToken.js';
 export { McpAuditLog, type IMcpAuditLog, type McpAuditAction } from './McpAuditLog.js';
+export { SystemConfig, type ISystemConfig, getConfig, setConfig } from './SystemConfig.js';

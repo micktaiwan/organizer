@@ -6,6 +6,9 @@ import {
 
 let permissionGranted = false;
 
+// Key for storing pending notification navigation
+const PENDING_NOTIFICATION_KEY = "organizer-pending-notification-roomId";
+
 /**
  * Initialize notification permissions (call on app startup)
  */
@@ -24,12 +27,16 @@ export async function initNotifications(): Promise<boolean> {
 }
 
 /**
- * Show a desktop notification for a new message
+ * Show a desktop notification for a new message.
+ * Stores the roomId so the app can navigate to it when the window gains focus
+ * (macOS doesn't support notification click callbacks, but clicking a notification
+ * brings the app window to focus).
  */
 export async function showMessageNotification(
   senderName: string,
   roomName: string,
-  preview: string
+  preview: string,
+  roomId?: string
 ): Promise<void> {
   if (!permissionGranted) {
     permissionGranted = await isPermissionGranted();
@@ -37,6 +44,11 @@ export async function showMessageNotification(
   }
 
   try {
+    // Store the roomId for navigation when window gains focus
+    if (roomId) {
+      localStorage.setItem(PENDING_NOTIFICATION_KEY, roomId);
+    }
+
     sendNotification({
       title: `${senderName} - ${roomName}`,
       body: preview,
@@ -44,4 +56,16 @@ export async function showMessageNotification(
   } catch (err) {
     console.error("Failed to send notification:", err);
   }
+}
+
+/**
+ * Get and clear the pending notification roomId.
+ * Call this when the window gains focus to navigate to the room.
+ */
+export function consumePendingNotificationRoomId(): string | null {
+  const roomId = localStorage.getItem(PENDING_NOTIFICATION_KEY);
+  if (roomId) {
+    localStorage.removeItem(PENDING_NOTIFICATION_KEY);
+  }
+  return roomId;
 }

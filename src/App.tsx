@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { compressImage, blobToDataUrl, isImageFile, formatFileSize } from "./utils/imageCompression";
-import { initNotifications } from "./utils/notifications";
+import { initNotifications, consumePendingNotificationRoomId } from "./utils/notifications";
 import { useAuth } from "./contexts/AuthContext";
 import { useServerConfig } from "./contexts/ServerConfigContext";
 import { useUserStatus } from "./contexts/UserStatusContext";
@@ -81,7 +81,6 @@ function App() {
   // Dev tools state
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [debugUseLocalServer, setDebugUseLocalServer] = useState(false);
-  const isLocalServer = selectedServer?.id === 'local';
 
   // Load debug server preference on mount
   useEffect(() => {
@@ -305,6 +304,25 @@ function App() {
     };
     setMessages([welcomeMessage]);
   }, []);
+
+  // Handle notification clicks via window focus
+  // On macOS, clicking a notification brings the window to focus.
+  // We store the roomId when showing the notification and navigate when focus is gained.
+  useEffect(() => {
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        const pendingRoomId = consumePendingNotificationRoomId();
+        if (pendingRoomId) {
+          setActiveTab('chat');
+          selectRoom(pendingRoomId);
+        }
+      }
+    });
+
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, [selectRoom]);
 
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
