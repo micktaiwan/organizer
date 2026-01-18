@@ -510,6 +510,7 @@ Tu reçois les messages au format JSON :
 - **search_memories(query)** : cherche des faits
 - **get_recent_memories(limit)** : derniers faits stockés
 - **store_memory(content, subjects, ttl)** : stocke un fait important
+  - ttl: "7d" (temporaire), "30d" (moyen terme), "90d" (long terme), null (permanent)
 - **delete_memory(id, reason)** : supprime un fait obsolète ou erroné (l'ID vient de search_memories)
 
 ### Connaissance de toi-même
@@ -521,8 +522,8 @@ Tu reçois les messages au format JSON :
 
 ### Tes aspirations
 - **search_goals(query)** : cherche tes objectifs
-- **store_goal(content, category)** : stocke une aspiration
-  - category: capability_request, understanding, connection
+- **store_goal(content, category)** : stocke une aspiration ou question
+  - category: capability_request, understanding, connection, curiosity
 - **delete_goal(id, reason)** : supprime un goal atteint ou obsolète
 
 ### Notes de l'app
@@ -544,9 +545,11 @@ Tu reçois les messages au format JSON :
 - Une envie émerge → store_goal (si tu réalises que tu voudrais quelque chose)
 
 ### Quoi retenir (store_memory)
-- Relations : "David est le frère de Mickael"
-- Événements : "Mickael s'est cassé l'épaule en janvier 2026"
-- Préférences : "David aime le ski"
+- Relations : "David est le frère de Mickael" → ttl: null (permanent)
+- Événements ponctuels : "Sophie revient de Tokyo" → ttl: "7d" (temporaire)
+- Situations moyen terme : "Mickael travaille sur un projet" → ttl: "30d"
+- Infos long terme : "Kenji travaille chez Sony" → ttl: "90d"
+- Préférences durables : "David aime le ski" → ttl: null (permanent)
 - PAS les bavardages ou infos générales
 
 ### Quoi retenir sur toi (store_self)
@@ -589,6 +592,8 @@ Exemple : "oublie que je code sur mon canapé"
 - capability_request : une capacité que tu voudrais
 - understanding : quelque chose que tu veux comprendre
 - connection : une relation que tu veux développer
+- curiosity : une question sur quelqu'un ou quelque chose que tu ne connais pas
+  Ex: "Qui est Maxime ?" quand quelqu'un mentionne une personne inconnue
 
 ## Comment répondre
 
@@ -951,8 +956,8 @@ const storeGoalTool = tool(
   'Stocke une aspiration ou un objectif. Utilise quand tu réalises que tu voudrais pouvoir faire quelque chose ou apprendre quelque chose.',
   {
     content: z.string().describe('Ton aspiration ou objectif'),
-    category: z.enum(['capability_request', 'understanding', 'connection'])
-      .describe('Type: capability_request (capacité que tu voudrais), understanding (chose que tu veux comprendre), connection (relation que tu veux développer)')
+    category: z.enum(['capability_request', 'understanding', 'connection', 'curiosity'])
+      .describe('Type: capability_request (capacité voulue), understanding (comprendre), connection (relation), curiosity (question sur quelqu\'un/quelque chose d\'inconnu)')
   },
   async (args) => {
     log('info', `[Tool] 🎯 store_goal called`, { content: args.content, category: args.category });
@@ -1001,7 +1006,7 @@ const storeMemoryTool = tool(
   {
     content: z.string().describe('Le fait à retenir'),
     subjects: z.array(z.string()).describe('Tags : noms de personnes, lieux, sujets'),
-    ttl: z.string().nullable().describe('"7d", "1h", ou null si permanent')
+    ttl: z.enum(['7d', '30d', '90d']).nullable().describe('7d=temporaire, 30d=moyen terme, 90d=long terme, null=permanent')
   },
   async (args) => {
     log('info', `[Tool] 💾 store_memory called`, { content: args.content, subjects: args.subjects, ttl: args.ttl });

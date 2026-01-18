@@ -10,6 +10,7 @@ interface MemoryPayload {
   goalCategory?: string;
   subjects?: string[];
   authorName?: string;
+  expiresAt?: string | null;
 }
 
 interface MemoryItem {
@@ -51,6 +52,7 @@ const GOAL_CATEGORIES: Record<string, string> = {
   capability_request: 'Capability Request',
   understanding: 'Understanding',
   connection: 'Connection',
+  curiosity: 'Curiosity',
 };
 
 export function BrainDashboard({ serverUrl, getAuthHeaders }: BrainDashboardProps) {
@@ -310,6 +312,32 @@ export function BrainDashboard({ serverUrl, getAuthHeaders }: BrainDashboardProp
     });
   };
 
+  const formatTTL = (expiresAt: string | null | undefined): { text: string; className: string } => {
+    if (!expiresAt) {
+      return { text: '∞', className: 'ttl-permanent' };
+    }
+
+    const now = Date.now();
+    const expiry = new Date(expiresAt).getTime();
+    const diff = expiry - now;
+
+    if (diff <= 0) {
+      return { text: 'expiré', className: 'ttl-expired' };
+    }
+
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days > 0) {
+      return { text: `${days}j`, className: 'ttl-days' };
+    } else if (hours > 0) {
+      return { text: `${hours}h`, className: 'ttl-hours' };
+    } else {
+      return { text: `${minutes}m`, className: 'ttl-minutes' };
+    }
+  };
+
   const renderCategoryGroup = (
     category: string,
     items: MemoryItem[],
@@ -450,26 +478,32 @@ export function BrainDashboard({ serverUrl, getAuthHeaders }: BrainDashboardProp
               />
             </div>
             <div className="facts-list">
-              {filteredFacts.map((item) => (
-                <div key={item.id} className="brain-item fact-item">
-                  <div className="item-content">{item.payload.content}</div>
-                  <div className="item-meta">
-                    {item.payload.subjects && item.payload.subjects.length > 0 && (
-                      <span className="item-subjects">
-                        {item.payload.subjects.join(', ')}
+              {filteredFacts.map((item) => {
+                const ttl = formatTTL(item.payload.expiresAt);
+                return (
+                  <div key={item.id} className="brain-item fact-item">
+                    <div className="item-content">{item.payload.content}</div>
+                    <div className="item-meta">
+                      {item.payload.subjects && item.payload.subjects.length > 0 && (
+                        <span className="item-subjects">
+                          {item.payload.subjects.join(', ')}
+                        </span>
+                      )}
+                      <span className={`item-ttl ${ttl.className}`} title="TTL">
+                        {ttl.text}
                       </span>
-                    )}
-                    <span className="item-date">{formatDate(item.payload.timestamp)}</span>
-                    <button
-                      className="item-delete"
-                      onClick={() => deleteItem('facts', item.id)}
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                      <span className="item-date">{formatDate(item.payload.timestamp)}</span>
+                      <button
+                        className="item-delete"
+                        onClick={() => deleteItem('facts', item.id)}
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {filteredFacts.length === 0 && (
                 <div className="empty-state">
                   {factsSearch ? 'No matching facts' : 'No facts'}

@@ -62,6 +62,17 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
 
   // Save preference when it changes
   const setUseLocalServerPersisted = async (value: boolean) => {
+    // Clear any previous error
+    setLocalServerError(null);
+
+    // If switching to local, check if server is running first
+    if (value && !useLocalServer) {
+      const isRunning = await localServer.checkStatus();
+      if (!isRunning) {
+        setLocalServerError('Server local non démarré');
+      }
+    }
+
     onUseLocalServerChange(value);
     try {
       if (!debugStoreRef.current) {
@@ -94,6 +105,7 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
   const [memoriesLoading, setMemoriesLoading] = useState(false);
   const [prodServerStatus, setProdServerStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
   const [liveStats, setLiveStats] = useState<string | null>(null);
+  const [localServerError, setLocalServerError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Group consecutive system messages into single bubbles
@@ -139,6 +151,13 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
       checkProdServer();
     }
   }, [useLocalServer]);
+
+  // Clear error when server starts running
+  useEffect(() => {
+    if (localServer.isRunning) {
+      setLocalServerError(null);
+    }
+  }, [localServer.isRunning]);
 
   const checkProdServer = async () => {
     try {
@@ -635,7 +654,9 @@ export function PetDebugScreen({ showLogPanel, onToggleLogPanel, useLocalServer,
         {useLocalServer ? (
           <div className="local-server-controls">
             <span className={`status-dot ${localServer.isRunning ? 'running' : localServer.isStarting ? 'starting' : 'stopped'}`} />
-            <span>{localServer.isRunning ? 'Running' : localServer.isStarting ? 'Starting...' : 'Stopped'}</span>
+            <span className={localServerError ? 'error-text' : ''}>
+              {localServerError || (localServer.isRunning ? 'Running' : localServer.isStarting ? 'Starting...' : 'Stopped')}
+            </span>
             <button onClick={toggleLocalServer} title={localServer.isRunning ? 'Stop' : 'Start'}>
               <Power size={14} />
             </button>
