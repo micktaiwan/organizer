@@ -1,0 +1,368 @@
+.note-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  color: #f5f5f5;
+  position: relative;
+}
+
+.note-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-back {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.note-editor-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.note-editor-pin-btn,
+.note-editor-delete-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.note-editor-pin-btn:hover,
+.note-editor-delete-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-pin-btn.active {
+  color: #ffd700;
+}
+
+.note-editor-delete-btn:hover {
+  color: #ff3b30;
+}
+
+.note-editor-copy-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.note-editor-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-copy-toast {
+  position: absolute;
+  top: 60px;
+  right: 16px;
+  padding: 8px 16px;
+  background: #34c759;
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+  animation: fadeInOut 2s ease-in-out forwards;
+  z-index: 100;
+}
+
+.note-editor-title {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #f5f5f5;
+  outline: none;
+}
+
+.note-editor-title::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.note-editor-content {
+  flex: 1;
+  width: 100%;
+  padding: 0 1.5rem 1rem;
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.9);
+  outline: none;
+  resize: none;
+  line-height: 1.6;
+  min-height: 0;
+}
+
+.note-editor-content::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.note-editor-checklist {
+  flex: 1;
+  padding: 0 1rem 1rem;
+  overflow-y: auto;
+}
+
+.note-editor-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.note-editor-checklist-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.note-editor-checklist-item.checked {
+  opacity: 0.5;
+}
+
+.note-editor-checklist-item.checked .checklist-checkbox {
+  color: #34c759;
+}
+
+.note-editor-checklist-item.checked .checklist-item-text {
+  text-decoration: line-through;
+}
+
+.note-editor-checklist-item:hover .checklist-item-delete {
+  opacity: 1;
+}
+
+.note-editor-checklist-add {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.note-editor-checklist-add input {
+  flex: 1;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  color: #f5f5f5;
+  font-size: 1rem;
+  outline: none;
+}
+
+.note-editor-checklist-add input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.note-editor-checklist-placeholder {
+  padding: 2rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.note-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.note-editor-tool {
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.note-editor-tool:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-tool:disabled,
+.note-editor-tool.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.note-editor-colors {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.note-editor-color {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.note-editor-color:hover {
+  transform: scale(1.1);
+}
+
+.note-editor-color.selected {
+  border-color: white;
+}
+
+.note-editor-label-picker {
+  position: relative;
+}
+
+.note-editor-label-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 0.5rem;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 200px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.note-editor-no-labels {
+  padding: 1rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+  text-align: center;
+  margin: 0;
+}
+
+.note-editor-label-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  color: #f5f5f5;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.note-editor-label-option:hover {
+  background: #333;
+}
+
+.note-editor-label-option.selected {
+  background: rgba(0, 122, 255, 0.2);
+}
+
+.note-editor-label-option .label-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.note-editor-selected-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.note-editor-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.note-editor-dialog {
+  background: #2a2a2a;
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 320px;
+  text-align: center;
+}
+
+.note-editor-dialog h3 {
+  margin: 0 0 0.5rem 0;
+  color: #f5f5f5;
+}
+
+.note-editor-dialog p {
+  margin: 0 0 1.5rem 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9rem;
+}
+
+.note-editor-dialog-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.note-editor-dialog-actions button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.note-editor-dialog-actions button:first-child {
+  background: #444;
+  color: #f5f5f5;
+}
+
+.note-editor-dialog-actions button.danger {
+  background: #ff3b30;
+  color: white;
+}

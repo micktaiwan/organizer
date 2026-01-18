@@ -1,0 +1,78 @@
+.label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  border: 1px solid;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.label-chip.clickable {
+  cursor: pointer;
+}
+
+.label-chip.clickable:hover {
+  opacity: 0.8;
+}
+
+.label-chip.selected {
+  color: white;
+}
+
+.label-chip-sm {
+  padding: 0.15rem 0.35rem;
+  font-size: 0.7rem;
+}
+
+.label-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.label-chip-sm .label-chip-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.label-chip-name {
+  white-space: nowrap;
+}
+
+.label-chip-remove {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+}
+
+.label-chip-remove:hover {
+  opacity: 1;
+}
+
+.label-color-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.label-color-btn:hover {
+  transform: scale(1.1);
+}
+
+.label-color-btn.selected {
+  border-color: white;
+}
