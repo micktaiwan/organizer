@@ -1,0 +1,103 @@
+.sender-status-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  margin-left: 0.25rem;
+}
+
+.sender-status-label.available {
+  background: rgba(52, 199, 89, 0.15);
+  color: #34c759;
+}
+
+.sender-status-label.busy {
+  background: rgba(255, 149, 0, 0.15);
+  color: #ff9500;
+}
+
+.sender-status-label.away {
+  background: rgba(255, 59, 48, 0.15);
+  color: #ff3b30;
+}
+
+.sender-status-label.dnd {
+  background: rgba(142, 142, 147, 0.15);
+  color: #8e8e93;
+}
+
+.sender-status-label.offline {
+  background: rgba(142, 142, 147, 0.15);
+  color: #8e8e93;
+}
+
+.sender-status-message {
+  font-size: 0.65rem;
+  font-style: italic;
+  color: #888;
+  margin-left: 0.25rem;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: #34c759;
+}
+
+.status-dot.offline {
+  background: #ff9500;
+}
+
+.status-dot.available {
+  background: #34c759; /* Green */
+}
+
+.status-dot.busy {
+  background: #ff9500; /* Orange */
+}
+
+.status-dot.away {
+  background: #ff3b30; /* Red */
+}
+
+.status-dot.dnd {
+  background: #8e8e93; /* Gray */
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 0.75rem 1rem;
+  background: white;
+  border-radius: 18px;
+  border-bottom-left-radius: 4px;
+  width: fit-content;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  background: #999;
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out both;
+}
+
+.typing-indicator span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@media (prefers-color-scheme: dark) {
+.typing-indicator {
+    background: #2a2a2a;
+  }
+}

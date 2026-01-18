@@ -1,0 +1,234 @@
+.call-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: #34c759;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-btn:hover:not(:disabled) {
+  background: #2db84d;
+}
+
+.call-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.call-overlay.incoming-call {
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.call-overlay.connected {
+  flex-direction: column;
+}
+
+.incoming-call-modal {
+  background: #2a2a2a;
+  border-radius: 16px;
+  padding: 2rem;
+  text-align: center;
+  min-width: 300px;
+}
+
+.caller-info {
+  margin-bottom: 1.5rem;
+}
+
+.caller-avatar {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.caller-avatar.pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.caller-info h3 {
+  font-size: 1.25rem;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.caller-info p {
+  color: #999;
+  font-size: 0.9rem;
+}
+
+.incoming-call-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.reject-btn {
+  background: #ff3b30;
+  padding: 0.75rem 1.25rem;
+}
+
+.reject-btn:hover:not(:disabled) {
+  background: #e0342b;
+}
+
+.accept-btn {
+  background: #34c759;
+  padding: 0.75rem 1.25rem;
+}
+
+.accept-btn:hover:not(:disabled) {
+  background: #2db84d;
+}
+
+.accept-btn.video {
+  background: #007aff;
+}
+
+.accept-btn.video:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.calling-info {
+  text-align: center;
+  color: #fff;
+}
+
+.calling-info h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.calling-info p {
+  color: #999;
+  margin-bottom: 2rem;
+}
+
+.video-container {
+  position: relative;
+  width: 100%;
+  height: calc(100% - 80px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remote-video {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+}
+
+.remote-video.audio-only {
+  display: none;
+}
+
+.local-video {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  width: 120px;
+  height: 90px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid #fff;
+}
+
+.call-controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.5);
+  width: 100%;
+}
+
+.control-btn {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  background: #444;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-btn:hover:not(:disabled) {
+  background: #555;
+}
+
+.control-btn.disabled {
+  background: #ff3b30;
+}
+
+.end-call-btn {
+  background: #ff3b30;
+  padding: 0.75rem 1.5rem;
+  border-radius: 24px;
+}
+
+.end-call-btn:hover:not(:disabled) {
+  background: #e0342b;
+}
+
+.call-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.call-button.audio {
+  background: #e8f4f8;
+  color: #007aff;
+}
+
+.call-button.audio:hover {
+  background: #d0e8f2;
+}
+
+.call-button.video {
+  background: #e8f8e8;
+  color: #34c759;
+}
+
+.call-button.video:hover {
+  background: #d0f0d0;
+}
+
+@media (prefers-color-scheme: dark) {
+.call-button.audio {
+    background: #1a3a4a;
+    color: #5fa8d3;
+  }
+
+.call-button.audio:hover {
+    background: #244a5a;
+  }
+
+.call-button.video {
+    background: #1a3a1a;
+    color: #5fd35f;
+  }
+
+.call-button.video:hover {
+    background: #244a24;
+  }
+}
