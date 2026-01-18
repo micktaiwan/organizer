@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
-import { useAuth } from '../../contexts/AuthContext';
+import { useEkoAuth } from '../../hooks/useEkoAuth';
 import './LogPanel.css';
 
 const LOCAL_SERVER_URL = 'http://localhost:3001';
@@ -20,15 +20,16 @@ interface LogPanelProps {
 }
 
 export function LogPanel({ useLocalServer, onClose }: LogPanelProps) {
-  const { token, user } = useAuth();
+  const serverUrl = useLocalServer ? LOCAL_SERVER_URL : PROD_SERVER_URL;
+  const serverId = useLocalServer ? 'local' : 'prod';
+  const ekoAuth = useEkoAuth(serverId, serverUrl);
+
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  const isAdmin = user?.isAdmin ?? false;
-  const serverUrl = useLocalServer ? LOCAL_SERVER_URL : PROD_SERVER_URL;
   const serverName = useLocalServer ? 'Local' : 'Prod';
 
   useEffect(() => {
@@ -38,19 +39,23 @@ export function LogPanel({ useLocalServer, onClose }: LogPanelProps) {
       socketRef.current = null;
     }
 
-    // Only connect if user is admin and server is selected
-    if (!token || !isAdmin || !serverUrl) {
-      setAuthError(!serverUrl ? 'Aucun serveur sélectionné' : 'Accès réservé aux administrateurs');
+    // Skip auth check for local server (DEV mode)
+    // For prod, require Eko token
+    if (!useLocalServer && !ekoAuth.token) {
+      if (ekoAuth.isLoading) {
+        return; // Wait for token to load
+      }
+      setAuthError('Login Eko requis pour voir les logs prod');
       setIsConnected(false);
       return;
     }
 
     setAuthError(null);
 
-    // Connect to logs namespace with auth token
+    // Connect to logs namespace with auth token (skip for local)
     const socket = io(`${serverUrl}/logs`, {
       transports: ['websocket'],
-      auth: { token },
+      auth: useLocalServer ? {} : { token: ekoAuth.token },
     });
 
     socketRef.current = socket;
@@ -98,7 +103,7 @@ export function LogPanel({ useLocalServer, onClose }: LogPanelProps) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [token, isAdmin, serverUrl]);
+  }, [useLocalServer, ekoAuth.token, ekoAuth.isLoading, serverUrl]);
 
   // Auto-scroll to bottom
   useEffect(() => {
