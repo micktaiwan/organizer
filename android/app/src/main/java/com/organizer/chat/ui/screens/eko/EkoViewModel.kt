@@ -1,4 +1,4 @@
-package com.organizer.chat.ui.screens.tamagotchi
+package com.organizer.chat.ui.screens.eko
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class TamagotchiUiState(
+data class EkoUiState(
     val isLoading: Boolean = false,
     val currentThought: String? = null,
     val currentExpression: String = "neutral",
@@ -19,14 +19,14 @@ data class TamagotchiUiState(
     val error: String? = null
 )
 
-class TamagotchiViewModel : ViewModel() {
+class EkoViewModel : ViewModel() {
 
     companion object {
-        private const val TAG = "TamagotchiViewModel"
+        private const val TAG = "EkoViewModel"
     }
 
-    private val _uiState = MutableStateFlow(TamagotchiUiState())
-    val uiState: StateFlow<TamagotchiUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(EkoUiState())
+    val uiState: StateFlow<EkoUiState> = _uiState.asStateFlow()
 
     fun askQuestion(question: String) {
         if (question.isBlank()) return

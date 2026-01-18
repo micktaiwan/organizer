@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Power, RefreshCw, ChevronDown, ChevronUp, Trash2, Skull } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useServerConfig } from '../../contexts/ServerConfigContext';
+import { useLocalServerControl } from '../../hooks/useLocalServerControl';
 
 type AuthMode = 'login' | 'register';
 
@@ -10,6 +12,12 @@ export const AuthScreen: React.FC = () => {
   const [mode, setMode] = useState<AuthMode>('login');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Local server control
+  const [logsExpanded, setLogsExpanded] = useState(false);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  const localServer = useLocalServerControl();
+  const isLocalServer = selectedServer?.id === 'local';
 
   // Form fields
   const [username, setUsername] = useState('');
@@ -32,6 +40,26 @@ export const AuthScreen: React.FC = () => {
     };
     loadCredentials();
   }, [selectedServer, getSavedCredentials]);
+
+  // Check local server status when local server is selected
+  useEffect(() => {
+    if (isLocalServer) {
+      localServer.checkStatus();
+    }
+  }, [isLocalServer]);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    if (logsExpanded && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [localServer.logs, logsExpanded]);
+
+  // Expand logs panel when starting server
+  const handleStartServer = async () => {
+    setLogsExpanded(true);
+    await localServer.startServer();
+  };
 
   const resetForm = () => {
     setUsername('');
@@ -130,6 +158,99 @@ export const AuthScreen: React.FC = () => {
         <span className="server-name">{selectedServer?.name || 'Non configuré'}</span>
         <span className="server-change">Changer</span>
       </div>
+
+      {/* Local Server Control Panel */}
+      {isLocalServer && (
+        <div className="local-server-panel">
+          <div className="local-server-status">
+            <span className={`status-dot ${localServer.isRunning ? 'running' : localServer.isStarting ? 'starting' : 'stopped'}`} />
+            <span className="status-text">
+              Serveur local: {localServer.isRunning ? 'Running' : localServer.isStarting ? 'Starting...' : 'Stopped'}
+            </span>
+            <div className="local-server-actions">
+              {!localServer.isRunning && !localServer.isStarting && (
+                <button
+                  type="button"
+                  className="btn-server-action btn-start"
+                  onClick={handleStartServer}
+                  title="Démarrer le serveur"
+                >
+                  <Power size={14} />
+                  Démarrer
+                </button>
+              )}
+              {(localServer.isRunning || localServer.isStarting) && (
+                <button
+                  type="button"
+                  className="btn-server-action btn-stop"
+                  onClick={localServer.stopServer}
+                  title="Arrêter le serveur"
+                >
+                  <Power size={14} />
+                  Stop
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-server-action btn-refresh"
+                onClick={localServer.checkStatus}
+                title="Vérifier le status"
+              >
+                <RefreshCw size={14} />
+              </button>
+              <button
+                type="button"
+                className="btn-server-action btn-kill"
+                onClick={localServer.forceKillServer}
+                title="Force kill"
+              >
+                <Skull size={14} />
+              </button>
+              <button
+                type="button"
+                className="btn-server-action btn-toggle-logs"
+                onClick={() => setLogsExpanded(!logsExpanded)}
+                title={logsExpanded ? 'Masquer les logs' : 'Afficher les logs'}
+              >
+                {logsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Logs Panel */}
+          {logsExpanded && (
+            <div className="local-server-logs">
+              <div className="logs-header">
+                <span>Logs de démarrage</span>
+                <button
+                  type="button"
+                  className="btn-clear-logs"
+                  onClick={localServer.clearLogs}
+                  title="Effacer les logs"
+                >
+                  <Trash2 size={12} />
+                  Clear
+                </button>
+              </div>
+              <div className="logs-content">
+                {localServer.logs.length === 0 ? (
+                  <div className="logs-empty">Aucun log</div>
+                ) : (
+                  localServer.logs.map(log => (
+                    <div key={log.id} className={`log-entry log-${log.type}`}>
+                      <span className="log-time">
+                        {log.timestamp.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </span>
+                      <span className="log-content">{log.content}</span>
+                    </div>
+                  ))
+                )}
+                <div ref={logsEndRef} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="connection-box auth-box">
         <div className="auth-tabs">

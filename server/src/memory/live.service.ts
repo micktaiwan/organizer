@@ -207,6 +207,55 @@ export async function clearLiveCollection(): Promise<number> {
 }
 
 /**
+ * Delete a single live message by ID
+ */
+export async function deleteLiveMessage(id: string): Promise<void> {
+  await qdrantRequest(`/collections/${COLLECTION_NAME}/points/delete`, {
+    method: 'POST',
+    body: JSON.stringify({
+      points: [id],
+    }),
+  });
+  console.log(`[Live] Deleted message: ${id}`);
+}
+
+/**
+ * Get all messages with IDs (for brain dashboard)
+ */
+export async function getAllLiveMessagesWithIds(): Promise<{ id: string; payload: LiveMessagePayload }[]> {
+  const allMessages: { id: string; payload: LiveMessagePayload }[] = [];
+  let offset: string | null = null;
+  const BATCH_SIZE = 1000;
+
+  do {
+    const result: ScrollResponse<{ id: string; payload: LiveMessagePayload }> = await qdrantRequest(
+      `/collections/${COLLECTION_NAME}/points/scroll`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          limit: BATCH_SIZE,
+          offset: offset,
+          with_payload: true,
+          with_vector: false,
+        }),
+      }
+    );
+
+    allMessages.push(...result.result.points);
+    offset = result.result.next_page_offset;
+  } while (offset !== null);
+
+  // Sort by timestamp DESC (most recent first)
+  return allMessages.sort((a, b) => {
+    const timeA = new Date(a.payload.timestamp).getTime();
+    const timeB = new Date(b.payload.timestamp).getTime();
+    if (isNaN(timeA)) return 1;
+    if (isNaN(timeB)) return -1;
+    return timeB - timeA;
+  });
+}
+
+/**
  * Get collection stats
  */
 export async function getLiveCollectionInfo(): Promise<{ pointsCount: number }> {

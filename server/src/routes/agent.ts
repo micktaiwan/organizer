@@ -3,8 +3,12 @@ import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { agentService } from '../agent/index.js';
 import { getCollectionInfo, listMemories, deleteMemory } from '../memory/index.js';
+import brainRoutes from './brain.js';
 
 const router = Router();
+
+// Mount brain sub-routes
+router.use('/brain', brainRoutes);
 
 // Lightweight health check - no LLM call, just checks worker is running
 router.get('/health', authMiddleware, async (_req: AuthRequest, res: Response): Promise<void> => {

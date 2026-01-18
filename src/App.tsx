@@ -81,22 +81,51 @@ function App() {
   // Dev tools state
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [debugUseLocalServer, setDebugUseLocalServer] = useState(false);
+  const [debugViewMode, setDebugViewMode] = useState<'chat' | 'brain'>('chat');
 
-  // Load debug server preference on mount
+  // Track if preferences have been loaded to avoid overwriting on mount
+  const debugPrefsLoaded = useRef(false);
+
+  // Load debug preferences on mount
   useEffect(() => {
-    const loadDebugPreference = async () => {
+    const loadDebugPreferences = async () => {
       try {
         const store = await load('pet-debug.json', { autoSave: false, defaults: {} });
-        const saved = await store.get<boolean>('useLocalServer');
-        if (saved !== null && saved !== undefined) {
-          setDebugUseLocalServer(saved);
+        const savedServer = await store.get<boolean>('pet_debug_use_local');
+        if (savedServer !== null && savedServer !== undefined) {
+          setDebugUseLocalServer(savedServer);
         }
+        const savedViewMode = await store.get<'chat' | 'brain'>('viewMode');
+        if (savedViewMode !== null && savedViewMode !== undefined) {
+          setDebugViewMode(savedViewMode);
+        }
+        const savedShowLogPanel = await store.get<boolean>('showLogPanel');
+        if (savedShowLogPanel !== null && savedShowLogPanel !== undefined) {
+          setShowLogPanel(savedShowLogPanel);
+        }
+        debugPrefsLoaded.current = true;
       } catch (error) {
-        console.error('[App] Failed to load debug server preference:', error);
+        console.error('[App] Failed to load debug preferences:', error);
+        debugPrefsLoaded.current = true;
       }
     };
-    loadDebugPreference();
+    loadDebugPreferences();
   }, []);
+
+  // Save showLogPanel when it changes (but not on initial mount)
+  useEffect(() => {
+    if (!debugPrefsLoaded.current) return;
+    const saveShowLogPanel = async () => {
+      try {
+        const store = await load('pet-debug.json', { autoSave: false, defaults: {} });
+        await store.set('showLogPanel', showLogPanel);
+        await store.save();
+      } catch (error) {
+        console.error('[App] Failed to save showLogPanel:', error);
+      }
+    };
+    saveShowLogPanel();
+  }, [showLogPanel]);
 
   // Notes view state
   const [notesView, setNotesView] = useState<'list' | 'editor' | 'labels'>('list');
@@ -545,7 +574,7 @@ function App() {
           onClick={() => setActiveTab('pet')}
         >
           <Bug size={18} />
-          <span>Pet</span>
+          <span>Eko</span>
         </button>
       </div>
 
@@ -561,6 +590,8 @@ function App() {
           onDeleteRoom={deleteRoom}
           onLeaveRoom={leaveRoom}
           isLoading={isLoadingRooms}
+          username={username}
+          onLogout={logout}
         />
 
         <div className="chat-main">
@@ -579,7 +610,6 @@ function App() {
               onStatusChange={handleStatusChange}
               onOpenSettings={() => setShowAdminPanel(true)}
               onChangeServer={handleChangeServer}
-              onLogout={logout}
             />
           )}
 
@@ -672,6 +702,8 @@ function App() {
             onToggleLogPanel={() => setShowLogPanel(!showLogPanel)}
             useLocalServer={debugUseLocalServer}
             onUseLocalServerChange={setDebugUseLocalServer}
+            viewMode={debugViewMode}
+            onViewModeChange={setDebugViewMode}
           />
         </div>
       )}

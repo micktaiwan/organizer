@@ -116,6 +116,16 @@
   background: #666;
 }
 
+.status-dot.starting {
+  background: #ff9500;
+  animation: pulse-dot 1s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .pet-debug-messages {
   flex: 1 1 0;
   min-height: 0;

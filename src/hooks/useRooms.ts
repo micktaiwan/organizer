@@ -181,6 +181,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     if (!currentRoomId || !userId) return;
 
     const unsubNewMessage = socketService.on('message:new', async (data: any) => {
+      // Skip own messages - we already have them via optimistic update
+      if (data.from === userId) return;
+
       if (data.roomId === currentRoomId && data.messageId) {
         // Retry logic for transient failures
         const maxRetries = 3;

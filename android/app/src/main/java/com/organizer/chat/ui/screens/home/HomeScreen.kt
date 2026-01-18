@@ -21,7 +21,7 @@ import com.organizer.chat.ui.screens.users.UsersScreen
 import com.organizer.chat.ui.screens.users.UsersViewModel
 import com.organizer.chat.ui.screens.notes.NotesScreen
 import com.organizer.chat.ui.screens.rooms.RoomsContent
-import com.organizer.chat.ui.screens.tamagotchi.TamagotchiScreen
+import com.organizer.chat.ui.screens.eko.EkoScreen
 import com.organizer.chat.ui.screens.gallery.GalleryScreen
 import com.organizer.chat.ui.screens.gallery.GalleryViewModel
 import com.organizer.chat.util.AppPreferences
@@ -32,7 +32,7 @@ enum class HomeTab {
     GALLERY,
     NOTES,
     USERS,
-    TAMAGOTCHI
+    EKO
 }
 
 @Composable
@@ -142,15 +142,15 @@ fun HomeScreen(
                     label = { Text("Users") }
                 )
                 NavigationBarItem(
-                    selected = selectedTab == HomeTab.TAMAGOTCHI,
-                    onClick = { selectedTabIndex = HomeTab.TAMAGOTCHI.ordinal },
+                    selected = selectedTab == HomeTab.EKO,
+                    onClick = { selectedTabIndex = HomeTab.EKO.ordinal },
                     icon = {
                         Icon(
                             imageVector = Icons.Default.Pets,
-                            contentDescription = "Pet"
+                            contentDescription = "Eko"
                         )
                     },
-                    label = { Text("Pet") }
+                    label = { Text("Eko") }
                 )
             }
         }
@@ -196,8 +196,8 @@ fun HomeScreen(
                         onMapClick = onMapClick
                     )
                 }
-                HomeTab.TAMAGOTCHI -> {
-                    TamagotchiScreen()
+                HomeTab.EKO -> {
+                    EkoScreen()
                 }
             }
         }

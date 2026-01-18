@@ -1,4 +1,4 @@
-import { Note } from '../../models/index.js';
+import { listNotes } from '../../services/notes.service.js';
 import { IMcpToken } from '../../models/McpToken.js';
 import { IUser } from '../../models/User.js';
 import { McpToolDefinition, McpToolResult } from '../types.js';
@@ -30,10 +30,7 @@ export async function listNotesHandler(
     const archived = args.archived === true;
     const limit = Math.min(Number(args.limit) || 50, 100);
 
-    const notes = await Note.find({ isArchived: archived })
-      .populate('createdBy', 'username displayName')
-      .sort({ isPinned: -1, order: 1 })
-      .limit(limit);
+    const notes = await listNotes({ archived, limit });
 
     const noteList = notes.map(note => ({
       id: note._id.toString(),

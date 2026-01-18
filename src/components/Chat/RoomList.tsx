@@ -12,6 +12,8 @@ interface RoomListProps {
   onDeleteRoom?: (roomId: string) => Promise<void>;
   onLeaveRoom?: (roomId: string) => Promise<void>;
   isLoading: boolean;
+  username?: string;
+  onLogout?: () => void;
 }
 
 interface DeleteConfirmModalProps {
@@ -67,6 +69,8 @@ export const RoomList: React.FC<RoomListProps> = ({
   onDeleteRoom,
   onLeaveRoom,
   isLoading,
+  username,
+  onLogout,
 }) => {
   const [roomToDelete, setRoomToDelete] = useState<Room | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -233,6 +237,18 @@ export const RoomList: React.FC<RoomListProps> = ({
           );
           })}
         </div>
+        {onLogout && (
+          <div className="room-list-footer">
+            <button
+              className="room-list-logout-btn"
+              onClick={onLogout}
+              title="Se déconnecter"
+            >
+              <LogOut size={14} />
+              <span>Déconnexion{username ? ` (${username})` : ''}</span>
+            </button>
+          </div>
+        )}
       </aside>
 
       {roomToDelete && (

@@ -1,4 +1,4 @@
-package com.organizer.chat.ui.screens.tamagotchi
+package com.organizer.chat.ui.screens.eko
 
 import androidx.compose.animation.core.*
 import androidx.compose.runtime.*
@@ -14,7 +14,8 @@ import kotlin.math.sin
 data class ExpressionParams(
     val eyeOpenness: Float,
     val mouthOpenness: Float,
-    val smileAmount: Float = 1f  // 0 = neutral, 1 = normal smile, 2 = big smile
+    val smileAmount: Float = 1f,  // 0 = neutral, 1 = normal smile, 2 = big smile
+    val isLaughing: Boolean = false  // Show tears of joy
 )
 
 /**
@@ -22,7 +23,7 @@ data class ExpressionParams(
  */
 fun String.toExpressionParams(): ExpressionParams = when (this) {
     "happy" -> ExpressionParams(1.0f, 0.0f, 2f)      // Eyes open, big closed smile
-    "laughing" -> ExpressionParams(0.3f, 0.8f, 2f)   // Squinted eyes, open laughing mouth
+    "laughing" -> ExpressionParams(0.15f, 0.9f, 2f, isLaughing = true)  // Very squinted eyes, open laughing mouth with tears
     "surprised" -> ExpressionParams(1.0f, 0.7f, 0f)  // Wide eyes, "O" mouth
     "sad" -> ExpressionParams(0.7f, 0.0f, -1f)       // Half-closed eyes, frown
     "sleepy" -> ExpressionParams(0.2f, 0.0f, 0.5f)   // Nearly closed eyes
@@ -32,9 +33,9 @@ fun String.toExpressionParams(): ExpressionParams = when (this) {
 }
 
 /**
- * State holder for Tamagotchi animations and interactions
+ * State holder for Eko animations and interactions
  */
-class TamagotchiState {
+class EkoState {
     // Touch state
     var isTouched by mutableStateOf(false)
         private set
@@ -84,7 +85,7 @@ class TamagotchiState {
         val dx = touchPosition.x - canvasCenter.x
         val dy = touchPosition.y - canvasCenter.y
         val angle = atan2(dy, dx)
-        val maxOffset = TamagotchiConfig.pupilMaxOffset
+        val maxOffset = EkoConfig.pupilMaxOffset
 
         targetPupilOffset = Offset(
             cos(angle) * maxOffset,
@@ -94,16 +95,16 @@ class TamagotchiState {
 }
 
 @Composable
-fun rememberTamagotchiState(): TamagotchiState {
-    val state = remember { TamagotchiState() }
+fun rememberEkoState(): EkoState {
+    val state = remember { EkoState() }
 
     // Breathing animation
     val infiniteTransition = rememberInfiniteTransition(label = "breathing")
     val breathingScale by infiniteTransition.animateFloat(
-        initialValue = TamagotchiConfig.breathingMin,
-        targetValue = TamagotchiConfig.breathingMax,
+        initialValue = EkoConfig.breathingMin,
+        targetValue = EkoConfig.breathingMax,
         animationSpec = infiniteRepeatable(
-            animation = tween(TamagotchiConfig.breathingDurationMs, easing = EaseInOutSine),
+            animation = tween(EkoConfig.breathingDurationMs, easing = EaseInOutSine),
             repeatMode = RepeatMode.Reverse
         ),
         label = "breathingScale"
@@ -111,7 +112,7 @@ fun rememberTamagotchiState(): TamagotchiState {
 
     // Touch scale animation
     val touchScale by animateFloatAsState(
-        targetValue = if (state.isTouched) TamagotchiConfig.touchScaleMax else 1f,
+        targetValue = if (state.isTouched) EkoConfig.touchScaleMax else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
@@ -151,9 +152,9 @@ fun rememberTamagotchiState(): TamagotchiState {
     // Random blink effect
     LaunchedEffect(Unit) {
         while (true) {
-            delay((TamagotchiConfig.blinkIntervalMin..TamagotchiConfig.blinkIntervalMax).random())
+            delay((EkoConfig.blinkIntervalMin..EkoConfig.blinkIntervalMax).random())
             state.isBlinking = true
-            delay(TamagotchiConfig.blinkDurationMs)
+            delay(EkoConfig.blinkDurationMs)
             state.isBlinking = false
         }
     }
@@ -161,7 +162,7 @@ fun rememberTamagotchiState(): TamagotchiState {
     // Reset touch after animation
     LaunchedEffect(state.isTouched) {
         if (state.isTouched) {
-            delay(TamagotchiConfig.touchResetDelayMs)
+            delay(EkoConfig.touchResetDelayMs)
             state.resetTouch()
         }
     }
@@ -175,7 +176,7 @@ fun rememberTamagotchiState(): TamagotchiState {
         pupilOffsetX,
         pupilOffsetY
     ) {
-        TamagotchiAnimatedState(
+        EkoAnimatedState(
             state = state,
             breathingScale = breathingScale,
             touchScale = touchScale,
@@ -191,8 +192,8 @@ fun rememberTamagotchiState(): TamagotchiState {
 /**
  * Holds both the mutable state and the current animated values
  */
-data class TamagotchiAnimatedState(
-    val state: TamagotchiState,
+data class EkoAnimatedState(
+    val state: EkoState,
     val breathingScale: Float,
     val touchScale: Float,
     val mouthOpenness: Float,
@@ -202,26 +203,27 @@ data class TamagotchiAnimatedState(
     val tiltOffset: Offset = Offset.Zero,
     val isShaking: Boolean = false,
     val bodyRotation: Float = 0f,      // Rotation angle in degrees (from Y tilt)
-    val gyroPupilOffset: Offset = Offset.Zero  // Eye tracking from Z rotation
+    val gyroPupilOffset: Offset = Offset.Zero,  // Eye tracking from Z rotation
+    val isLaughing: Boolean = false    // Show tears of joy when laughing
 )
 
 @Composable
-fun rememberTamagotchiAnimatedState(
+fun rememberEkoAnimatedState(
     roll: Float = 0f,      // Tilt left/right in degrees (-180 to +180)
     pitch: Float = 0f,     // Tilt forward/back in degrees (-90 to +90)
     gyroZ: Float = 0f,     // Gyroscope Z rotation speed (rad/s) for eye tracking
     isShaking: Boolean = false,
     expression: String = "neutral"  // Current facial expression
-): TamagotchiAnimatedState {
-    val state = remember { TamagotchiState() }
+): EkoAnimatedState {
+    val state = remember { EkoState() }
 
     // Breathing animation
     val infiniteTransition = rememberInfiniteTransition(label = "breathing")
     val breathingScale by infiniteTransition.animateFloat(
-        initialValue = TamagotchiConfig.breathingMin,
-        targetValue = TamagotchiConfig.breathingMax,
+        initialValue = EkoConfig.breathingMin,
+        targetValue = EkoConfig.breathingMax,
         animationSpec = infiniteRepeatable(
-            animation = tween(TamagotchiConfig.breathingDurationMs, easing = EaseInOutSine),
+            animation = tween(EkoConfig.breathingDurationMs, easing = EaseInOutSine),
             repeatMode = RepeatMode.Reverse
         ),
         label = "breathingScale"
@@ -230,8 +232,8 @@ fun rememberTamagotchiAnimatedState(
     // Touch scale animation (also triggered by shake)
     val touchScale by animateFloatAsState(
         targetValue = when {
-            isShaking -> TamagotchiConfig.shakeScaleMax
-            state.isTouched -> TamagotchiConfig.touchScaleMax
+            isShaking -> EkoConfig.shakeScaleMax
+            state.isTouched -> EkoConfig.touchScaleMax
             else -> 1f
         },
         animationSpec = spring(
@@ -297,10 +299,10 @@ fun rememberTamagotchiAnimatedState(
 
     // Tilt offset animation (from rotation vector)
     // roll = tilt left/right, pitch = tilt forward/back
-    val maxOffset = TamagotchiConfig.maxTiltOffset.value
-    val sensitivity = TamagotchiConfig.tiltSensitivity
+    val maxOffset = EkoConfig.maxTiltOffset.value
+    val sensitivity = EkoConfig.tiltSensitivity
 
-    // Roll: positive = tilted right, so pet slides right (same direction)
+    // Roll: positive = tilted right, so Eko slides right (same direction)
     val targetTiltX = (roll * sensitivity / 9f).coerceIn(-maxOffset, maxOffset)
     // Pitch: positive = tilted back (screen up), negative = tilted forward
     val targetTiltY = (-pitch * sensitivity / 4f).coerceIn(-maxOffset, maxOffset)  // More sensitive
@@ -323,7 +325,7 @@ fun rememberTamagotchiAnimatedState(
     )
 
     // Body rotation from roll (already in degrees)
-    // Pet head stays upright by rotating opposite to phone tilt
+    // Eko head stays upright by rotating opposite to phone tilt
     val targetRotation = -roll  // Direct angle in degrees
 
     val animatedBodyRotation by animateFloatAsState(
@@ -337,8 +339,8 @@ fun rememberTamagotchiAnimatedState(
 
     // Eye tracking from gyroscope Z (rotation speed around vertical axis)
     // When showing phone to someone, eyes follow the movement
-    val gyroEyeSensitivity = TamagotchiConfig.gyroEyeSensitivity
-    val maxPupilOffset = TamagotchiConfig.pupilMaxOffset
+    val gyroEyeSensitivity = EkoConfig.gyroEyeSensitivity
+    val maxPupilOffset = EkoConfig.pupilMaxOffset
     // gyroZ is in rad/s, multiply by sensitivity
     val targetGyroEyeX = (gyroZ * gyroEyeSensitivity).coerceIn(-maxPupilOffset, maxPupilOffset)
 
@@ -351,9 +353,9 @@ fun rememberTamagotchiAnimatedState(
     // Random blink effect
     LaunchedEffect(Unit) {
         while (true) {
-            delay((TamagotchiConfig.blinkIntervalMin..TamagotchiConfig.blinkIntervalMax).random())
+            delay((EkoConfig.blinkIntervalMin..EkoConfig.blinkIntervalMax).random())
             state.isBlinking = true
-            delay(TamagotchiConfig.blinkDurationMs)
+            delay(EkoConfig.blinkDurationMs)
             state.isBlinking = false
         }
     }
@@ -361,12 +363,12 @@ fun rememberTamagotchiAnimatedState(
     // Reset touch after animation
     LaunchedEffect(state.isTouched) {
         if (state.isTouched) {
-            delay(TamagotchiConfig.touchResetDelayMs)
+            delay(EkoConfig.touchResetDelayMs)
             state.resetTouch()
         }
     }
 
-    return TamagotchiAnimatedState(
+    return EkoAnimatedState(
         state = state,
         breathingScale = breathingScale,
         touchScale = touchScale,
@@ -377,6 +379,7 @@ fun rememberTamagotchiAnimatedState(
         tiltOffset = Offset(animatedTiltX, animatedTiltY),
         isShaking = isShaking,
         bodyRotation = animatedBodyRotation,
-        gyroPupilOffset = Offset(animatedGyroEyeX, 0f)
+        gyroPupilOffset = Offset(animatedGyroEyeX, 0f),
+        isLaughing = expressionParams.isLaughing
     )
 }

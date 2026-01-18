@@ -288,13 +288,22 @@ export const MessageItem: React.FC<MessageItemProps> = ({
       <div className="message-content">
         {firstMsg.senderName && (
           <span className="message-sender-name">
-            <span className={`status-dot ${senderIsOnline ? 'online' : 'offline'}`} />
-            {firstMsg.senderName}
-            <span className={`sender-status-label ${senderStatus}`}>
-              {{ available: 'Disponible', busy: 'Occupé', away: 'Absent', dnd: 'Ne pas déranger' }[senderStatus] || 'Disponible'}
-            </span>
-            {senderStatusMessage && (
-              <span className="sender-status-message">{senderStatusMessage}</span>
+            {firstMsg.senderName.toLowerCase() === 'eko' ? (
+              <>
+                <Bot size={14} className="eko-icon" />
+                <span className="eko-name">Eko</span>
+              </>
+            ) : (
+              <>
+                <span className={`status-dot ${senderIsOnline ? 'online' : 'offline'}`} />
+                {firstMsg.senderName}
+                <span className={`sender-status-label ${senderStatus}`}>
+                  {{ available: 'Disponible', busy: 'Occupé', away: 'Absent', dnd: 'Ne pas déranger' }[senderStatus] || 'Disponible'}
+                </span>
+                {senderStatusMessage && (
+                  <span className="sender-status-message">{senderStatusMessage}</span>
+                )}
+              </>
             )}
           </span>
         )}

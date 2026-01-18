@@ -330,6 +330,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND || intent?.action == Intent.ACTION_SEND_MULTIPLE) {
             Log.d(TAG, "Received share intent: ${intent.action}, type: ${intent.type}")
@@ -344,20 +345,32 @@ class MainActivity : ComponentActivity() {
                 }
                 intent.type?.startsWith("image/") == true -> {
                     if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
-                        intent.getParcelableArrayListExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.let { uris ->
-                            Log.d(TAG, "Shared ${uris.size} images")
-                            sharedContent.value = SharedContent.MultipleImages(uris)
+                        val uris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                        } else {
+                            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+                        }
+                        uris?.let {
+                            Log.d(TAG, "Shared ${it.size} images")
+                            sharedContent.value = SharedContent.MultipleImages(it)
                             loadRoomsForSharing()
                         }
                     } else {
-                        intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.let { uri ->
-                            Log.d(TAG, "Shared single image: $uri")
-                            sharedContent.value = SharedContent.SingleImage(uri)
+                        val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                        } else {
+                            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+                        }
+                        uri?.let {
+                            Log.d(TAG, "Shared single image: $it")
+                            sharedContent.value = SharedContent.SingleImage(it)
                             loadRoomsForSharing()
                         }
                     }
                 }
             }
+            // Clear intent action to prevent re-processing on activity recreation
+            intent.action = null
         }
     }
 

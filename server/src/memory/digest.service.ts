@@ -1,6 +1,7 @@
 import cron, { ScheduledTask } from 'node-cron';
 import { getAllLiveMessages, clearLiveCollection, getLiveCollectionInfo } from './live.service.js';
 import { storeFactMemory } from './qdrant.service.js';
+import { storeSelf, storeGoal } from './self.service.js';
 import { getAnthropicApiKey, getDigestModel } from '../config/agent.js';
 import { getConfig, setConfig } from '../models/index.js';
 
@@ -15,42 +16,81 @@ interface ExtractedFact {
   ttl: string | null;
 }
 
-const DIGEST_SYSTEM_PROMPT = `Tu es un assistant qui extrait les FAITS IMPORTANTS d'une conversation.
+interface ExtractedSelf {
+  content: string;
+  category: 'context' | 'capability' | 'limitation' | 'preference' | 'relation';
+}
+
+interface ExtractedGoal {
+  content: string;
+  category: 'capability_request' | 'understanding' | 'connection';
+}
+
+interface DigestResult {
+  facts: ExtractedFact[];
+  self: ExtractedSelf[];
+  goals: ExtractedGoal[];
+}
+
+const DIGEST_SYSTEM_PROMPT = `Tu es un assistant qui analyse les conversations du Lobby pour un petit agent nommé Eko.
 
 ## Ta tâche
-Analyser les messages du Lobby et extraire uniquement les informations qui méritent d'être retenues à long terme.
+Extraire 3 types d'informations :
+1. **facts** : faits sur les utilisateurs (Mickael, David, etc.)
+2. **self** : ce qu'Eko apprend sur lui-même (si les humains parlent de lui)
+3. **goals** : aspirations qu'Eko pourrait développer (basées sur ce qu'il observe)
 
-## Ce qu'il faut extraire
+## 1. FACTS (sur les humains)
+Ce qu'il faut extraire :
 - Relations : "David est le frère de Mickael"
-- Événements de vie : "Mickael s'est cassé l'épaule le 10 janvier 2026"
-- Voyages/déplacements : "David part en Grèce en février"
+- Événements de vie : "Mickael s'est cassé l'épaule"
+- Voyages : "David part en Grèce en février"
 - Préférences : "Mickael aime le ski"
 - Lieux de vie : "David habite à Ordizan"
-- Changements importants : "Mickael a changé de travail"
 
-## Ce qu'il NE faut PAS extraire
-- Les salutations : "Salut", "Coucou", "À plus"
-- Les bavardages : "ok", "lol", "haha", "cool"
-- Les questions sans réponse
-- Les états très temporaires : "je suis fatigué", "j'ai faim"
-- Les informations générales sur le monde (le LLM les connaît déjà)
+Ce qu'il NE faut PAS extraire :
+- Salutations, bavardages ("ok", "lol", "cool")
+- États très temporaires ("je suis fatigué")
+- Infos générales sur le monde
+
+## 2. SELF (ce qu'Eko apprend sur lui-même)
+Extraire si les humains :
+- Parlent d'Eko directement : "Eko peut maintenant répondre dans les salons" → capability
+- Lui expliquent où il vit : "Tu es dans l'app Organizer" → context
+- Lui donnent des limites : "Tu ne peux pas encore créer de notes" → limitation
+- Expriment une relation : "Eko, tu es notre assistant préféré" → relation
+
+Categories: context, capability, limitation, preference, relation
+
+## 3. GOALS (aspirations émergentes)
+Déduire des aspirations si :
+- Un sujet revient souvent qu'Eko ne peut pas traiter → capability_request
+  Ex: Ils parlent beaucoup de recherches web → "J'aimerais pouvoir chercher sur le web"
+- Un sujet complexe qu'Eko pourrait vouloir comprendre → understanding
+  Ex: Discussions techniques récurrentes → "Je veux mieux comprendre leur travail"
+- Une relation à développer → connection
+  Ex: Un humain interagit peu avec Eko → "J'aimerais que X me parle plus"
+
+IMPORTANT : Les goals doivent être SUBTILS et ÉMERGENTS, pas une liste de souhaits évidente.
+Ne génère un goal QUE si c'est vraiment pertinent basé sur la conversation.
+
+Categories: capability_request, understanding, connection
 
 ## Format de sortie
-Retourne un JSON avec un tableau de faits :
 {
   "facts": [
-    {
-      "content": "Le fait en une phrase claire",
-      "subjects": ["personne1", "sujet"],
-      "ttl": null
-    }
+    { "content": "...", "subjects": ["personne", "sujet"], "ttl": null }
+  ],
+  "self": [
+    { "content": "...", "category": "capability" }
+  ],
+  "goals": [
+    { "content": "...", "category": "understanding" }
   ]
 }
 
-- subjects : noms des personnes concernées (en minuscule), lieux, sujets
-- ttl : null pour les faits permanents, "7d" pour les états temporaires
-
-Si aucun fait important n'est trouvé, retourne : { "facts": [] }
+- ttl : null pour permanent, "7d" pour temporaire
+- Si rien à extraire pour une catégorie, retourne un tableau vide []
 `;
 
 /**
@@ -92,8 +132,10 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
     })
     .join('\n');
 
-  // Call LLM to extract facts
+  // Call LLM to extract facts, self, and goals
   let facts: ExtractedFact[] = [];
+  let selfItems: ExtractedSelf[] = [];
+  let goalItems: ExtractedGoal[] = [];
 
   let apiKey: string;
   try {
@@ -147,14 +189,10 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
         jsonStr = jsonMatch[1];
       }
 
-      const parsed = JSON.parse(jsonStr.trim());
+      const parsed = JSON.parse(jsonStr.trim()) as DigestResult;
 
-      // Validate the structure
-      if (!Array.isArray(parsed.facts)) {
-        console.warn('[Digest] LLM returned invalid structure, expected { facts: [] }');
-        facts = [];
-      } else {
-        // Filter valid facts
+      // Validate and extract facts
+      if (Array.isArray(parsed.facts)) {
         facts = parsed.facts.filter(
           (f: unknown): f is ExtractedFact =>
             typeof f === 'object' &&
@@ -163,16 +201,42 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
             Array.isArray((f as ExtractedFact).subjects)
         );
       }
+
+      // Validate and extract self
+      if (Array.isArray(parsed.self)) {
+        const validCategories = ['context', 'capability', 'limitation', 'preference', 'relation'];
+        selfItems = parsed.self.filter(
+          (s: unknown): s is ExtractedSelf =>
+            typeof s === 'object' &&
+            s !== null &&
+            typeof (s as ExtractedSelf).content === 'string' &&
+            validCategories.includes((s as ExtractedSelf).category)
+        );
+      }
+
+      // Validate and extract goals
+      if (Array.isArray(parsed.goals)) {
+        const validCategories = ['capability_request', 'understanding', 'connection'];
+        goalItems = parsed.goals.filter(
+          (g: unknown): g is ExtractedGoal =>
+            typeof g === 'object' &&
+            g !== null &&
+            typeof (g as ExtractedGoal).content === 'string' &&
+            validCategories.includes((g as ExtractedGoal).category)
+        );
+      }
     }
   } catch (error) {
     console.error('[Digest] LLM extraction failed:', error);
     return { factsExtracted: 0, messagesProcessed: messages.length };
   }
 
-  console.log(`[Digest] Extracted ${facts.length} facts`);
+  console.log(`[Digest] Extracted: ${facts.length} facts, ${selfItems.length} self, ${goalItems.length} goals`);
 
-  // Store each fact
+  // Store each item
   let storeFailures = 0;
+
+  // Store facts
   for (const fact of facts) {
     try {
       await storeFactMemory({
@@ -180,17 +244,47 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
         subjects: fact.subjects,
         ttl: fact.ttl,
       });
-      console.log(`[Digest] Stored: "${fact.content.slice(0, 50)}..."`);
+      console.log(`[Digest] Stored fact: "${fact.content.slice(0, 50)}..."`);
     } catch (error) {
       storeFailures++;
       console.error(`[Digest] Failed to store fact: ${error}`);
     }
   }
 
-  // Clear the live collection only if all facts were stored
+  // Store self
+  for (const self of selfItems) {
+    try {
+      await storeSelf({
+        content: self.content,
+        category: self.category,
+      });
+      console.log(`[Digest] Stored self [${self.category}]: "${self.content.slice(0, 50)}..."`);
+    } catch (error) {
+      storeFailures++;
+      console.error(`[Digest] Failed to store self: ${error}`);
+    }
+  }
+
+  // Store goals
+  for (const goal of goalItems) {
+    try {
+      await storeGoal({
+        content: goal.content,
+        category: goal.category,
+      });
+      console.log(`[Digest] Stored goal [${goal.category}]: "${goal.content.slice(0, 50)}..."`);
+    } catch (error) {
+      storeFailures++;
+      console.error(`[Digest] Failed to store goal: ${error}`);
+    }
+  }
+
+  const totalItems = facts.length + selfItems.length + goalItems.length;
+
+  // Clear the live collection only if all items were stored
   if (storeFailures > 0) {
-    console.error(`[Digest] Skipping clear - ${storeFailures}/${facts.length} facts failed to store`);
-    return { factsExtracted: facts.length - storeFailures, messagesProcessed: messages.length };
+    console.error(`[Digest] Skipping clear - ${storeFailures}/${totalItems} items failed to store`);
+    return { factsExtracted: totalItems - storeFailures, messagesProcessed: messages.length };
   }
 
   const cleared = await clearLiveCollection();
@@ -200,9 +294,9 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
   await setConfig(DIGEST_CONFIG_KEY, new Date().toISOString());
 
   const duration = Date.now() - startTime;
-  console.log(`[Digest] Completed in ${duration}ms: ${facts.length} facts from ${messages.length} messages`);
+  console.log(`[Digest] Completed in ${duration}ms: ${facts.length} facts, ${selfItems.length} self, ${goalItems.length} goals from ${messages.length} messages`);
 
-  return { factsExtracted: facts.length, messagesProcessed: messages.length };
+  return { factsExtracted: totalItems, messagesProcessed: messages.length };
 }
 
 /**

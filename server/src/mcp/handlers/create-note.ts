@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import { Note, Label } from '../../models/index.js';
+import { createNote, validateLabels } from '../../services/notes.service.js';
 import { IMcpToken } from '../../models/McpToken.js';
 import { IUser } from '../../models/User.js';
 import { McpToolDefinition, McpToolResult } from '../types.js';
@@ -54,10 +54,10 @@ export async function createNoteHandler(
   io?: Server
 ): Promise<McpToolResult> {
   try {
-    const type = (args.type as string) || 'note';
+    const type = (args.type as 'note' | 'checklist') || 'note';
     const title = (args.title as string) || '';
     const content = (args.content as string) || '';
-    const rawItems = (args.items as Array<{ text: string }>) || [];
+    const items = (args.items as Array<{ text: string }>) || [];
     const color = (args.color as string) || '#1a1a1a';
     const labels = (args.labels as string[]) || [];
 
@@ -89,39 +89,22 @@ export async function createNoteHandler(
       };
     }
 
-    if (labels.length > 0) {
-      const labelCount = await Label.countDocuments({ _id: { $in: labels } });
-      if (labelCount !== labels.length) {
-        return {
-          content: [{ type: 'text', text: 'One or more label IDs are invalid' }],
-          isError: true,
-        };
-      }
+    if (labels.length > 0 && !(await validateLabels(labels))) {
+      return {
+        content: [{ type: 'text', text: 'One or more label IDs are invalid' }],
+        isError: true,
+      };
     }
 
-    const items = rawItems.map((item, index) => ({
-      text: item.text,
-      checked: false,
-      order: index,
-    }));
-
-    const note = new Note({
+    const note = await createNote({
       type,
       title,
       content,
       items,
       color,
       labels,
-      assignedTo: user._id,
-      createdBy: user._id,
+      userId: user._id,
     });
-
-    await note.save();
-    await note.populate([
-      { path: 'labels', select: 'name color' },
-      { path: 'assignedTo', select: 'username displayName' },
-      { path: 'createdBy', select: 'username displayName' },
-    ]);
 
     if (io) {
       io.to('notes').emit('note:created', { note, createdBy: user._id.toString() });

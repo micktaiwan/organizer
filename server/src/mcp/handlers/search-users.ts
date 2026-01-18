@@ -1,4 +1,4 @@
-import { User } from '../../models/index.js';
+import { searchUsers } from '../../services/users.service.js';
 import { IMcpToken } from '../../models/McpToken.js';
 import { IUser } from '../../models/User.js';
 import { McpToolDefinition, McpToolResult } from '../types.js';
@@ -38,14 +38,7 @@ export async function searchUsersHandler(
       };
     }
 
-    const users = await User.find({
-      $or: [
-        { username: { $regex: query, $options: 'i' } },
-        { displayName: { $regex: query, $options: 'i' } },
-      ],
-    })
-      .select('username displayName isOnline isBot isAdmin lastSeen')
-      .limit(limit);
+    const users = await searchUsers({ query, limit });
 
     const userList = users.map(u => ({
       id: u._id.toString(),

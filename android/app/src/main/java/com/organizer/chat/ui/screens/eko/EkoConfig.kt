@@ -1,4 +1,4 @@
-package com.organizer.chat.ui.screens.tamagotchi
+package com.organizer.chat.ui.screens.eko
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -7,9 +7,9 @@ import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.CharcoalDark
 
 /**
- * Configuration constants for the Tamagotchi creature
+ * Configuration constants for Eko creature
  */
-object TamagotchiConfig {
+object EkoConfig {
     // Body
     val bodyRadius: Dp = 100.dp
     val bodyColor: Color = AccentBlue
@@ -56,11 +56,11 @@ object TamagotchiConfig {
 
     // Accelerometer
     val tiltSensitivity: Float = 15f  // Multiplier for tilt offset
-    val maxTiltOffset: Dp = 120.dp    // Max distance pet can move from center
+    val maxTiltOffset: Dp = 120.dp    // Max distance Eko can move from center
     val shakeScaleMax: Float = 1.4f   // Scale when shaking
 
     // Gyroscope
     val rotationSensitivity: Float = 9f    // Multiplier for X rotation angle
-    val maxRotationAngle: Float = 180f     // No limit - pet always stays upright
+    val maxRotationAngle: Float = 180f     // No limit - Eko always stays upright
     val gyroEyeSensitivity: Float = 8f     // Multiplier for eye tracking from Z rotation (rad/s)
 }

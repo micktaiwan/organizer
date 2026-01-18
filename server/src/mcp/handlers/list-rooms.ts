@@ -1,4 +1,4 @@
-import { Room } from '../../models/index.js';
+import { listRooms } from '../../services/rooms.service.js';
 import { IMcpToken } from '../../models/McpToken.js';
 import { IUser } from '../../models/User.js';
 import { McpToolDefinition, McpToolResult } from '../types.js';
@@ -28,25 +28,14 @@ export async function listRoomsHandler(
   user: IUser
 ): Promise<McpToolResult> {
   try {
-    const type = (args.type as string) || 'all';
+    const type = (args.type as 'all' | 'private' | 'public' | 'lobby') || 'all';
     const limit = Math.min(Number(args.limit) || 50, 100);
 
-    const query: Record<string, unknown> = {
-      $or: [
-        { 'members.userId': user._id },
-        { type: 'public' },
-        { type: 'lobby' },
-      ],
-    };
-
-    if (type !== 'all') {
-      query.type = type;
-    }
-
-    const rooms = await Room.find(query)
-      .populate('members.userId', 'username displayName isOnline')
-      .sort({ lastMessageAt: -1, updatedAt: -1 })
-      .limit(limit);
+    const rooms = await listRooms({
+      userId: user._id,
+      type,
+      limit,
+    });
 
     const roomList = rooms.map(room => ({
       id: room._id.toString(),
