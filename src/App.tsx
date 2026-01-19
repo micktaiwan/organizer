@@ -28,6 +28,7 @@ import { RoomMessaging } from "./components/Chat/RoomMessaging";
 import { RoomHeader } from "./components/Chat/RoomHeader";
 import "./components/Chat/RoomHeader.css";
 import { CreateRoomModal } from "./components/Chat/CreateRoomModal";
+import { SearchOverlay } from "./components/Chat/SearchOverlay";
 import { CallOverlay } from "./components/Call/CallOverlay";
 import { IncomingCallModal } from "./components/Call/IncomingCallModal";
 // import { ContactModal } from "./components/Contact/ContactModal";
@@ -57,6 +58,7 @@ function App() {
   // const [showContactsModal, setShowContactsModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [showSearchOverlay, setShowSearchOverlay] = useState(false);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [createRoomError, setCreateRoomError] = useState<string | null>(null);
   // TODO: Implement contact editing in room context
@@ -197,6 +199,10 @@ function App() {
     typingUsers,
     notifyTypingStart,
     notifyTypingStop,
+    loadMessagesAround,
+    returnToLatest,
+    messageMode,
+    targetMessageId,
   } = useRooms({ userId: user?.id, username });
 
   const addCallSystemMessage = (type: "missed-call" | "rejected-call" | "ended-call") => {
@@ -352,6 +358,20 @@ function App() {
       unlisten.then(fn => fn());
     };
   }, [selectRoom]);
+
+  // Keyboard shortcut: Cmd+K (Mac) / Ctrl+K (Win) to open search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        if (activeTab === 'chat' && currentRoomId) {
+          setShowSearchOverlay(prev => !prev);
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, currentRoomId]);
 
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
@@ -610,6 +630,7 @@ function App() {
               onStatusChange={handleStatusChange}
               onOpenSettings={() => setShowAdminPanel(true)}
               onChangeServer={handleChangeServer}
+              onOpenSearch={() => setShowSearchOverlay(true)}
             />
           )}
 
@@ -642,6 +663,9 @@ function App() {
             typingUsers={typingUsers}
             onTypingStart={notifyTypingStart}
             onTypingStop={notifyTypingStop}
+            targetMessageId={targetMessageId}
+            messageMode={messageMode}
+            onReturnToLatest={returnToLatest}
           />
         </div>
       </div>
@@ -757,6 +781,17 @@ function App() {
           onCancel={() => {
             setShowCreateRoomModal(false);
             setCreateRoomError(null);
+          }}
+        />
+      )}
+
+      {showSearchOverlay && currentRoomId && (
+        <SearchOverlay
+          roomId={currentRoomId}
+          isOpen={showSearchOverlay}
+          onClose={() => setShowSearchOverlay(false)}
+          onSelectResult={(timestamp, messageId) => {
+            loadMessagesAround(timestamp, messageId);
           }}
         />
       )}

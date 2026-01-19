@@ -427,4 +427,156 @@ router.post('/:roomId/read', async (req: AuthRequest, res: Response): Promise<vo
   }
 });
 
+// GET /rooms/:roomId/search - Search messages in a room
+router.get('/:roomId/search', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const room = await Room.findById(req.params.roomId);
+
+    if (!room) {
+      res.status(404).json({ error: 'Salon non trouvé' });
+      return;
+    }
+
+    // Check access
+    const isMember = room.members.some(m => m.userId.toString() === req.userId);
+    const isPublic = room.type === 'public' || room.type === 'lobby';
+
+    if (!isMember && !isPublic) {
+      res.status(403).json({ error: 'Accès non autorisé' });
+      return;
+    }
+
+    const query = req.query.q as string;
+    if (!query || query.trim().length === 0) {
+      res.status(400).json({ error: 'Le paramètre de recherche est requis' });
+      return;
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+
+    const { Message } = await import('../models/index.js');
+    const roomObjectId = new Types.ObjectId(req.params.roomId);
+
+    // Run both searches in parallel: text search (full words) + regex (partial matches)
+    const [textResults, regexResults] = await Promise.all([
+      // Text search - fast, uses index, full words only
+      Message.find({
+        roomId: roomObjectId,
+        $text: { $search: query },
+      })
+        .populate('senderId', 'username displayName avatar')
+        .sort({ score: { $meta: 'textScore' }, createdAt: -1 })
+        .limit(limit)
+        .catch(() => []), // Ignore errors (e.g., no text index)
+
+      // Regex search - slower but finds partial matches
+      Message.find({
+        roomId: roomObjectId,
+        content: { $regex: query, $options: 'i' },
+      })
+        .populate('senderId', 'username displayName avatar')
+        .sort({ createdAt: -1 })
+        .limit(limit),
+    ]);
+
+    // Merge: text results first (more relevant), then regex-only results
+    // Each group sorted by date DESC
+    const seenIds = new Set(textResults.map(m => m._id.toString()));
+    const results = [
+      ...textResults.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+      ...regexResults
+        .filter(m => !seenIds.has(m._id.toString()))
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+    ].slice(0, limit);
+
+    const total = results.length;
+
+    res.json({ results, total });
+  } catch (error) {
+    console.error('Search messages error:', error);
+    res.status(500).json({ error: 'Erreur lors de la recherche' });
+  }
+});
+
+// GET /rooms/:roomId/messages/around - Get messages around a timestamp
+router.get('/:roomId/messages/around', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const room = await Room.findById(req.params.roomId);
+
+    if (!room) {
+      res.status(404).json({ error: 'Salon non trouvé' });
+      return;
+    }
+
+    // Check access
+    const isMember = room.members.some(m => m.userId.toString() === req.userId);
+    const isPublic = room.type === 'public' || room.type === 'lobby';
+
+    if (!isMember && !isPublic) {
+      res.status(403).json({ error: 'Accès non autorisé' });
+      return;
+    }
+
+    const timestamp = req.query.timestamp as string;
+    if (!timestamp) {
+      res.status(400).json({ error: 'Le paramètre timestamp est requis' });
+      return;
+    }
+
+    const targetDate = new Date(timestamp);
+    if (isNaN(targetDate.getTime())) {
+      res.status(400).json({ error: 'Timestamp invalide' });
+      return;
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const halfLimit = Math.floor(limit / 2);
+
+    const { Message } = await import('../models/index.js');
+
+    // Get messages before the timestamp
+    const messagesBefore = await Message.find({
+      roomId: new Types.ObjectId(req.params.roomId),
+      createdAt: { $lt: targetDate },
+    })
+      .sort({ createdAt: -1 })
+      .limit(halfLimit)
+      .populate('senderId', 'username displayName status statusMessage');
+
+    // Get messages at or after the timestamp
+    const messagesAfter = await Message.find({
+      roomId: new Types.ObjectId(req.params.roomId),
+      createdAt: { $gte: targetDate },
+    })
+      .sort({ createdAt: 1 })
+      .limit(halfLimit)
+      .populate('senderId', 'username displayName status statusMessage');
+
+    // Combine and sort by createdAt
+    const messages = [...messagesBefore.reverse(), ...messagesAfter];
+
+    // Check if there are older/newer messages
+    const hasOlder = messagesBefore.length === halfLimit;
+
+    const newerCount = await Message.countDocuments({
+      roomId: new Types.ObjectId(req.params.roomId),
+      createdAt: { $gt: messagesAfter.length > 0 ? messagesAfter[messagesAfter.length - 1].createdAt : targetDate },
+    });
+    const hasNewer = newerCount > 0;
+
+    // Find the message closest to the target timestamp
+    let targetMessageId: string | null = null;
+    if (messagesAfter.length > 0) {
+      targetMessageId = messagesAfter[0]._id.toString();
+    } else if (messagesBefore.length > 0) {
+      targetMessageId = messagesBefore[0]._id.toString();
+    }
+
+    res.json({ messages, hasOlder, hasNewer, targetMessageId });
+  } catch (error) {
+    console.error('Get messages around error:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 export default router;

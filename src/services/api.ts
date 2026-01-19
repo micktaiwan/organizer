@@ -339,6 +339,26 @@ class ApiService {
     return this.request<{ messages: Message[] }>(url);
   }
 
+  async searchRoomMessages(roomId: string, query: string, limit = 20): Promise<{ results: Message[]; total: number }> {
+    return this.request<{ results: Message[]; total: number }>(
+      `/rooms/${roomId}/search?q=${encodeURIComponent(query)}&limit=${limit}`
+    );
+  }
+
+  async getMessagesAround(roomId: string, timestamp: string, limit = 50): Promise<{
+    messages: Message[];
+    hasOlder: boolean;
+    hasNewer: boolean;
+    targetMessageId: string | null;
+  }> {
+    return this.request<{
+      messages: Message[];
+      hasOlder: boolean;
+      hasNewer: boolean;
+      targetMessageId: string | null;
+    }>(`/rooms/${roomId}/messages/around?timestamp=${encodeURIComponent(timestamp)}&limit=${limit}`);
+  }
+
   async getMessage(messageId: string): Promise<{ message: Message }> {
     return this.request<{ message: Message }>(`/messages/${messageId}`);
   }

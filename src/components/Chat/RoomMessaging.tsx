@@ -34,6 +34,10 @@ interface RoomMessagingProps {
   typingUsers?: Set<string>;
   onTypingStart?: () => void;
   onTypingStop?: () => void;
+  // Search/navigation props
+  targetMessageId?: string | null;
+  messageMode?: 'latest' | 'around';
+  onReturnToLatest?: () => void;
 }
 
 export const RoomMessaging: React.FC<RoomMessagingProps> = ({
@@ -60,6 +64,9 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   typingUsers,
   onTypingStart,
   onTypingStop,
+  targetMessageId,
+  messageMode,
+  onReturnToLatest,
 }) => {
   // Use refs to avoid re-triggering effects when callbacks change reference
   const onTypingStartRef = useRef(onTypingStart);
@@ -140,6 +147,9 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
         onReactMessage={onReactMessage}
         currentUserId={currentUserId}
         humanMemberIds={humanMemberIds}
+        targetMessageId={targetMessageId}
+        messageMode={messageMode}
+        onReturnToLatest={onReturnToLatest}
       />
 
       <MessageInput

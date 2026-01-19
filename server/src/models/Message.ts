@@ -110,5 +110,6 @@ const MessageSchema = new Schema<IMessage>(
 
 MessageSchema.index({ roomId: 1, createdAt: -1 });
 MessageSchema.index({ senderId: 1, createdAt: -1 });
+MessageSchema.index({ content: 'text' });
 
 export const Message = mongoose.model<IMessage>('Message', MessageSchema);

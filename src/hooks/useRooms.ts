@@ -96,6 +96,11 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
+  // Search/navigation state
+  const [messageMode, setMessageMode] = useState<'latest' | 'around'>('latest');
+  const [targetMessageId, setTargetMessageId] = useState<string | null>(null);
+  const [hasNewerMessages, setHasNewerMessages] = useState(false);
+
   // Typing indicator state
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
 
@@ -111,6 +116,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     setMessages([]);
     setRooms([]);
     setIsLoadingRooms(true);
+    setMessageMode('latest');
+    setTargetMessageId(null);
+    setHasNewerMessages(false);
   }, [getApiBaseUrl()]);
 
   // Load rooms on mount and when user changes
@@ -150,6 +158,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     const loadRoom = async () => {
       try {
         setIsLoadingMessages(true);
+        setMessageMode('latest');
+        setTargetMessageId(null);
+        setHasNewerMessages(false);
         const { room } = await api.getRoom(currentRoomId);
         setCurrentRoom(room);
 
@@ -403,8 +414,51 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
       const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
       setMessages(convertedMessages);
+      setMessageMode('latest');
+      setTargetMessageId(null);
+      setHasNewerMessages(false);
     } catch (error) {
       console.error('Failed to load messages:', error);
+    }
+  }, [currentRoomId, userId]);
+
+  // Load messages around a specific timestamp (for search results)
+  const loadMessagesAround = useCallback(async (timestamp: string, msgId?: string) => {
+    if (!currentRoomId) return;
+    try {
+      setIsLoadingMessages(true);
+      const response = await api.getMessagesAround(currentRoomId, timestamp);
+      const convertedMessages = response.messages.map((msg: ServerMessage) =>
+        convertServerMessage(msg, userId)
+      );
+      setMessages(convertedMessages);
+      setMessageMode('around');
+      setHasNewerMessages(response.hasNewer);
+      setTargetMessageId(msgId || response.targetMessageId);
+    } catch (error) {
+      console.error('Failed to load messages around timestamp:', error);
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  }, [currentRoomId, userId]);
+
+  // Return to latest messages (from search mode)
+  const returnToLatest = useCallback(async () => {
+    if (!currentRoomId) return;
+    try {
+      setIsLoadingMessages(true);
+      const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
+      const convertedMessages = serverMessages.map((msg: ServerMessage) =>
+        convertServerMessage(msg, userId)
+      );
+      setMessages(convertedMessages);
+      setMessageMode('latest');
+      setTargetMessageId(null);
+      setHasNewerMessages(false);
+    } catch (error) {
+      console.error('Failed to return to latest messages:', error);
+    } finally {
+      setIsLoadingMessages(false);
     }
   }, [currentRoomId, userId]);
 
@@ -687,6 +741,13 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     deleteMessage,
     reactToMessage,
     loadMessages,
+    loadMessagesAround,
+    returnToLatest,
+
+    // Search/navigation state
+    messageMode,
+    targetMessageId,
+    hasNewerMessages,
 
     // Typing indicators
     typingUsers,
