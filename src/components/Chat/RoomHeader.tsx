@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Globe, Hash } from 'lucide-react';
+import { Settings, Globe, Hash, Search } from 'lucide-react';
 import { Room } from '../../services/api';
 import { UserStatus } from '../../types';
 import { RoomMembers } from './RoomMembers';
@@ -19,6 +19,7 @@ interface RoomHeaderProps {
   onStatusChange: (status: UserStatus, statusMessage: string | null, isMuted: boolean) => void;
   onOpenSettings: () => void;
   onChangeServer: () => void;
+  onOpenSearch?: () => void;
 }
 
 export const RoomHeader: React.FC<RoomHeaderProps> = ({
@@ -35,6 +36,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   onStatusChange,
   onOpenSettings,
   onChangeServer,
+  onOpenSearch,
 }) => {
   return (
     <header className="room-header">
@@ -64,6 +66,15 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
       {/* Right: User Controls */}
       <div className="room-header__controls">
         <div className="room-header__toolbar">
+          {onOpenSearch && (
+            <button
+              className="room-header__btn"
+              onClick={onOpenSearch}
+              title="Rechercher"
+            >
+              <Search size={18} />
+            </button>
+          )}
           <button
             className="room-header__btn"
             onClick={onOpenSettings}
