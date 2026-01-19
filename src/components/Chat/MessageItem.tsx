@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText, Monitor, Smartphone, Bot, CheckCircle, Check } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { Avatar } from "../ui/Avatar";
 import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji, UserStatus } from "../../types";
 import { formatMessageTimestamp } from "../../utils/dateFormat";
@@ -76,49 +77,48 @@ const downloadFile = async (url: string, filename: string) => {
   }
 };
 
-// URL regex pattern
-const URL_REGEX = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g;
-
-// Render text with clickable links
-const renderTextWithLinks = (text: string): React.ReactNode[] => {
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  // Reset regex state
-  URL_REGEX.lastIndex = 0;
-
-  while ((match = URL_REGEX.exec(text)) !== null) {
-    // Add text before the URL
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-
-    // Add the clickable URL
-    const url = match[0];
-    parts.push(
+// Markdown text component with clickable links
+const MarkdownText: React.FC<{ text: string }> = ({ text }) => {
+  // Memoize components to prevent recreation on every render
+  const components = useMemo(() => ({
+    a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
       <a
-        key={`link-${match.index}`}
-        href={url}
+        href={href}
         className="message-link"
         onClick={(e) => {
           e.preventDefault();
-          openUrl(url).catch(console.error);
+          if (href) openUrl(href).catch(console.error);
         }}
       >
-        {url}
+        {children}
       </a>
-    );
+    ),
+    code: ({ className, children }: { className?: string; children?: React.ReactNode }) => {
+      // Check if it's a code block (has language class) vs inline code
+      const isCodeBlock = className?.startsWith('language-');
+      if (isCodeBlock) {
+        return (
+          <pre className="code-block">
+            <code className={className}>{children}</code>
+          </pre>
+        );
+      }
+      return <code className="inline-code">{children}</code>;
+    },
+    pre: ({ children }: { children?: React.ReactNode }) => {
+      // The pre tag wraps code blocks from react-markdown, we handle formatting in code component
+      return <>{children}</>;
+    },
+    p: ({ children }: { children?: React.ReactNode }) => (
+      <p className="markdown-paragraph">{children}</p>
+    ),
+  }), []);
 
-    lastIndex = URL_REGEX.lastIndex;
-  }
-
-  // Add remaining text after last URL
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
-
-  return parts.length > 0 ? parts : [text];
+  return (
+    <ReactMarkdown components={components}>
+      {text}
+    </ReactMarkdown>
+  );
 };
 
 export const MessageItem: React.FC<MessageItemProps> = ({
@@ -308,7 +308,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           </span>
         )}
         <div className="bubble">
-          {messages.map((msg, idx) => (
+          {messages.map((msg) => (
             <React.Fragment key={msg.id}>
               {msg.image && (
                 <div className="image-with-caption">
@@ -346,10 +346,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               )}
               {msg.caption && msg.type === 'file' && <span className="file-caption">{msg.caption}</span>}
               {msg.text && (
-                <>
-                  <span>{renderTextWithLinks(msg.text)}</span>
-                  {idx < messages.length - 1 && <br />}
-                </>
+                <div className="message-text-content">
+                  <MarkdownText text={msg.text} />
+                </div>
               )}
             </React.Fragment>
           ))}

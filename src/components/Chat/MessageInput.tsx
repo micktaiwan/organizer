@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useCallback } from "react";
 import { Image, Paperclip, FileText, Mic, X } from "lucide-react";
 import { formatDuration } from "../../utils/audio";
 
@@ -19,7 +19,7 @@ interface MessageInputProps {
   inputMessage: string;
   setInputMessage: (val: string) => void;
   onSendMessage: (e: React.FormEvent) => void;
-  onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   pendingImage: string | null;
   cancelPendingImage: () => void;
   pendingFile: PendingFile | null;
@@ -51,13 +51,36 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onSelectImageFile,
   onSelectFile,
 }) => {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea based on content
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
+    }
+  }, []);
 
   useEffect(() => {
     if (!isRecording) {
-      inputRef.current?.focus();
+      textareaRef.current?.focus();
     }
   }, [isRecording]);
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [inputMessage, adjustTextareaHeight]);
+
+  // Handle Enter to send, Shift+Enter for new line
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (inputMessage.trim() || pendingImage || pendingFile) {
+        onSendMessage(e as unknown as React.FormEvent);
+      }
+    }
+  };
 
   return (
     <>
@@ -126,13 +149,17 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             >
               <Mic size={20} />
             </button>
-            <input
-              ref={inputRef}
-              type="text"
+            <textarea
+              ref={textareaRef}
               value={inputMessage}
               onChange={onInputChange}
+              onKeyDown={handleKeyDown}
               placeholder={pendingImage || pendingFile ? "Ajouter une légende..." : "Tapez un message ou collez une image..."}
               autoFocus
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              rows={1}
             />
             <button type="submit" disabled={!inputMessage.trim() && !pendingImage && !pendingFile}>
               Envoyer

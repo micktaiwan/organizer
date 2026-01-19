@@ -10,11 +10,17 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.text.method.LinkMovementMethod
 import android.util.Base64
+import android.util.TypedValue
+import android.view.MotionEvent
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import io.noties.markwon.Markwon
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -46,6 +52,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -353,12 +360,6 @@ fun MessageBubble(
     }
 }
 
-// URL regex pattern
-private val urlPattern = Regex(
-    """(https?://[^\s<>"{}|\\^`\[\]]+)""",
-    RegexOption.IGNORE_CASE
-)
-
 // Link color for URLs
 private val LinkColor = Color(0xFF1976D2)
 
@@ -368,72 +369,58 @@ private fun TextMessageContent(
     onLongPress: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val layoutResult = remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    val markwon = remember { Markwon.create(context) }
+    val spanned = remember(content) { markwon.toMarkdown(content) }
 
-    val annotatedString = buildAnnotatedString {
-        var lastIndex = 0
-        val textStyle = SpanStyle(color = MessageTextColor)
-        val linkStyle = SpanStyle(
-            color = LinkColor,
-            textDecoration = TextDecoration.Underline
-        )
+    // Track long press state
+    var longPressTriggered by remember { mutableStateOf(false) }
 
-        urlPattern.findAll(content).forEach { matchResult ->
-            val start = matchResult.range.first
-            val end = matchResult.range.last + 1
-
-            // Add text before the URL
-            if (start > lastIndex) {
-                withStyle(textStyle) {
-                    append(content.substring(lastIndex, start))
-                }
-            }
-
-            // Add the URL with annotation
-            val url = matchResult.value
-            pushStringAnnotation(tag = "URL", annotation = url)
-            withStyle(linkStyle) {
-                append(url)
-            }
-            pop()
-
-            lastIndex = end
-        }
-
-        // Add remaining text after last URL
-        if (lastIndex < content.length) {
-            withStyle(textStyle) {
-                append(content.substring(lastIndex))
-            }
-        }
-    }
-
-    // NOTE: Long press is handled BOTH here and on the parent Surface bubble.
-    // This is intentional: the Text captures gestures on its area (for URLs + long press),
-    // while the Surface captures long press on padding areas outside the text.
-    // Without this duplication, long press wouldn't work on small messages or text areas.
-    Text(
-        text = annotatedString,
-        style = MaterialTheme.typography.bodyMedium,
-        onTextLayout = { layoutResult.value = it },
-        modifier = Modifier.pointerInput(onLongPress) {
-            detectTapGestures(
-                onTap = { offset ->
-                    // Find which character was tapped
-                    layoutResult.value?.let { layout ->
-                        val position = layout.getOffsetForPosition(offset)
-                        annotatedString.getStringAnnotations(tag = "URL", start = position, end = position)
-                            .firstOrNull()?.let { annotation ->
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(annotation.item))
-                                context.startActivity(intent)
+    AndroidView(
+        factory = { ctx ->
+            TextView(ctx).apply {
+                setTextColor(MessageTextColor.toArgb())
+                setLinkTextColor(LinkColor.toArgb())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                movementMethod = LinkMovementMethod.getInstance()
+                // Handle long press via touch listener
+                setOnTouchListener { view, event ->
+                    when (event.action) {
+                        MotionEvent.ACTION_DOWN -> {
+                            longPressTriggered = false
+                            view.postDelayed({
+                                if (!longPressTriggered) {
+                                    longPressTriggered = true
+                                    onLongPress?.invoke()
+                                }
+                            }, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                        }
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            view.removeCallbacks(null)
+                            if (longPressTriggered) {
+                                // Consume the event if long press was triggered
+                                true
+                            } else {
+                                // Let normal touch handling occur (for links)
+                                false
                             }
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            // Cancel long press if finger moves too much
+                            val slop = android.view.ViewConfiguration.get(ctx).scaledTouchSlop
+                            // Simple movement check - cancel if any significant movement
+                            false
+                        }
+                        else -> false
                     }
-                },
-                onLongPress = {
-                    onLongPress?.invoke()
+                    // Return false to allow LinkMovementMethod to handle link clicks
+                    false
                 }
-            )
-        }
+            }
+        },
+        update = { textView ->
+            markwon.setParsedMarkdown(textView, spanned)
+        },
+        modifier = Modifier
     )
 }
 
