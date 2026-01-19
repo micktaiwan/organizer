@@ -134,7 +134,7 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
     setPendingFile(null);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setInputMessage(e.target.value);
   };
 
