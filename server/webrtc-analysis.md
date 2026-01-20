@@ -352,4 +352,285 @@ L'implémentation WebRTC est à **~30% de complétion**:
 - ❌ Échange SDP non fonctionnel
 - ❌ Échange ICE candidates non fonctionnel
 
-**Temps estimé pour correction:** Non fourni (voir CLAUDE.md)
+---
+
+## Bugs additionnels (Iteration 2)
+
+### Bug #6: Aucune implémentation Android
+
+**Sévérité:** HAUTE
+
+Aucun code WebRTC n'existe côté Android:
+```bash
+grep -ri "WebRTC\|RTCPeer" android/  # Aucun résultat
+```
+
+**Impact:** Les appels ne fonctionneront que sur desktop (Tauri), jamais sur mobile Android.
+
+**Dépendance requise pour Android:**
+```kotlin
+// build.gradle.kts
+implementation("io.getstream:stream-webrtc-android:1.1.1")
+// ou
+implementation("org.webrtc:google-webrtc:1.0.+")
+```
+
+---
+
+### Bug #7: Fuite mémoire potentielle - RTCPeerConnection non fermé
+
+**Fichier:** `src/hooks/useWebRTCCall.ts:86-100`
+**Sévérité:** MOYENNE
+
+La fonction `endCallInternal` ne ferme pas le `RTCPeerConnection`:
+
+```typescript
+const endCallInternal = useCallback(() => {
+  stopRingtone();
+  stopLocalStream();
+  removeTracksFromPC();
+  // ... reset states
+  // MANQUANT: pcRef.current?.close(); pcRef.current = null;
+}, [stopLocalStream, removeTracksFromPC]);
+```
+
+**Impact:** Si le RTCPeerConnection était créé, il resterait ouvert après la fin de l'appel, causant des fuites de ressources.
+
+---
+
+### Bug #8: Sécurité - Aucune vérification de relation (serveur)
+
+**Fichier:** `server/src/socket/index.ts:230-259`
+**Sévérité:** HAUTE (sécurité)
+
+Les événements WebRTC sont relayés sans vérifier que les utilisateurs ont une relation (room commune, contacts):
+
+```typescript
+socket.on('webrtc:offer', (data: { to: string; offer: unknown }) => {
+  io.to(`user:${data.to}`).emit('webrtc:offer', {  // Pas de vérification!
+    from: userId,
+    // ...
+  });
+});
+```
+
+**Impact:** N'importe quel utilisateur authentifié peut:
+- Envoyer des demandes d'appel à n'importe qui
+- Potentiellement harceler d'autres utilisateurs
+- Découvrir si un utilisateur est en ligne
+
+**Correction suggérée:**
+```typescript
+socket.on('webrtc:offer', async (data: { to: string; offer: unknown }) => {
+  // Vérifier que les utilisateurs partagent une room
+  const sharedRoom = await Room.findOne({
+    'members.userId': { $all: [userId, data.to] }
+  });
+
+  if (!sharedRoom) {
+    socket.emit('error', { message: 'Cannot call user outside shared rooms' });
+    return;
+  }
+
+  io.to(`user:${data.to}`).emit('webrtc:offer', { ... });
+});
+```
+
+---
+
+### Bug #9: Pas de gestion d'erreur getUserMedia
+
+**Fichier:** `src/hooks/useWebRTCCall.ts:134-151`
+**Sévérité:** BASSE
+
+L'erreur getUserMedia affiche une alerte mais ne reset pas l'état:
+
+```typescript
+} catch (err) {
+  console.error('Failed to get local stream for call:', err);
+  alert("Impossible d'accéder au micro ou à la caméra...");
+  // MANQUANT: setCallState('idle'); cleanup();
+}
+```
+
+**Impact:** L'UI peut rester dans un état incohérent après une erreur de permissions.
+
+---
+
+## Tableau récapitulatif complet
+
+| # | Bug | Sévérité | Type |
+|---|-----|----------|------|
+| 1 | RTCPeerConnection jamais créé | CRITIQUE | Fonctionnel |
+| 2 | Handlers WebRTC non implémentés | CRITIQUE | Fonctionnel |
+| 3 | Pas de STUN/TURN | HAUTE | Config |
+| 4 | addTracksAndRenegotiate sur null | CRITIQUE | Fonctionnel |
+| 5 | ontrack useEffect inutile | MOYENNE | Fonctionnel |
+| 6 | Pas d'implémentation Android | HAUTE | Plateforme |
+| 7 | RTCPeerConnection jamais fermé | MOYENNE | Mémoire |
+| 8 | Pas de vérification relation | HAUTE | Sécurité |
+| 9 | Pas de cleanup sur erreur getUserMedia | BASSE | UX |
+
+---
+
+## Conclusion mise à jour
+
+L'implémentation WebRTC est à **~25% de complétion** (révision à la baisse):
+
+### Desktop (Tauri)
+- ✅ Signaling serveur fonctionnel
+- ✅ Interface utilisateur présente
+- ✅ Gestion du flux d'appel (request/accept/reject/end)
+- ❌ RTCPeerConnection non créé
+- ❌ Handlers WebRTC non implémentés
+- ❌ Configuration ICE absente
+- ❌ Cleanup incomplet
+
+### Android
+- ❌ Aucune implémentation (0%)
+
+### Sécurité
+- ❌ Pas de vérification de relation entre utilisateurs
+
+---
+
+## Bugs additionnels (Iteration 3)
+
+### Bug #10: Handler webrtc:close non implémenté
+
+**Sévérité:** MOYENNE
+
+Le serveur émet `webrtc:close` mais aucun handler n'existe côté client:
+```bash
+grep -r "on.*webrtc:close" src/  # Aucun résultat
+```
+
+**Impact:** Si un pair ferme sa connexion WebRTC, l'autre pair ne sera pas notifié proprement.
+
+---
+
+### Bug #11: Fuite AudioContext dans le ringtone
+
+**Fichier:** `src/utils/audio.ts:23-35`
+**Sévérité:** BASSE
+
+Un nouveau `AudioContext` est créé toutes les 1.5 secondes pendant la sonnerie:
+
+```typescript
+const playTone = () => {
+  const audioContext = new AudioContext();  // Nouveau contexte à chaque fois!
+  // ...
+};
+ringtoneInterval = setInterval(playTone, 1500);
+```
+
+**Impact:**
+- Accumulation d'AudioContexts non fermés
+- Warning navigateur: "The AudioContext was not allowed to start"
+- Potentielle dégradation de performance sur appels longs sans réponse
+
+**Correction suggérée:**
+```typescript
+let audioContext: AudioContext | null = null;
+
+export const playRingtone = () => {
+  stopRingtone();
+  audioContext = new AudioContext();  // Un seul contexte
+
+  const playTone = () => {
+    if (!audioContext) return;
+    const oscillator = audioContext.createOscillator();
+    // ...
+  };
+  // ...
+};
+
+export const stopRingtone = () => {
+  if (ringtoneInterval) {
+    clearInterval(ringtoneInterval);
+    ringtoneInterval = null;
+  }
+  if (audioContext) {
+    audioContext.close();
+    audioContext = null;
+  }
+};
+```
+
+---
+
+### Bug #12: Ordre incorrect - call:request envoyé avant SDP
+
+**Fichier:** `src/hooks/useWebRTCCall.ts:124-152`
+**Sévérité:** HAUTE (si implémenté)
+
+Dans le flux prévu, `socketService.requestCall()` est appelé APRÈS `addTracksAndRenegotiate()`:
+
+```typescript
+const startCall = useCallback(async (targetUser: string, withCamera: boolean) => {
+  // ...
+  await addTracksAndRenegotiate(stream, targetUser);  // Envoie l'offre SDP
+  socketService.requestCall(targetUser, withCamera);   // Puis demande l'appel
+  setCallState('calling');
+}, []);
+```
+
+**Problème:** Le destinataire reçoit l'offre SDP AVANT la notification d'appel entrant. Il n'aura pas le temps de voir le modal d'appel entrant avant de recevoir l'offre.
+
+**Flux correct:**
+1. `call:request` → Destinataire voit le modal, ringtone joue
+2. Destinataire accepte → `call:accept`
+3. PUIS échange SDP (offer → answer → ICE)
+
+---
+
+## Tableau récapitulatif final
+
+| # | Bug | Sévérité | Type |
+|---|-----|----------|------|
+| 1 | RTCPeerConnection jamais créé | CRITIQUE | Fonctionnel |
+| 2 | Handlers WebRTC non implémentés | CRITIQUE | Fonctionnel |
+| 3 | Pas de STUN/TURN | HAUTE | Config |
+| 4 | addTracksAndRenegotiate sur null | CRITIQUE | Fonctionnel |
+| 5 | ontrack useEffect inutile | MOYENNE | Fonctionnel |
+| 6 | Pas d'implémentation Android | HAUTE | Plateforme |
+| 7 | RTCPeerConnection jamais fermé | MOYENNE | Mémoire |
+| 8 | Pas de vérification relation | HAUTE | Sécurité |
+| 9 | Pas de cleanup sur erreur getUserMedia | BASSE | UX |
+| 10 | Handler webrtc:close manquant | MOYENNE | Fonctionnel |
+| 11 | Fuite AudioContext ringtone | BASSE | Mémoire |
+| 12 | Ordre incorrect call:request vs SDP | HAUTE | Architecture |
+
+---
+
+## Statistiques finales
+
+| Sévérité | Nombre |
+|----------|--------|
+| CRITIQUE | 3 |
+| HAUTE | 5 |
+| MOYENNE | 3 |
+| BASSE | 2 |
+| **Total** | **12** |
+
+---
+
+## Conclusion finale
+
+**WebRTC: ~25% implémenté, 0% fonctionnel**
+
+L'implémentation actuelle est une coquille vide:
+- Le signaling serveur fonctionne (relais des événements)
+- L'UI existe (boutons, modals, overlays)
+- La logique de flux d'appel existe (états, handlers call:*)
+
+Mais le cœur de WebRTC - le `RTCPeerConnection` - n'existe pas.
+
+**Pour rendre WebRTC fonctionnel, il faut:**
+1. Créer et gérer le RTCPeerConnection
+2. Implémenter les handlers pour offer/answer/ice-candidate/close
+3. Configurer les serveurs STUN (minimum) et TURN (recommandé)
+4. Corriger l'ordre d'envoi (call:request avant SDP)
+5. Ajouter le cleanup approprié
+
+**Recommandation:** Désactiver les boutons d'appel en attendant une implémentation complète pour éviter la confusion utilisateur
