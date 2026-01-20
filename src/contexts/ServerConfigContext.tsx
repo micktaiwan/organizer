@@ -1,8 +1,33 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { load, Store } from '@tauri-apps/plugin-store';
 
+// Check if running in Tauri environment
+const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
 const SERVER_CONFIGS_KEY = 'server_configs';
 const SELECTED_SERVER_KEY = 'selected_server';
+
+// Browser fallback store using localStorage
+class BrowserStore {
+  private prefix = 'organizer_';
+
+  async get<T>(key: string): Promise<T | null> {
+    const value = localStorage.getItem(this.prefix + key);
+    return value ? JSON.parse(value) : null;
+  }
+
+  async set(key: string, value: unknown): Promise<void> {
+    localStorage.setItem(this.prefix + key, JSON.stringify(value));
+  }
+
+  async delete(key: string): Promise<void> {
+    localStorage.removeItem(this.prefix + key);
+  }
+
+  async save(): Promise<void> {
+    // localStorage saves immediately, no-op
+  }
+}
 
 export interface ServerConfig {
   id: string;
@@ -30,15 +55,21 @@ const DEFAULT_SERVERS: ServerConfig[] = [
   { id: 'production', name: 'Production', url: 'http://51.210.150.25:3001' },
 ];
 
+type StoreInterface = Store | BrowserStore;
+
 export function ServerConfigProvider({ children }: { children: ReactNode }) {
   const [servers, setServers] = useState<ServerConfig[]>([]);
   const [selectedServer, setSelectedServer] = useState<ServerConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const storeRef = useRef<Store | null>(null);
+  const storeRef = useRef<StoreInterface | null>(null);
 
-  const getStore = async (): Promise<Store> => {
+  const getStore = async (): Promise<StoreInterface> => {
     if (!storeRef.current) {
-      storeRef.current = await load('settings.json', { autoSave: false, defaults: {} });
+      if (isTauri()) {
+        storeRef.current = await load('settings.json', { autoSave: false, defaults: {} });
+      } else {
+        storeRef.current = new BrowserStore();
+      }
     }
     return storeRef.current;
   };

@@ -3,6 +3,14 @@ import { CallState } from '../types';
 import { socketService } from '../services/socket';
 import { playRingtone, stopRingtone } from '../utils/audio';
 
+// STUN servers configuration
+const ICE_SERVERS: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
+};
+
 interface UseWebRTCCallOptions {
   pcRef: React.MutableRefObject<RTCPeerConnection | null>;
   addSystemMessage: (type: 'missed-call' | 'rejected-call' | 'ended-call') => void;
@@ -14,6 +22,7 @@ export const useWebRTCCall = ({
 }: UseWebRTCCallOptions) => {
   // Target user for the current call (caller or callee)
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
+  const [remoteUsername, setRemoteUsername] = useState<string | null>(null);
   const [callState, setCallState] = useState<CallState>('idle');
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
   const [isMicEnabled, setIsMicEnabled] = useState(true);
@@ -26,27 +35,64 @@ export const useWebRTCCall = ({
   const localStreamRef = useRef<MediaStream | null>(null);
   const sendersRef = useRef<RTCRtpSender[]>([]);
 
-  // Handle remote stream
-  useEffect(() => {
-    const pc = pcRef.current;
-    if (!pc) return;
+  // Store pending ICE candidates (received before remote description is set)
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
-    const handleTrack = (event: RTCTrackEvent) => {
+  // Create RTCPeerConnection
+  const createPeerConnection = useCallback((targetUser: string, username?: string) => {
+    console.log('Creating RTCPeerConnection for', targetUser);
+
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+
+    // Handle ICE candidates
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('Sending ICE candidate to', targetUser);
+        socketService.sendIceCandidate(targetUser, event.candidate.toJSON());
+      }
+    };
+
+    // Handle remote tracks
+    pc.ontrack = (event) => {
       console.log('Remote track received:', event.track.kind);
       if (remoteVideoRef.current && event.streams[0]) {
         remoteVideoRef.current.srcObject = event.streams[0];
       }
-      if (callState === 'calling') {
+    };
+
+    // Handle connection state changes
+    pc.onconnectionstatechange = () => {
+      console.log('Connection state:', pc.connectionState);
+      if (pc.connectionState === 'connected') {
         setCallState('connected');
+      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        console.log('Connection lost, cleaning up');
+        endCallInternal();
       }
     };
 
-    pc.addEventListener('track', handleTrack);
-
-    return () => {
-      pc.removeEventListener('track', handleTrack);
+    pc.oniceconnectionstatechange = () => {
+      console.log('ICE connection state:', pc.iceConnectionState);
     };
-  }, [pcRef.current, callState]);
+
+    pcRef.current = pc;
+    setTargetUserId(targetUser);
+    if (username) {
+      setRemoteUsername(username);
+    }
+
+    return pc;
+  }, []);
+
+  // Close RTCPeerConnection
+  const closePeerConnection = useCallback(() => {
+    if (pcRef.current) {
+      console.log('Closing RTCPeerConnection');
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    pendingIceCandidatesRef.current = [];
+  }, []);
 
   // Sync local video when camera is enabled
   useEffect(() => {
@@ -88,6 +134,7 @@ export const useWebRTCCall = ({
     stopRingtone();
     stopLocalStream();
     removeTracksFromPC();
+    closePeerConnection();
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = null;
     }
@@ -97,27 +144,23 @@ export const useWebRTCCall = ({
     setRemoteHasCamera(false);
     setIncomingCallFrom(null);
     setTargetUserId(null);
-  }, [stopLocalStream, removeTracksFromPC]);
+    setRemoteUsername(null);
+  }, [stopLocalStream, removeTracksFromPC, closePeerConnection]);
 
-  // Add tracks to peer connection and renegotiate
-  const addTracksAndRenegotiate = useCallback(async (stream: MediaStream, target: string) => {
+  // Process pending ICE candidates
+  const processPendingIceCandidates = useCallback(async () => {
     const pc = pcRef.current;
-    if (!pc || !target) return;
+    if (!pc || !pc.remoteDescription) return;
 
-    // Add tracks to peer connection
-    stream.getTracks().forEach(track => {
-      const sender = pc.addTrack(track, stream);
-      sendersRef.current.push(sender);
-    });
-
-    // Renegotiate the connection
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socketService.sendOffer(target, offer);
-    } catch (err) {
-      console.error('Failed to renegotiate:', err);
+    console.log(`Processing ${pendingIceCandidatesRef.current.length} pending ICE candidates`);
+    for (const candidate of pendingIceCandidatesRef.current) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.error('Failed to add pending ICE candidate:', err);
+      }
     }
+    pendingIceCandidatesRef.current = [];
   }, []);
 
   // Start a call with specific target user
@@ -127,10 +170,13 @@ export const useWebRTCCall = ({
       return;
     }
 
-    setTargetUserId(targetUser);
-
     try {
       console.log('Starting call, getting user media...', { withCamera });
+
+      // 1. Create peer connection first
+      const pc = createPeerConnection(targetUser);
+
+      // 2. Get user media
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: withCamera,
@@ -138,18 +184,28 @@ export const useWebRTCCall = ({
       localStreamRef.current = stream;
       setIsCameraEnabled(withCamera);
 
-      // Add tracks to peer connection
-      await addTracksAndRenegotiate(stream, targetUser);
+      // 3. Add tracks to peer connection
+      stream.getTracks().forEach(track => {
+        const sender = pc.addTrack(track, stream);
+        sendersRef.current.push(sender);
+      });
 
-      // Send call request via Socket.io
+      // 4. Create and send offer
+      console.log('Creating offer...');
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socketService.sendOffer(targetUser, offer);
+
+      // 5. Send call request via Socket.io
       console.log('Sending call request signaling...');
       socketService.requestCall(targetUser, withCamera);
       setCallState('calling');
     } catch (err) {
-      console.error('Failed to get local stream for call:', err);
+      console.error('Failed to start call:', err);
+      closePeerConnection();
       alert("Impossible d'accéder au micro ou à la caméra. Vérifiez les permissions système.");
     }
-  }, [addTracksAndRenegotiate]);
+  }, [createPeerConnection, closePeerConnection]);
 
   // Accept an incoming call
   const acceptCall = useCallback(async (withCamera: boolean) => {
@@ -157,14 +213,20 @@ export const useWebRTCCall = ({
     stopRingtone();
 
     const callTarget = incomingCallFrom?.userId;
+    const callerUsername = incomingCallFrom?.username;
     if (!callTarget) {
       console.error('Cannot accept call: no incoming call');
       return;
     }
 
-    setTargetUserId(callTarget);
-
     try {
+      // 1. Create peer connection if not already created (it should be from webrtc:offer)
+      let pc = pcRef.current;
+      if (!pc) {
+        pc = createPeerConnection(callTarget, callerUsername);
+      }
+
+      // 2. Get user media
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: withCamera,
@@ -172,18 +234,30 @@ export const useWebRTCCall = ({
       localStreamRef.current = stream;
       setIsCameraEnabled(withCamera);
 
-      // Add tracks to peer connection
-      await addTracksAndRenegotiate(stream, callTarget);
+      // 3. Add tracks to peer connection
+      stream.getTracks().forEach(track => {
+        const sender = pc!.addTrack(track, stream);
+        sendersRef.current.push(sender);
+      });
 
-      // Send call accept via Socket.io
+      // 4. Create and send answer (if we have remote description from offer)
+      if (pc.remoteDescription) {
+        console.log('Creating answer...');
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socketService.sendAnswer(callTarget, answer);
+      }
+
+      // 5. Send call accept via Socket.io
       console.log('Sending call-accept signaling...');
       socketService.acceptCall(callTarget, withCamera);
       setCallState('connected');
     } catch (err) {
       console.error('Failed to accept call (getUserMedia error):', err);
+      closePeerConnection();
       alert('Erreur micro/caméra: ' + (err as Error).message);
     }
-  }, [incomingCallFrom, addTracksAndRenegotiate]);
+  }, [incomingCallFrom, createPeerConnection, closePeerConnection]);
 
   // Reject an incoming call
   const rejectCall = useCallback(() => {
@@ -194,16 +268,19 @@ export const useWebRTCCall = ({
       socketService.rejectCall(incomingCallFrom.userId);
     }
 
+    closePeerConnection();
     addSystemMessage('rejected-call');
     setCallState('idle');
     setIncomingCallFrom(null);
-  }, [incomingCallFrom, addSystemMessage]);
+    setRemoteUsername(null);
+  }, [incomingCallFrom, addSystemMessage, closePeerConnection]);
 
   // End the current call
   const endCall = useCallback(() => {
     console.log('Ending call...');
     if (targetUserId) {
       socketService.endCall(targetUserId);
+      socketService.closeWebRTC(targetUserId);
     }
     addSystemMessage('ended-call');
     endCallInternal();
@@ -262,6 +339,7 @@ export const useWebRTCCall = ({
     const handleCallRequest = (data: { from: string; fromUsername: string; withCamera: boolean }) => {
       console.log('Receiving call request from:', data.from);
       setIncomingCallFrom({ userId: data.from, username: data.fromUsername });
+      setRemoteUsername(data.fromUsername);
       setIncomingCallWithCamera(data.withCamera);
       setCallState('incoming');
       playRingtone();
@@ -293,6 +371,21 @@ export const useWebRTCCall = ({
       setRemoteHasCamera(data.enabled);
     };
 
+    const handleCallError = (data: { error: string; message: string }) => {
+      console.error('Call error:', data.error, data.message);
+      alert(`Erreur d'appel: ${data.message}`);
+      endCallInternal();
+    };
+
+    const handleWebRTCError = (data: { error: string; message: string }) => {
+      console.error('WebRTC error:', data.error, data.message);
+      // Only alert if we're actively in a call
+      if (callState === 'calling' || callState === 'connected') {
+        alert(`Erreur WebRTC: ${data.message}`);
+        endCallInternal();
+      }
+    };
+
     const unsubRequest = socketService.on('call:request', (data) =>
       handleCallRequest(data as { from: string; fromUsername: string; withCamera: boolean })
     );
@@ -304,6 +397,12 @@ export const useWebRTCCall = ({
     const unsubToggle = socketService.on('call:toggle-camera', (data) =>
       handleToggleCamera(data as { from: string; enabled: boolean })
     );
+    const unsubCallError = socketService.on('call:error', (data) =>
+      handleCallError(data as { error: string; message: string })
+    );
+    const unsubWebRTCError = socketService.on('webrtc:error', (data) =>
+      handleWebRTCError(data as { error: string; message: string })
+    );
 
     return () => {
       unsubRequest();
@@ -311,16 +410,118 @@ export const useWebRTCCall = ({
       unsubReject();
       unsubEnd();
       unsubToggle();
+      unsubCallError();
+      unsubWebRTCError();
     };
   }, [callState, addSystemMessage, endCallInternal]);
+
+  // Handle WebRTC signaling events
+  useEffect(() => {
+    const handleWebRTCOffer = async (data: { from: string; fromUsername: string; offer: RTCSessionDescriptionInit }) => {
+      console.log('Received WebRTC offer from', data.from);
+
+      // Create peer connection if not exists
+      let pc = pcRef.current;
+      if (!pc) {
+        pc = createPeerConnection(data.from, data.fromUsername);
+      }
+
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        console.log('Remote description set from offer');
+
+        // Process any pending ICE candidates
+        await processPendingIceCandidates();
+
+        // If we already have local stream (call already accepted), create answer
+        if (localStreamRef.current) {
+          console.log('Creating answer...');
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socketService.sendAnswer(data.from, answer);
+        }
+      } catch (err) {
+        console.error('Failed to handle WebRTC offer:', err);
+      }
+    };
+
+    const handleWebRTCAnswer = async (data: { from: string; answer: RTCSessionDescriptionInit }) => {
+      console.log('Received WebRTC answer from', data.from);
+      const pc = pcRef.current;
+      if (!pc) {
+        console.error('No peer connection for answer');
+        return;
+      }
+
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        console.log('Remote description set from answer');
+
+        // Process any pending ICE candidates
+        await processPendingIceCandidates();
+      } catch (err) {
+        console.error('Failed to handle WebRTC answer:', err);
+      }
+    };
+
+    const handleICECandidate = async (data: { from: string; candidate: RTCIceCandidateInit }) => {
+      console.log('Received ICE candidate from', data.from);
+      const pc = pcRef.current;
+
+      if (!pc) {
+        console.log('No peer connection yet, queuing ICE candidate');
+        pendingIceCandidatesRef.current.push(data.candidate);
+        return;
+      }
+
+      if (!pc.remoteDescription) {
+        console.log('Remote description not set yet, queuing ICE candidate');
+        pendingIceCandidatesRef.current.push(data.candidate);
+        return;
+      }
+
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        console.log('ICE candidate added');
+      } catch (err) {
+        console.error('Failed to add ICE candidate:', err);
+      }
+    };
+
+    const handleWebRTCClose = (data: { from: string }) => {
+      console.log('WebRTC close signal from', data.from);
+      endCallInternal();
+    };
+
+    const unsubOffer = socketService.on('webrtc:offer', (data) =>
+      handleWebRTCOffer(data as { from: string; fromUsername: string; offer: RTCSessionDescriptionInit })
+    );
+    const unsubAnswer = socketService.on('webrtc:answer', (data) =>
+      handleWebRTCAnswer(data as { from: string; answer: RTCSessionDescriptionInit })
+    );
+    const unsubICE = socketService.on('webrtc:ice-candidate', (data) =>
+      handleICECandidate(data as { from: string; candidate: RTCIceCandidateInit })
+    );
+    const unsubClose = socketService.on('webrtc:close', (data) =>
+      handleWebRTCClose(data as { from: string })
+    );
+
+    return () => {
+      unsubOffer();
+      unsubAnswer();
+      unsubICE();
+      unsubClose();
+    };
+  }, [createPeerConnection, processPendingIceCandidates, endCallInternal]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopLocalStream();
       removeTracksFromPC();
+      closePeerConnection();
     };
-  }, [stopLocalStream, removeTracksFromPC]);
+  }, [stopLocalStream, removeTracksFromPC, closePeerConnection]);
 
   return {
     callState,
@@ -329,6 +530,7 @@ export const useWebRTCCall = ({
     incomingCallWithCamera,
     remoteHasCamera,
     incomingCallFrom,
+    remoteUsername,
     localVideoRef,
     remoteVideoRef,
     startCall,

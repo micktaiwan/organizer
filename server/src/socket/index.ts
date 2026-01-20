@@ -3,6 +3,7 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { User, Room, Message } from '../models/index.js';
 import { JwtPayload } from '../middleware/auth.js';
+import { canCommunicate } from '../services/authorization.service.js';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -227,7 +228,12 @@ export function setupSocket(httpServer: HttpServer): Server {
     // ===== WebRTC Signaling Events =====
 
     // Relayer l'offre WebRTC (SDP)
-    socket.on('webrtc:offer', (data: { to: string; offer: unknown }) => {
+    socket.on('webrtc:offer', async (data: { to: string; offer: unknown }) => {
+      const canCall = await canCommunicate(userId, data.to);
+      if (!canCall) {
+        socket.emit('webrtc:error', { error: 'unauthorized', message: 'You cannot call this user' });
+        return;
+      }
       io.to(`user:${data.to}`).emit('webrtc:offer', {
         from: userId,
         fromUsername: socket.username,
@@ -236,7 +242,12 @@ export function setupSocket(httpServer: HttpServer): Server {
     });
 
     // Relayer la réponse WebRTC (SDP)
-    socket.on('webrtc:answer', (data: { to: string; answer: unknown }) => {
+    socket.on('webrtc:answer', async (data: { to: string; answer: unknown }) => {
+      const canCall = await canCommunicate(userId, data.to);
+      if (!canCall) {
+        socket.emit('webrtc:error', { error: 'unauthorized', message: 'You cannot call this user' });
+        return;
+      }
       io.to(`user:${data.to}`).emit('webrtc:answer', {
         from: userId,
         answer: data.answer,
@@ -244,7 +255,12 @@ export function setupSocket(httpServer: HttpServer): Server {
     });
 
     // Relayer les candidats ICE
-    socket.on('webrtc:ice-candidate', (data: { to: string; candidate: unknown }) => {
+    socket.on('webrtc:ice-candidate', async (data: { to: string; candidate: unknown }) => {
+      const canCall = await canCommunicate(userId, data.to);
+      if (!canCall) {
+        // Silently ignore - auth should have failed at offer/answer stage
+        return;
+      }
       io.to(`user:${data.to}`).emit('webrtc:ice-candidate', {
         from: userId,
         candidate: data.candidate,
@@ -253,6 +269,7 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     // Fermer la connexion WebRTC
     socket.on('webrtc:close', (data: { to: string }) => {
+      // No auth check - always allow closing
       io.to(`user:${data.to}`).emit('webrtc:close', {
         from: userId,
       });
@@ -261,7 +278,12 @@ export function setupSocket(httpServer: HttpServer): Server {
     // ===== Call Signaling Events =====
 
     // Demande d'appel
-    socket.on('call:request', (data: { to: string; withCamera: boolean }) => {
+    socket.on('call:request', async (data: { to: string; withCamera: boolean }) => {
+      const canCall = await canCommunicate(userId, data.to);
+      if (!canCall) {
+        socket.emit('call:error', { error: 'unauthorized', message: 'You cannot call this user' });
+        return;
+      }
       io.to(`user:${data.to}`).emit('call:request', {
         from: userId,
         fromUsername: socket.username,
@@ -270,7 +292,12 @@ export function setupSocket(httpServer: HttpServer): Server {
     });
 
     // Acceptation d'appel
-    socket.on('call:accept', (data: { to: string; withCamera: boolean }) => {
+    socket.on('call:accept', async (data: { to: string; withCamera: boolean }) => {
+      const canCall = await canCommunicate(userId, data.to);
+      if (!canCall) {
+        socket.emit('call:error', { error: 'unauthorized', message: 'You cannot accept this call' });
+        return;
+      }
       io.to(`user:${data.to}`).emit('call:accept', {
         from: userId,
         withCamera: data.withCamera,
@@ -279,6 +306,7 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     // Rejet d'appel
     socket.on('call:reject', (data: { to: string }) => {
+      // No auth check - always allow rejection
       io.to(`user:${data.to}`).emit('call:reject', {
         from: userId,
       });
@@ -286,6 +314,7 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     // Fin d'appel
     socket.on('call:end', (data: { to: string }) => {
+      // No auth check - always allow ending calls
       io.to(`user:${data.to}`).emit('call:end', {
         from: userId,
       });
@@ -293,6 +322,7 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     // Toggle caméra pendant l'appel
     socket.on('call:toggle-camera', (data: { to: string; enabled: boolean }) => {
+      // No auth check - if call was established, toggling camera is allowed
       io.to(`user:${data.to}`).emit('call:toggle-camera', {
         from: userId,
         enabled: data.enabled,
