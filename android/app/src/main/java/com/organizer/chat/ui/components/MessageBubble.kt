@@ -21,6 +21,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import io.noties.markwon.Markwon
+import io.noties.markwon.linkify.LinkifyPlugin
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -369,7 +370,11 @@ private fun TextMessageContent(
     onLongPress: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val markwon = remember { Markwon.create(context) }
+    val markwon = remember {
+        Markwon.builder(context)
+            .usePlugin(LinkifyPlugin.create())
+            .build()
+    }
     val spanned = remember(content) { markwon.toMarkdown(content) }
 
     // Track long press state
@@ -383,34 +388,21 @@ private fun TextMessageContent(
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                 movementMethod = LinkMovementMethod.getInstance()
                 // Handle long press via touch listener
+                var longPressRunnable: Runnable? = null
                 setOnTouchListener { view, event ->
                     when (event.action) {
                         MotionEvent.ACTION_DOWN -> {
                             longPressTriggered = false
-                            view.postDelayed({
-                                if (!longPressTriggered) {
-                                    longPressTriggered = true
-                                    onLongPress?.invoke()
-                                }
-                            }, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                            longPressRunnable = Runnable {
+                                longPressTriggered = true
+                                onLongPress?.invoke()
+                            }
+                            view.postDelayed(longPressRunnable, android.view.ViewConfiguration.getLongPressTimeout().toLong())
                         }
                         MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                            view.removeCallbacks(null)
-                            if (longPressTriggered) {
-                                // Consume the event if long press was triggered
-                                true
-                            } else {
-                                // Let normal touch handling occur (for links)
-                                false
-                            }
+                            longPressRunnable?.let { view.removeCallbacks(it) }
+                            longPressRunnable = null
                         }
-                        MotionEvent.ACTION_MOVE -> {
-                            // Cancel long press if finger moves too much
-                            val slop = android.view.ViewConfiguration.get(ctx).scaledTouchSlop
-                            // Simple movement check - cancel if any significant movement
-                            false
-                        }
-                        else -> false
                     }
                     // Return false to allow LinkMovementMethod to handle link clicks
                     false
