@@ -102,6 +102,7 @@ Ajouter à chaque bug:
 - Un bug à la fois
 - Commits atomiques si possible
 - Garder les changements minimaux
+- commenter le code en anglais pour les explications de fixes et éviter ainsi les régressions futures
 
 ### 4.2 Vérification immédiate
 Après chaque fix:
@@ -121,9 +122,11 @@ Mettre le status à `Fixed` et ajouter:
 
 ---
 
-## Iteration 5: Revue post-fix
+## Iteration 5: Revue post-fix (OBLIGATOIRE)
 
 **Objectif:** S'assurer que les fixes n'introduisent pas de nouvelles régressions.
+
+⚠️ **Cette itération est OBLIGATOIRE avant de marquer la tâche comme complète.**
 
 ### 5.1 Revue des changements
 Pour chaque fichier modifié:
@@ -131,9 +134,23 @@ Pour chaque fichier modifié:
 - Y a-t-il des cas edge non gérés par le fix?
 - Le fix peut-il casser d'autres fonctionnalités?
 
-### 5.2 Vérification croisée
-- Les autres specs sont-elles toujours respectées?
-- Y a-t-il des interactions entre les fixes?
+### 5.2 Vérification croisée (REQUIS)
+**Créer une section dans docs/bugs.md avec ce format EXACT :**
+
+```markdown
+## Vérification croisée des specs
+
+| Spec | Fichiers touchés par le fix | Impact | Vérifié |
+|------|----------------------------|--------|---------|
+| SPEC-XXX | file.ts:123 | Aucun / Potentiel / Cassé | ✅ / ⚠️ / ❌ |
+```
+
+Pour chaque spec dans docs/specs.md :
+1. Identifier si les fichiers modifiés touchent cette spec
+2. Si oui, vérifier que le comportement est préservé
+3. Documenter le résultat dans le tableau
+
+**Ne pas compléter la loop si cette section n'existe pas dans bugs.md.**
 
 ### 5.3 Rapport final
 Mettre à jour `docs/bugs.md` avec un résumé:
