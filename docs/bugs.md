@@ -227,6 +227,25 @@ private fun addMessageIfNotExists(message: Message): Boolean {
 
 ---
 
+## Vérification croisée des specs
+
+| Spec | Fichiers touchés par le fix | Impact | Vérifié |
+|------|----------------------------|--------|---------|
+| Liens HTTP/HTTPS cliquables | useRooms.ts (state only) | Aucun - rendu non touché | ✅ |
+| Sauts de ligne préservés | useRooms.ts (state only) | Aucun - rendu non touché | ✅ |
+| Android: tap = no action | ChatService.kt, SocketManager.kt | Aucun - gestures non touchées | ✅ |
+| Android: long press = popup | ChatService.kt, SocketManager.kt | Aucun - gestures non touchées | ✅ |
+| Android: partage natif | Aucun fichier touché | Aucun | ✅ |
+
+**Justification :** Les modifications concernent uniquement :
+- Le tracking des messages en cours d'envoi (state management)
+- La configuration du SharedFlow (replay)
+- La garde de connexion socket (lifecycle)
+
+Aucun fichier de rendu (MessageItem, MessageBubble) ou de gestion des gestes n'a été modifié.
+
+---
+
 ## Résumé
 
 | Bug | Sévérité | Plateforme | Impact réel | Status |
