@@ -26,7 +26,58 @@ export const playNotificationSound = () => {
   oscillator.stop(notificationAudioContext.currentTime + 0.2);
 };
 
-// Ringtone state
+// Ringback tone state (outgoing calls - waiting for answer)
+let ringbackInterval: ReturnType<typeof setInterval> | null = null;
+let ringbackAudioContext: AudioContext | null = null;
+
+export const playRingback = () => {
+  stopRingback();
+
+  ringbackAudioContext = new AudioContext();
+
+  const playTone = () => {
+    if (!ringbackAudioContext || ringbackAudioContext.state === 'closed') return;
+
+    const oscillator = ringbackAudioContext.createOscillator();
+    const gainNode = ringbackAudioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(ringbackAudioContext.destination);
+
+    // Classic phone ringback tone (425Hz in Europe, dual tone)
+    oscillator.frequency.setValueAtTime(425, ringbackAudioContext.currentTime);
+    gainNode.gain.setValueAtTime(0.2, ringbackAudioContext.currentTime);
+    gainNode.gain.setValueAtTime(0.2, ringbackAudioContext.currentTime + 0.4);
+    gainNode.gain.setValueAtTime(0, ringbackAudioContext.currentTime + 0.4);
+
+    oscillator.start(ringbackAudioContext.currentTime);
+    oscillator.stop(ringbackAudioContext.currentTime + 0.4);
+  };
+
+  playTone();
+  // European pattern: 400ms on, 200ms off, 400ms on, 2000ms off
+  let toggle = false;
+  ringbackInterval = setInterval(() => {
+    toggle = !toggle;
+    if (toggle) {
+      setTimeout(playTone, 200); // Second beep after 200ms pause
+    } else {
+      playTone(); // First beep
+    }
+  }, 1500);
+};
+
+export const stopRingback = () => {
+  if (ringbackInterval) {
+    clearInterval(ringbackInterval);
+    ringbackInterval = null;
+  }
+  if (ringbackAudioContext) {
+    ringbackAudioContext.close();
+    ringbackAudioContext = null;
+  }
+};
+
+// Ringtone state (incoming calls)
 let ringtoneInterval: ReturnType<typeof setInterval> | null = null;
 let ringtoneAudioContext: AudioContext | null = null;
 

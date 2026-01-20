@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Call
 import android.net.Uri
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
@@ -80,7 +81,8 @@ fun ChatScreen(
     roomRepository: RoomRepository,
     chatService: ChatService?,
     tokenManager: TokenManager,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onCallClick: (userId: String, username: String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val viewModel = remember(roomId, chatService, context) {
@@ -217,6 +219,25 @@ fun ChatScreen(
                         }
                     },
                     actions = {
+                        // Call button - only for private 1-to-1 rooms
+                        val otherMemberId = uiState.humanMemberIds
+                            .filter { it != uiState.currentUserId }
+                            .singleOrNull()
+
+                        if (otherMemberId != null) {
+                            IconButton(
+                                onClick = {
+                                    // Use roomName as username for now (in private rooms, roomName is often the other user's name)
+                                    onCallClick(otherMemberId, roomName)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Call,
+                                    contentDescription = "Appeler"
+                                )
+                            }
+                        }
+
                         ConnectionStatusIcon(
                             connectionState = connectionState,
                             modifier = Modifier.padding(end = 8.dp)

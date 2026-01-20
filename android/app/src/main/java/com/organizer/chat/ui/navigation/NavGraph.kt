@@ -52,7 +52,8 @@ fun NavGraph(
     noteRepository: NoteRepository,
     appPreferences: AppPreferences,
     onLoginSuccess: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onCallClick: (userId: String, username: String) -> Unit = { _, _ -> }
 ) {
     NavHost(
         navController = navController,
@@ -183,7 +184,8 @@ fun NavGraph(
                 roomRepository = roomRepository,
                 chatService = chatService,
                 tokenManager = tokenManager,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onCallClick = onCallClick
             )
         }
 
