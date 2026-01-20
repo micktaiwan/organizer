@@ -96,6 +96,19 @@ class SocketManager(private val tokenManager: TokenManager) {
     val unreadUpdated: SharedFlow<UnreadUpdatedEvent> = _unreadUpdated.asSharedFlow()
 
     fun connect(versionName: String? = null, versionCode: Int? = null) {
+        // Guard against multiple connections (BUG-003 fix)
+        if (socket?.connected() == true) {
+            Log.d(TAG, "Socket already connected, skipping")
+            return
+        }
+
+        // Clean up existing socket if not connected
+        socket?.let {
+            Log.d(TAG, "Cleaning up existing disconnected socket")
+            it.off()
+            it.disconnect()
+        }
+
         val token = tokenManager.getTokenSync()
         if (token == null) {
             Log.e(TAG, "Cannot connect: no token available")

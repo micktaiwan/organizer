@@ -110,6 +110,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Track message IDs already marked as read to prevent duplicate requests
   const markedAsReadRef = useRef<Set<string>>(new Set());
 
+  // Track pending message sends to prevent duplicates from socket events
+  const pendingSendsRef = useRef<Set<string>>(new Set());
+
   // Reload data when API server changes (even if userId stays the same)
   useEffect(() => {
     setCurrentRoomId(null);
@@ -195,6 +198,12 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       // Note: We don't filter by userId here because the same user may send
       // messages from different devices (Android, desktop). The duplicate check
       // below (line checking serverMessageId) handles optimistic update deduplication.
+
+      // Skip socket events for our own pending messages to avoid race condition
+      // between optimistic update and socket event (BUG-001 fix)
+      if (data.from === userId && pendingSendsRef.current.size > 0) {
+        return;
+      }
 
       if (data.roomId === currentRoomId && data.messageId) {
         // Retry logic for transient failures
@@ -485,6 +494,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     };
     setMessages(prev => [...prev, optimisticMessage]);
 
+    // Track pending send to prevent duplicate from socket event (BUG-001 fix)
+    pendingSendsRef.current.add(messageId);
+
     try {
       const response = await api.sendMessage(currentRoomId, type, text, audio, imageBlob, caption);
 
@@ -504,6 +516,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       setMessages(prev => prev.map(m =>
         m.id === messageId ? { ...m, status: 'failed' } : m
       ));
+    } finally {
+      // Clear pending tracking after response (success or failure)
+      pendingSendsRef.current.delete(messageId);
     }
   }, [currentRoomId, username]);
 
@@ -529,6 +544,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     };
     setMessages(prev => [...prev, optimisticMessage]);
 
+    // Track pending send to prevent duplicate from socket event (BUG-001 fix)
+    pendingSendsRef.current.add(messageId);
+
     try {
       const response = await api.uploadFile(currentRoomId, file, caption);
 
@@ -549,6 +567,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       setMessages(prev => prev.map(m =>
         m.id === messageId ? { ...m, status: 'failed' } : m
       ));
+    } finally {
+      // Clear pending tracking after response (success or failure)
+      pendingSendsRef.current.delete(messageId);
     }
   }, [currentRoomId, username]);
 
