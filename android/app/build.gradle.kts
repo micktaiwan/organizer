@@ -14,8 +14,8 @@ android {
         applicationId = "com.organizer.chat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 47
-        versionName = "1.8.2"
+        versionCode = 48
+        versionName = "1.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -109,4 +109,7 @@ dependencies {
     // Markdown rendering
     implementation("io.noties.markwon:core:4.6.2")
     implementation("io.noties.markwon:linkify:4.6.2")
+
+    // WebRTC
+    implementation("io.getstream:stream-webrtc-android:1.3.8")
 }

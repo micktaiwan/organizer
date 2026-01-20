@@ -95,6 +95,32 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _unreadUpdated = MutableSharedFlow<UnreadUpdatedEvent>(extraBufferCapacity = 10)
     val unreadUpdated: SharedFlow<UnreadUpdatedEvent> = _unreadUpdated.asSharedFlow()
 
+    // WebRTC signaling events
+    private val _webrtcOffer = MutableSharedFlow<WebRTCOfferEvent>(extraBufferCapacity = 5)
+    val webrtcOffer: SharedFlow<WebRTCOfferEvent> = _webrtcOffer.asSharedFlow()
+
+    private val _webrtcAnswer = MutableSharedFlow<WebRTCAnswerEvent>(extraBufferCapacity = 5)
+    val webrtcAnswer: SharedFlow<WebRTCAnswerEvent> = _webrtcAnswer.asSharedFlow()
+
+    private val _webrtcIceCandidate = MutableSharedFlow<WebRTCIceCandidateEvent>(extraBufferCapacity = 20)
+    val webrtcIceCandidate: SharedFlow<WebRTCIceCandidateEvent> = _webrtcIceCandidate.asSharedFlow()
+
+    private val _webrtcClose = MutableSharedFlow<WebRTCCloseEvent>(extraBufferCapacity = 5)
+    val webrtcClose: SharedFlow<WebRTCCloseEvent> = _webrtcClose.asSharedFlow()
+
+    // Call signaling events
+    private val _callRequest = MutableSharedFlow<CallRequestEvent>(extraBufferCapacity = 5)
+    val callRequest: SharedFlow<CallRequestEvent> = _callRequest.asSharedFlow()
+
+    private val _callAccept = MutableSharedFlow<CallAcceptEvent>(extraBufferCapacity = 5)
+    val callAccept: SharedFlow<CallAcceptEvent> = _callAccept.asSharedFlow()
+
+    private val _callReject = MutableSharedFlow<CallRejectEvent>(extraBufferCapacity = 5)
+    val callReject: SharedFlow<CallRejectEvent> = _callReject.asSharedFlow()
+
+    private val _callEnd = MutableSharedFlow<CallEndEvent>(extraBufferCapacity = 5)
+    val callEnd: SharedFlow<CallEndEvent> = _callEnd.asSharedFlow()
+
     fun connect(versionName: String? = null, versionCode: Int? = null) {
         // Guard against multiple connections (BUG-003 fix)
         if (socket?.connected() == true) {
@@ -521,6 +547,121 @@ class SocketManager(private val tokenManager: TokenManager) {
                     Log.e(TAG, "Error parsing unread:updated", e)
                 }
             }
+
+            // WebRTC signaling
+            on("webrtc:offer") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    // offer is an object with { type, sdp }
+                    val offerObj = data.getJSONObject("offer")
+                    val event = WebRTCOfferEvent(
+                        from = data.getString("from"),
+                        fromUsername = data.optString("fromUsername", ""),
+                        offer = offerObj.getString("sdp")
+                    )
+                    Log.d(TAG, "WebRTC offer from ${event.from}")
+                    _webrtcOffer.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing webrtc:offer", e)
+                }
+            }
+
+            on("webrtc:answer") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    // answer is an object with { type, sdp }
+                    val answerObj = data.getJSONObject("answer")
+                    val event = WebRTCAnswerEvent(
+                        from = data.getString("from"),
+                        answer = answerObj.getString("sdp")
+                    )
+                    Log.d(TAG, "WebRTC answer from ${event.from}")
+                    _webrtcAnswer.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing webrtc:answer", e)
+                }
+            }
+
+            on("webrtc:ice-candidate") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    // candidate is an object with { candidate, sdpMid, sdpMLineIndex }
+                    val candidateObj = data.getJSONObject("candidate")
+                    val event = WebRTCIceCandidateEvent(
+                        from = data.getString("from"),
+                        candidate = candidateObj.getString("candidate"),
+                        sdpMid = candidateObj.optString("sdpMid", ""),
+                        sdpMLineIndex = candidateObj.optInt("sdpMLineIndex", 0)
+                    )
+                    Log.d(TAG, "WebRTC ICE candidate from ${event.from}: ${event.candidate.take(50)}...")
+                    _webrtcIceCandidate.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing webrtc:ice-candidate", e)
+                }
+            }
+
+            on("webrtc:close") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = WebRTCCloseEvent(from = data.getString("from"))
+                    Log.d(TAG, "WebRTC close from ${event.from}")
+                    _webrtcClose.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing webrtc:close", e)
+                }
+            }
+
+            // Call signaling
+            on("call:request") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = CallRequestEvent(
+                        from = data.getString("from"),
+                        fromUsername = data.optString("fromUsername", ""),
+                        withCamera = data.optBoolean("withCamera", false)
+                    )
+                    Log.d(TAG, "Call request from ${event.from} (camera=${event.withCamera})")
+                    _callRequest.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing call:request", e)
+                }
+            }
+
+            on("call:accept") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = CallAcceptEvent(
+                        from = data.getString("from"),
+                        withCamera = data.optBoolean("withCamera", false)
+                    )
+                    Log.d(TAG, "Call accepted by ${event.from}")
+                    _callAccept.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing call:accept", e)
+                }
+            }
+
+            on("call:reject") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = CallRejectEvent(from = data.getString("from"))
+                    Log.d(TAG, "Call rejected by ${event.from}")
+                    _callReject.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing call:reject", e)
+                }
+            }
+
+            on("call:end") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = CallEndEvent(from = data.getString("from"))
+                    Log.d(TAG, "Call ended by ${event.from}")
+                    _callEnd.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing call:end", e)
+                }
+            }
         }
     }
 
@@ -584,6 +725,79 @@ class SocketManager(private val tokenManager: TokenManager) {
     }
 
     fun isConnected(): Boolean = socket?.connected() == true
+
+    // WebRTC signaling emit methods
+    fun sendWebRTCOffer(to: String, sdp: String) {
+        socket?.emit("webrtc:offer", JSONObject().apply {
+            put("to", to)
+            put("offer", JSONObject().apply {
+                put("type", "offer")
+                put("sdp", sdp)
+            })
+        })
+        Log.d(TAG, "Sent WebRTC offer to $to")
+    }
+
+    fun sendWebRTCAnswer(to: String, sdp: String) {
+        socket?.emit("webrtc:answer", JSONObject().apply {
+            put("to", to)
+            put("answer", JSONObject().apply {
+                put("type", "answer")
+                put("sdp", sdp)
+            })
+        })
+        Log.d(TAG, "Sent WebRTC answer to $to")
+    }
+
+    fun sendIceCandidate(to: String, candidate: String, sdpMid: String?, sdpMLineIndex: Int) {
+        socket?.emit("webrtc:ice-candidate", JSONObject().apply {
+            put("to", to)
+            put("candidate", JSONObject().apply {
+                put("candidate", candidate)
+                put("sdpMid", sdpMid ?: JSONObject.NULL)
+                put("sdpMLineIndex", sdpMLineIndex)
+            })
+        })
+        Log.d(TAG, "Sent ICE candidate to $to")
+    }
+
+    fun closeWebRTC(to: String) {
+        socket?.emit("webrtc:close", JSONObject().apply {
+            put("to", to)
+        })
+        Log.d(TAG, "Sent WebRTC close to $to")
+    }
+
+    // Call signaling emit methods
+    fun requestCall(to: String, withCamera: Boolean) {
+        socket?.emit("call:request", JSONObject().apply {
+            put("to", to)
+            put("withCamera", withCamera)
+        })
+        Log.d(TAG, "Sent call request to $to (camera=$withCamera)")
+    }
+
+    fun acceptCall(to: String, withCamera: Boolean) {
+        socket?.emit("call:accept", JSONObject().apply {
+            put("to", to)
+            put("withCamera", withCamera)
+        })
+        Log.d(TAG, "Sent call accept to $to")
+    }
+
+    fun rejectCall(to: String) {
+        socket?.emit("call:reject", JSONObject().apply {
+            put("to", to)
+        })
+        Log.d(TAG, "Sent call reject to $to")
+    }
+
+    fun endCall(to: String) {
+        socket?.emit("call:end", JSONObject().apply {
+            put("to", to)
+        })
+        Log.d(TAG, "Sent call end to $to")
+    }
 }
 
 // Event classes
@@ -722,4 +936,47 @@ data class TrackPointData(
     val lng: Double,
     val accuracy: Float?,
     val timestamp: String?
+)
+
+// WebRTC signaling events
+data class WebRTCOfferEvent(
+    val from: String,
+    val fromUsername: String,
+    val offer: String
+)
+
+data class WebRTCAnswerEvent(
+    val from: String,
+    val answer: String
+)
+
+data class WebRTCIceCandidateEvent(
+    val from: String,
+    val candidate: String,
+    val sdpMid: String,
+    val sdpMLineIndex: Int
+)
+
+data class WebRTCCloseEvent(
+    val from: String
+)
+
+// Call signaling events
+data class CallRequestEvent(
+    val from: String,
+    val fromUsername: String,
+    val withCamera: Boolean
+)
+
+data class CallAcceptEvent(
+    val from: String,
+    val withCamera: Boolean
+)
+
+data class CallRejectEvent(
+    val from: String
+)
+
+data class CallEndEvent(
+    val from: String
 )

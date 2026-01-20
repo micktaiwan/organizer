@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { CallState } from '../types';
 import { socketService } from '../services/socket';
-import { playRingtone, stopRingtone } from '../utils/audio';
+import { playRingtone, stopRingtone, playRingback, stopRingback } from '../utils/audio';
 
 // STUN servers configuration
 const ICE_SERVERS: RTCConfiguration = {
@@ -132,6 +132,7 @@ export const useWebRTCCall = ({
   const endCallInternal = useCallback(() => {
     console.log('Ending call internally and cleaning up');
     stopRingtone();
+    stopRingback();
     stopLocalStream();
     removeTracksFromPC();
     closePeerConnection();
@@ -200,6 +201,9 @@ export const useWebRTCCall = ({
       console.log('Sending call request signaling...');
       socketService.requestCall(targetUser, withCamera);
       setCallState('calling');
+
+      // 6. Play ringback tone while waiting for answer
+      playRingback();
     } catch (err) {
       console.error('Failed to start call:', err);
       closePeerConnection();
@@ -347,6 +351,7 @@ export const useWebRTCCall = ({
 
     const handleCallAccept = (data: { from: string; withCamera: boolean }) => {
       console.log('Call accepted by remote');
+      stopRingback();
       setRemoteHasCamera(data.withCamera);
       setCallState('connected');
     };

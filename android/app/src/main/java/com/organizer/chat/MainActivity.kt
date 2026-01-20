@@ -42,7 +42,11 @@ import com.organizer.chat.data.repository.UpdateRepository
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.components.UpdateProgressDialog
 import com.organizer.chat.ui.components.ShareHandlerDialog
+import com.organizer.chat.ui.components.IncomingCallDialog
 import com.organizer.chat.ui.navigation.NavGraph
+import com.organizer.chat.ui.screens.call.CallScreen
+import com.organizer.chat.webrtc.CallManager
+import com.organizer.chat.webrtc.CallState
 import com.organizer.chat.ui.navigation.Routes
 import com.organizer.chat.ui.theme.OrganizerChatTheme
 import com.organizer.chat.util.AppPreferences
@@ -84,6 +88,10 @@ class MainActivity : ComponentActivity() {
     private var sharedContent = mutableStateOf<SharedContent?>(null)
     private var availableRooms = mutableStateOf<List<Room>>(emptyList())
 
+    // Call manager for WebRTC
+    private var callManagerState = mutableStateOf<CallManager?>(null)
+    private val callEventJobs = mutableListOf<kotlinx.coroutines.Job>()
+
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as ChatService.ChatBinder
@@ -91,10 +99,21 @@ class MainActivity : ComponentActivity() {
             serviceBound = true
             chatServiceState.value?.setAppInForeground(true)
             chatServiceState.value?.reconnectIfNeeded()
+
+            // Initialize CallManager
+            chatServiceState.value?.socketManager?.let { socketManager ->
+                callManagerState.value = CallManager(this@MainActivity, socketManager)
+                setupCallEventListeners()
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
+            // Cancel all call event listeners to prevent duplicate handling
+            callEventJobs.forEach { it.cancel() }
+            callEventJobs.clear()
+
             chatServiceState.value = null
+            callManagerState.value = null
             serviceBound = false
         }
     }
@@ -154,6 +173,7 @@ class MainActivity : ComponentActivity() {
                 val currentUpdateInfo by updateInfo
                 val currentSharedContent by sharedContent
                 val rooms by availableRooms
+                val callManager by callManagerState
 
                 // Observer for download state (auto-update progress)
                 val downloadState by updateManager.downloadState.collectAsState()
@@ -288,8 +308,39 @@ class MainActivity : ComponentActivity() {
                     },
                     onLogout = {
                         stopChatService()
+                    },
+                    onCallClick = { userId, username ->
+                        callManager?.startCall(userId, username, withCamera = false)
                     }
                 )
+
+                // Call UI - rendered AFTER NavGraph so it appears on top
+                callManager?.let { manager ->
+                    val currentCallState by manager.callState.collectAsState()
+                    val remoteVideoTrack by manager.remoteVideoTrack.collectAsState()
+
+                    when (val state = currentCallState) {
+                        is CallState.Incoming -> {
+                            IncomingCallDialog(
+                                callerName = state.fromUsername,
+                                withCamera = state.withCamera,
+                                onAccept = { manager.acceptCall(state.withCamera) },
+                                onReject = { manager.rejectCall() }
+                            )
+                        }
+                        is CallState.Calling, is CallState.Connected -> {
+                            CallScreen(
+                                callState = state,
+                                remoteVideoTrack = remoteVideoTrack,
+                                callManager = manager,
+                                onEndCall = { manager.endCall() }
+                            )
+                        }
+                        CallState.Idle -> {
+                            // No call UI
+                        }
+                    }
+                }
             }
         }
     }
@@ -471,6 +522,63 @@ class MainActivity : ComponentActivity() {
                     Log.e(TAG, "Failed to check for updates: ${e.message}")
                 }
             )
+        }
+    }
+
+    private fun setupCallEventListeners() {
+        val socketManager = chatServiceState.value?.socketManager ?: return
+        val callManager = callManagerState.value ?: return
+
+        // Cancel any existing jobs to prevent duplicate handling
+        callEventJobs.forEach { it.cancel() }
+        callEventJobs.clear()
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.callRequest.collect { event ->
+                callManager.handleCallRequest(event.from, event.fromUsername, event.withCamera)
+            }
+        }
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.callAccept.collect { event ->
+                callManager.handleCallAccept(event.from, event.withCamera)
+            }
+        }
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.callReject.collect { event ->
+                callManager.handleCallReject(event.from)
+            }
+        }
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.callEnd.collect { event ->
+                callManager.handleCallEnd(event.from)
+            }
+        }
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.webrtcOffer.collect { event ->
+                callManager.handleWebRTCOffer(event.from, event.offer)
+            }
+        }
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.webrtcAnswer.collect { event ->
+                callManager.handleWebRTCAnswer(event.from, event.answer)
+            }
+        }
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.webrtcIceCandidate.collect { event ->
+                callManager.handleIceCandidate(event.from, event.candidate, event.sdpMid, event.sdpMLineIndex)
+            }
+        }
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.webrtcClose.collect { event ->
+                callManager.handleWebRTCClose(event.from)
+            }
         }
     }
 }
