@@ -446,7 +446,7 @@ Le flow actuel suffit : le pet voit l'URL, peut demander "c'était quoi ?", et s
 
 ---
 
-## Conscience émergente (à venir)
+## Conscience émergente
 
 ### Constat : le pet ne sait pas qui il est
 

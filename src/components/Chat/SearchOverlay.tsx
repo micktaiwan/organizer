@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, ArrowRight } from 'lucide-react';
-import { api, Message as ServerMessage } from '../../services/api';
+import { api } from '../../services/api';
 import './SearchOverlay.css';
 
 interface SearchResult {

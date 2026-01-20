@@ -133,7 +133,7 @@ Cycle :
 | 2 | Premier dialogue (Claude Agent SDK, RAG) | ✅ |
 | 1.5 | Mémoire persistante → [memory-architecture.md](memory-architecture.md) | ✅ |
 | 2.5 | Boucle agentique avec tools → [memory-architecture.md](memory-architecture.md) | ✅ |
-| 3 | Conscience émergente (self + goals) → [memory-architecture.md](memory-architecture.md#conscience-émergente-à-venir) | ⏳ |
+| 3 | Conscience émergente (self + goals) → [memory-architecture.md](memory-architecture.md#conscience-émergente) | ✅ |
 | 4 | Vitals et personnalité | ⏳ |
 | 5 | Système de capacités | ⏳ |
 | 6 | Boucle agentique autonome | ⏳ |
