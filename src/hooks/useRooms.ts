@@ -7,8 +7,12 @@ import { api } from '../services/api';
 import { socketService } from '../services/socket';
 import { showMessageNotification } from '../utils/notifications';
 
+// Check if running in Tauri environment
+const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
 // Helper to update tray badge
 const setTrayBadge = async (hasBadge: boolean) => {
+  if (!isTauri()) return;
   try {
     await invoke('set_tray_badge', { hasBadge });
   } catch (error) {
@@ -271,11 +275,13 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       const { unreadCount } = data as { roomId: string; unreadCount: number };
       console.log('unread:updated', data);
 
-      // Only show badge if window is not focused
-      const isFocused = await getCurrentWindow().isFocused();
-      if (unreadCount > 0 && !isFocused) {
-        hasUnreadRef.current = true;
-        setTrayBadge(true);
+      // Only show badge if window is not focused (Tauri only)
+      if (isTauri()) {
+        const isFocused = await getCurrentWindow().isFocused();
+        if (unreadCount > 0 && !isFocused) {
+          hasUnreadRef.current = true;
+          setTrayBadge(true);
+        }
       }
     };
 
@@ -289,16 +295,19 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       }
     };
 
-    // Listen for window focus
-    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-      if (focused) {
-        handleFocus();
-      }
-    });
+    // Listen for window focus (Tauri only)
+    let unlisten: Promise<() => void> | null = null;
+    if (isTauri()) {
+      unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+        if (focused) {
+          handleFocus();
+        }
+      });
+    }
 
     return () => {
       unsubUnread();
-      unlisten.then(fn => fn());
+      unlisten?.then(fn => fn());
     };
   }, [userId]);
 
@@ -310,10 +319,12 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       // Don't notify for own messages
       if (data.from === userId) return;
 
-      // Only notify when window is not focused
-      const isFocused = await getCurrentWindow().isFocused();
-      if (!isFocused && data.fromName && data.preview) {
-        showMessageNotification(data.fromName, data.roomName || 'Chat', data.preview, data.roomId);
+      // Only notify when window is not focused (Tauri only)
+      if (isTauri()) {
+        const isFocused = await getCurrentWindow().isFocused();
+        if (!isFocused && data.fromName && data.preview) {
+          showMessageNotification(data.fromName, data.roomName || 'Chat', data.preview, data.roomId);
+        }
       }
     });
 

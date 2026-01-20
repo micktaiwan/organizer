@@ -4,6 +4,9 @@ import { MessageCircle, StickyNote, Bug } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
+
+// Check if running in Tauri environment
+const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 import { compressImage, blobToDataUrl, isImageFile, formatFileSize } from "./utils/imageCompression";
 import { initNotifications, consumePendingNotificationRoomId } from "./utils/notifications";
 import { useAuth } from "./contexts/AuthContext";
@@ -92,18 +95,20 @@ function App() {
   useEffect(() => {
     const loadDebugPreferences = async () => {
       try {
-        const store = await load('pet-debug.json', { autoSave: false, defaults: {} });
-        const savedServer = await store.get<boolean>('pet_debug_use_local');
-        if (savedServer !== null && savedServer !== undefined) {
-          setDebugUseLocalServer(savedServer);
-        }
-        const savedViewMode = await store.get<'chat' | 'brain'>('viewMode');
-        if (savedViewMode !== null && savedViewMode !== undefined) {
-          setDebugViewMode(savedViewMode);
-        }
-        const savedShowLogPanel = await store.get<boolean>('showLogPanel');
-        if (savedShowLogPanel !== null && savedShowLogPanel !== undefined) {
-          setShowLogPanel(savedShowLogPanel);
+        if (isTauri()) {
+          const store = await load('pet-debug.json', { autoSave: false, defaults: {} });
+          const savedServer = await store.get<boolean>('pet_debug_use_local');
+          if (savedServer !== null && savedServer !== undefined) {
+            setDebugUseLocalServer(savedServer);
+          }
+          const savedViewMode = await store.get<'chat' | 'brain'>('viewMode');
+          if (savedViewMode !== null && savedViewMode !== undefined) {
+            setDebugViewMode(savedViewMode);
+          }
+          const savedShowLogPanel = await store.get<boolean>('showLogPanel');
+          if (savedShowLogPanel !== null && savedShowLogPanel !== undefined) {
+            setShowLogPanel(savedShowLogPanel);
+          }
         }
         debugPrefsLoaded.current = true;
       } catch (error) {
@@ -117,6 +122,7 @@ function App() {
   // Save showLogPanel when it changes (but not on initial mount)
   useEffect(() => {
     if (!debugPrefsLoaded.current) return;
+    if (!isTauri()) return;
     const saveShowLogPanel = async () => {
       try {
         const store = await load('pet-debug.json', { autoSave: false, defaults: {} });
@@ -231,6 +237,8 @@ function App() {
     isMicEnabled,
     incomingCallWithCamera,
     remoteHasCamera,
+    incomingCallFrom,
+    remoteUsername,
     localVideoRef,
     remoteVideoRef,
     startCall,
@@ -322,11 +330,13 @@ function App() {
   }, [selectNote]);
 
   useEffect(() => {
-    const title = import.meta.env.DEV ? "Organizer - Dev mode" : "Organizer";
-    getCurrentWindow().setTitle(title);
+    if (isTauri()) {
+      const title = import.meta.env.DEV ? "Organizer - Dev mode" : "Organizer";
+      getCurrentWindow().setTitle(title);
 
-    // Initialize desktop notifications
-    initNotifications();
+      // Initialize desktop notifications
+      initNotifications();
+    }
 
     // Add welcome message with build info
     const welcomeMessage = {
@@ -344,6 +354,8 @@ function App() {
   // On macOS, clicking a notification brings the window to focus.
   // We store the roomId when showing the notification and navigate when focus is gained.
   useEffect(() => {
+    if (!isTauri()) return;
+
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) {
         const pendingRoomId = consumePendingNotificationRoomId();
@@ -732,9 +744,9 @@ function App() {
         </div>
       )}
 
-      {callState === 'incoming' && (
+      {callState === 'incoming' && incomingCallFrom && (
         <IncomingCallModal
-          remoteUsername="Appel entrant"
+          remoteUsername={incomingCallFrom.username}
           incomingCallWithCamera={incomingCallWithCamera}
           onAccept={acceptCall}
           onReject={rejectCall}
@@ -743,7 +755,7 @@ function App() {
 
       <CallOverlay
         callState={callState}
-        remoteUsername="En appel"
+        remoteUsername={remoteUsername || 'Utilisateur'}
         isCameraEnabled={isCameraEnabled}
         isMicEnabled={isMicEnabled}
         remoteHasCamera={remoteHasCamera}

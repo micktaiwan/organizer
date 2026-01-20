@@ -1,8 +1,35 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { load } from '@tauri-apps/plugin-store';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { load, Store } from '@tauri-apps/plugin-store';
 import { api, User, setApiBaseUrl } from '../services/api';
 import { socketService } from '../services/socket';
 import { useServerConfig } from './ServerConfigContext';
+
+// Check if running in Tauri environment
+const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
+// Browser fallback store using localStorage
+class BrowserStore {
+  private prefix = 'organizer_auth_';
+
+  async get<T>(key: string): Promise<T | null> {
+    const value = localStorage.getItem(this.prefix + key);
+    return value ? JSON.parse(value) : null;
+  }
+
+  async set(key: string, value: unknown): Promise<void> {
+    localStorage.setItem(this.prefix + key, JSON.stringify(value));
+  }
+
+  async delete(key: string): Promise<void> {
+    localStorage.removeItem(this.prefix + key);
+  }
+
+  async save(): Promise<void> {
+    // localStorage saves immediately, no-op
+  }
+}
+
+type StoreInterface = Store | BrowserStore;
 
 // Storage keys per server
 const getAuthTokenKey = (serverId: string) => `auth_token_${serverId}`;
@@ -34,6 +61,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const storeRef = useRef<StoreInterface | null>(null);
+
+  const getStore = async (): Promise<StoreInterface> => {
+    if (!storeRef.current) {
+      if (isTauri()) {
+        storeRef.current = await load('settings.json', { autoSave: true, defaults: {} });
+      } else {
+        storeRef.current = new BrowserStore();
+      }
+    }
+    return storeRef.current;
+  };
 
   useEffect(() => {
     // Wait until a server is selected before trying to authenticate
@@ -49,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const initAuth = async () => {
       setIsLoading(true);
       try {
-        const store = await load('settings.json', { autoSave: true, defaults: {} });
+        const store = await getStore();
         // Load token specific to this server
         const tokenKey = getAuthTokenKey(selectedServer.id);
         const savedToken = await store.get<string>(tokenKey);
@@ -85,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const response = await api.login(username, password);
 
-    const store = await load('settings.json', { autoSave: true, defaults: {} });
+    const store = await getStore();
     const tokenKey = getAuthTokenKey(selectedServer.id);
     await store.set(tokenKey, response.token);
 
@@ -103,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const response = await api.register(username, displayName, email, password);
 
-    const store = await load('settings.json', { autoSave: true, defaults: {} });
+    const store = await getStore();
     const tokenKey = getAuthTokenKey(selectedServer.id);
     await store.set(tokenKey, response.token);
 
@@ -118,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     if (selectedServer) {
-      const store = await load('settings.json', { autoSave: true, defaults: {} });
+      const store = await getStore();
       const tokenKey = getAuthTokenKey(selectedServer.id);
       await store.delete(tokenKey);
     }
@@ -135,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getSavedCredentials = async (serverId: string): Promise<StoredCredentials | null> => {
     try {
-      const store = await load('settings.json', { autoSave: true, defaults: {} });
+      const store = await getStore();
       const credKey = getAuthCredentialsKey(serverId);
       const saved = await store.get<StoredCredentials>(credKey);
       return saved || null;
@@ -147,7 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const saveCredentials = async (serverId: string, username: string, email?: string, displayName?: string) => {
     try {
-      const store = await load('settings.json', { autoSave: true, defaults: {} });
+      const store = await getStore();
       const credKey = getAuthCredentialsKey(serverId);
       await store.set(credKey, { username, email, displayName });
     } catch (error) {

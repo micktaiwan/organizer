@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { getCurrentWindow, LogicalPosition, LogicalSize, availableMonitors } from '@tauri-apps/api/window';
 
+// Check if running in Tauri environment
+const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
 const STORAGE_KEY = 'organizer-window-state';
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -21,6 +24,12 @@ export function useWindowState() {
   const initializedRef = useRef(false);
 
   useEffect(() => {
+    // Skip in browser environment
+    if (!isTauri()) {
+      console.log('[WindowState] Not in Tauri, skipping');
+      return;
+    }
+
     const appWindow = getCurrentWindow();
 
     // Save current window state to localStorage
