@@ -4,6 +4,23 @@ Ce prompt guide une analyse systématique pour détecter les régressions par ra
 
 ---
 
+## Iteration 0: Préparation (automatique)
+
+**Objectif:** Préparer l'environnement avant de commencer.
+
+1. Si `docs/bugs.md` existe et contient du contenu d'une session précédente :
+   - Archiver vers `docs/bugs/bugs-YYYY-MM-DD-HHmm.md`
+   - Créer un nouveau `docs/bugs.md` vide avec juste le header de session
+2. S'assurer que le dossier `docs/bugs/` existe
+
+```bash
+# Exemple d'archivage
+mkdir -p docs/bugs
+mv docs/bugs.md docs/bugs/bugs-$(date +%Y-%m-%d-%H%M).md
+```
+
+---
+
 ## Iteration 1: Lecture des specs
 
 **Objectif:** Comprendre les comportements attendus.
