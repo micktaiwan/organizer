@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText, Monitor, Smartphone, Bot, CheckCircle, Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import { Avatar } from "../ui/Avatar";
 import { Message, Reaction, ALLOWED_EMOJIS, ReactionEmoji, UserStatus } from "../../types";
 import { formatMessageTimestamp } from "../../utils/dateFormat";
@@ -116,7 +117,7 @@ const MarkdownText: React.FC<{ text: string }> = ({ text }) => {
   }), []);
 
   return (
-    <ReactMarkdown components={components} remarkPlugins={[remarkBreaks]}>
+    <ReactMarkdown components={components} remarkPlugins={[remarkGfm, remarkBreaks]}>
       {text}
     </ReactMarkdown>
   );
