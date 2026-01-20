@@ -57,7 +57,8 @@ class ChatService : Service() {
     val isAppInForeground: StateFlow<Boolean> = _isAppInForeground.asStateFlow()
 
     // Relay messages from socket to UI
-    private val _messages = MutableSharedFlow<NewMessageEvent>(replay = 1, extraBufferCapacity = 50)
+    // replay = 0 to prevent duplicate messages when ViewModel is recreated (BUG-002 fix)
+    private val _messages = MutableSharedFlow<NewMessageEvent>(replay = 0, extraBufferCapacity = 50)
     val messages: SharedFlow<NewMessageEvent> = _messages.asSharedFlow()
 
     // Room events (delegate to socketManager)
