@@ -379,6 +379,7 @@ Améliore V0 pour des tests plus confortables.
 - [x] Bouton mute micro
 - [x] Bouton toggle caméra on/off
 - [x] `IncomingCallScreen.kt` - UI plein écran appel entrant (remplace IncomingCallDialog)
+- [x] Multi-device : appel répondu ailleurs → dismiss sur les autres devices (server émet `call:answered-elsewhere`)
 
 **Bugs connus V0.5** :
 1. **Vidéo locale non affichée** : L'encart PiP est implémenté mais ne s'affiche pas (à investiguer)

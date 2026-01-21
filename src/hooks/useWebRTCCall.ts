@@ -410,6 +410,17 @@ export const useWebRTCCall = ({
       }
     };
 
+    const handleAnsweredElsewhere = () => {
+      // Only dismiss if we're in receiving state (ringing)
+      if (callState !== 'receiving') return;
+
+      console.log('Call answered on another device');
+      stopRingtone();
+      setCallState('idle');
+      setIncomingCallFrom(null);
+      setRemoteUsername(null);
+    };
+
     const unsubRequest = socketService.on('call:request', (data) =>
       handleCallRequest(data as { from: string; fromUsername: string; withCamera: boolean })
     );
@@ -427,6 +438,7 @@ export const useWebRTCCall = ({
     const unsubWebRTCError = socketService.on('webrtc:error', (data) =>
       handleWebRTCError(data as { error: string; message: string })
     );
+    const unsubAnsweredElsewhere = socketService.on('call:answered-elsewhere', handleAnsweredElsewhere);
 
     return () => {
       unsubRequest();
@@ -436,6 +448,7 @@ export const useWebRTCCall = ({
       unsubToggle();
       unsubCallError();
       unsubWebRTCError();
+      unsubAnsweredElsewhere();
     };
   }, [callState, addSystemMessage, endCallInternal]);
 

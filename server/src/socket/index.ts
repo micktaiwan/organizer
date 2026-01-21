@@ -298,9 +298,15 @@ export function setupSocket(httpServer: HttpServer): Server {
         socket.emit('call:error', { error: 'unauthorized', message: 'You cannot accept this call' });
         return;
       }
+      // Notify the caller
       io.to(`user:${data.to}`).emit('call:accept', {
         from: userId,
         withCamera: data.withCamera,
+      });
+      // Notify other devices of the same user that call was answered elsewhere
+      socket.to(`user:${userId}`).emit('call:answered-elsewhere', {
+        answeredBy: socket.id,
+        caller: data.to,
       });
     });
 

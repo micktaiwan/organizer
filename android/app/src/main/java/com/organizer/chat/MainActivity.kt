@@ -516,11 +516,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun hasCallPermissions(): Boolean {
-        return ContextCompat.checkSelfPermission(
+    private fun hasCallPermissions(withCamera: Boolean): Boolean {
+        val hasAudio = ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
+
+        if (!withCamera) return hasAudio
+
+        val hasCamera = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        return hasAudio && hasCamera
     }
 
     private fun requestCallPermissionsAndStart(
@@ -529,7 +538,7 @@ class MainActivity : ComponentActivity() {
         withCamera: Boolean,
         isIncoming: Boolean
     ) {
-        if (hasCallPermissions()) {
+        if (hasCallPermissions(withCamera)) {
             // Already have permissions, proceed
             if (isIncoming) {
                 callViewModelState.value?.acceptCall(withCamera)
@@ -683,6 +692,12 @@ class MainActivity : ComponentActivity() {
         callEventJobs += lifecycleScope.launch {
             socketManager.callToggleCamera.collect { event ->
                 callManager.handleRemoteCameraToggle(event.from, event.enabled)
+            }
+        }
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.callAnsweredElsewhere.collect { event ->
+                callManager.handleCallAnsweredElsewhere()
             }
         }
     }
