@@ -1,0 +1,299 @@
+/* ============================================
+   User Switcher - Industrial/Utilitarian Design
+   Matches RoomHeader aesthetic
+   ============================================ */
+
+.user-switcher {
+  position: relative;
+  z-index: 200;
+}
+
+/* ---- Trigger Button ---- */
+.user-switcher-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 34px;
+  padding: 0 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: #333;
+  transition: all 0.15s ease;
+}
+
+.user-switcher-trigger:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.user-switcher-username {
+  font-weight: 500;
+  color: #333;
+}
+
+.user-switcher-chevron {
+  color: #666;
+  transition: transform 0.2s ease;
+}
+
+.user-switcher-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* ---- Dropdown Panel ---- */
+.user-switcher-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 260px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.07),
+    0 10px 20px rgba(0, 0, 0, 0.1);
+  padding: 0.5rem;
+  animation: userSwitcherDropdownIn 0.15s ease-out;
+}
+
+@keyframes userSwitcherDropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---- Account List ---- */
+.user-switcher-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.user-switcher-account {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.user-switcher-account:hover {
+  background: #f5f5f5;
+  border-color: #e8e8e8;
+}
+
+.user-switcher-account.current {
+  background: linear-gradient(135deg, #e8f4fd 0%, #dbeafe 100%);
+  border-color: #bfdbfe;
+  cursor: default;
+}
+
+.user-switcher-account.switching {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.user-switcher-account.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+/* ---- Account Indicator ---- */
+.user-switcher-account-indicator {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-switcher-account-indicator .current-icon {
+  color: #007aff;
+}
+
+.user-switcher-account-indicator .error-icon {
+  color: #ef4444;
+}
+
+.user-switcher-account-indicator .empty-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d1d5db;
+}
+
+/* ---- Account Info ---- */
+.user-switcher-account-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.user-switcher-display-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-switcher-account-username {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.user-switcher-error-text {
+  font-size: 0.75rem;
+  color: #ef4444;
+  font-weight: 500;
+}
+
+/* ---- Remove Button ---- */
+.user-switcher-remove {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #999;
+  opacity: 0;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.user-switcher-account:hover .user-switcher-remove {
+  opacity: 1;
+}
+
+.user-switcher-remove:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #ef4444;
+}
+
+/* ---- Divider ---- */
+.user-switcher-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 0.5rem 0;
+}
+
+/* ---- Add Account Button ---- */
+.user-switcher-add {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  background: transparent;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: #666;
+  transition: all 0.15s ease;
+}
+
+.user-switcher-add:hover {
+  background: #f5f5f5;
+  border-color: #007aff;
+  color: #007aff;
+}
+
+/* ============================================
+   Dark Mode
+   ============================================ */
+@media (prefers-color-scheme: dark) {
+  .user-switcher-trigger {
+    color: #e0e0e0;
+  }
+
+  .user-switcher-trigger:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .user-switcher-username {
+    color: #e0e0e0;
+  }
+
+  .user-switcher-chevron {
+    color: #999;
+  }
+
+  .user-switcher-dropdown {
+    background: #252525;
+    border-color: #3a3a3a;
+    box-shadow:
+      0 4px 6px rgba(0, 0, 0, 0.2),
+      0 10px 20px rgba(0, 0, 0, 0.3);
+  }
+
+  .user-switcher-account:hover {
+    background: #333;
+    border-color: #444;
+  }
+
+  .user-switcher-account.current {
+    background: linear-gradient(135deg, #1a3a4a 0%, #0d2a3a 100%);
+    border-color: #2a5a7a;
+  }
+
+  .user-switcher-account.error {
+    background: #3a2020;
+    border-color: #6b2020;
+  }
+
+  .user-switcher-account-indicator .empty-indicator {
+    background: #555;
+  }
+
+  .user-switcher-display-name {
+    color: #e0e0e0;
+  }
+
+  .user-switcher-account-username {
+    color: #999;
+  }
+
+  .user-switcher-remove {
+    color: #666;
+  }
+
+  .user-switcher-remove:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ef4444;
+  }
+
+  .user-switcher-divider {
+    background: #333;
+  }
+
+  .user-switcher-add {
+    border-color: #444;
+    color: #999;
+  }
+
+  .user-switcher-add:hover {
+    background: #333;
+    border-color: #0a84ff;
+    color: #0a84ff;
+  }
+}

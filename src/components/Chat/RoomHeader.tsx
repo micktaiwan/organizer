@@ -4,6 +4,7 @@ import { Room } from '../../services/api';
 import { UserStatus } from '../../types';
 import { RoomMembers } from './RoomMembers';
 import { StatusSelector } from '../ui/StatusSelector';
+import { UserSwitcher } from '../ui/UserSwitcher';
 
 interface RoomHeaderProps {
   room: Room;
@@ -101,7 +102,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
             currentIsMuted={userIsMuted}
             onStatusChange={onStatusChange}
           />
-          <span className="room-header__username">{username}</span>
+          <UserSwitcher username={username} />
         </div>
       </div>
     </header>
