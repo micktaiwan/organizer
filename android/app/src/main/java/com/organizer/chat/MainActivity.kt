@@ -42,9 +42,10 @@ import com.organizer.chat.data.repository.UpdateRepository
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.components.UpdateProgressDialog
 import com.organizer.chat.ui.components.ShareHandlerDialog
-import com.organizer.chat.ui.components.IncomingCallDialog
 import com.organizer.chat.ui.navigation.NavGraph
 import com.organizer.chat.ui.screens.call.CallScreen
+import com.organizer.chat.ui.screens.call.IncomingCallScreen
+import com.organizer.chat.ui.viewmodel.CallViewModel
 import com.organizer.chat.webrtc.CallManager
 import com.organizer.chat.webrtc.CallState
 import com.organizer.chat.ui.navigation.Routes
@@ -88,9 +89,16 @@ class MainActivity : ComponentActivity() {
     private var sharedContent = mutableStateOf<SharedContent?>(null)
     private var availableRooms = mutableStateOf<List<Room>>(emptyList())
 
-    // Call manager for WebRTC
+    // Call manager and ViewModel for WebRTC
     private var callManagerState = mutableStateOf<CallManager?>(null)
+    private var callViewModelState = mutableStateOf<CallViewModel?>(null)
     private val callEventJobs = mutableListOf<kotlinx.coroutines.Job>()
+
+    // Pending call info (while waiting for permission)
+    private var pendingCallUserId: String? = null
+    private var pendingCallUsername: String? = null
+    private var pendingCallIsIncoming: Boolean = false
+    private var pendingCallWithCamera: Boolean = false
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -100,9 +108,11 @@ class MainActivity : ComponentActivity() {
             chatServiceState.value?.setAppInForeground(true)
             chatServiceState.value?.reconnectIfNeeded()
 
-            // Initialize CallManager
+            // Initialize CallManager and CallViewModel
             chatServiceState.value?.socketManager?.let { socketManager ->
-                callManagerState.value = CallManager(this@MainActivity, socketManager)
+                val callManager = CallManager(this@MainActivity, socketManager)
+                callManagerState.value = callManager
+                callViewModelState.value = CallViewModel(callManager)
                 setupCallEventListeners()
             }
         }
@@ -114,6 +124,7 @@ class MainActivity : ComponentActivity() {
 
             chatServiceState.value = null
             callManagerState.value = null
+            callViewModelState.value = null
             serviceBound = false
         }
     }
@@ -122,6 +133,41 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         // Permission result handled, continue with app
+    }
+
+    private val callPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val audioGranted = permissions[Manifest.permission.RECORD_AUDIO] == true
+
+        if (audioGranted) {
+            // Permission granted, proceed with the pending call
+            val userId = pendingCallUserId
+            val username = pendingCallUsername
+            val isIncoming = pendingCallIsIncoming
+            val withCamera = pendingCallWithCamera
+
+            // Clear pending call info
+            pendingCallUserId = null
+            pendingCallUsername = null
+            pendingCallIsIncoming = false
+            pendingCallWithCamera = false
+
+            if (userId != null && username != null) {
+                if (isIncoming) {
+                    callViewModelState.value?.acceptCall(withCamera)
+                } else {
+                    callViewModelState.value?.startCall(userId, username, withCamera)
+                }
+            }
+        } else {
+            // Permission denied, clear pending call
+            pendingCallUserId = null
+            pendingCallUsername = null
+            pendingCallIsIncoming = false
+            pendingCallWithCamera = false
+            Log.w(TAG, "Call permissions denied")
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -173,7 +219,7 @@ class MainActivity : ComponentActivity() {
                 val currentUpdateInfo by updateInfo
                 val currentSharedContent by sharedContent
                 val rooms by availableRooms
-                val callManager by callManagerState
+                val callViewModel by callViewModelState
 
                 // Observer for download state (auto-update progress)
                 val downloadState by updateManager.downloadState.collectAsState()
@@ -310,30 +356,48 @@ class MainActivity : ComponentActivity() {
                         stopChatService()
                     },
                     onCallClick = { userId, username ->
-                        callManager?.startCall(userId, username, withCamera = false)
+                        requestCallPermissionsAndStart(userId, username, withCamera = false, isIncoming = false)
                     }
                 )
 
                 // Call UI - rendered AFTER NavGraph so it appears on top
-                callManager?.let { manager ->
-                    val currentCallState by manager.callState.collectAsState()
-                    val remoteVideoTrack by manager.remoteVideoTrack.collectAsState()
+                callViewModel?.let { viewModel ->
+                    val currentCallState by viewModel.callState.collectAsState()
+                    val remoteVideoTrack by viewModel.remoteVideoTrack.collectAsState()
+                    val localVideoTrack by viewModel.localVideoTrack.collectAsState()
+                    val isMuted by viewModel.isMuted.collectAsState()
+                    val isCameraEnabled by viewModel.isCameraEnabled.collectAsState()
+                    val isRemoteCameraEnabled by viewModel.isRemoteCameraEnabled.collectAsState()
 
                     when (val state = currentCallState) {
                         is CallState.Incoming -> {
-                            IncomingCallDialog(
+                            IncomingCallScreen(
                                 callerName = state.fromUsername,
                                 withCamera = state.withCamera,
-                                onAccept = { manager.acceptCall(state.withCamera) },
-                                onReject = { manager.rejectCall() }
+                                onAccept = {
+                                    requestCallPermissionsAndStart(
+                                        state.fromUserId,
+                                        state.fromUsername,
+                                        state.withCamera,
+                                        isIncoming = true
+                                    )
+                                },
+                                onReject = { viewModel.rejectCall() }
                             )
                         }
                         is CallState.Calling, is CallState.Connected -> {
                             CallScreen(
                                 callState = state,
                                 remoteVideoTrack = remoteVideoTrack,
-                                callManager = manager,
-                                onEndCall = { manager.endCall() }
+                                localVideoTrack = localVideoTrack,
+                                isMuted = isMuted,
+                                isCameraEnabled = isCameraEnabled,
+                                isRemoteCameraEnabled = isRemoteCameraEnabled,
+                                onToggleMute = { viewModel.toggleMute() },
+                                onToggleCamera = { viewModel.toggleCamera() },
+                                onEndCall = { viewModel.endCall() },
+                                onInitRemoteRenderer = { renderer -> viewModel.initRemoteRenderer(renderer) },
+                                onInitLocalRenderer = { renderer -> viewModel.initLocalRenderer(renderer) }
                             )
                         }
                         CallState.Idle -> {
@@ -449,6 +513,41 @@ class MainActivity : ComponentActivity() {
             ) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
+        }
+    }
+
+    private fun hasCallPermissions(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestCallPermissionsAndStart(
+        userId: String,
+        username: String,
+        withCamera: Boolean,
+        isIncoming: Boolean
+    ) {
+        if (hasCallPermissions()) {
+            // Already have permissions, proceed
+            if (isIncoming) {
+                callViewModelState.value?.acceptCall(withCamera)
+            } else {
+                callViewModelState.value?.startCall(userId, username, withCamera)
+            }
+        } else {
+            // Store pending call info and request permissions
+            pendingCallUserId = userId
+            pendingCallUsername = username
+            pendingCallWithCamera = withCamera
+            pendingCallIsIncoming = isIncoming
+
+            val permissionsToRequest = mutableListOf(Manifest.permission.RECORD_AUDIO)
+            if (withCamera) {
+                permissionsToRequest.add(Manifest.permission.CAMERA)
+            }
+            callPermissionsLauncher.launch(permissionsToRequest.toTypedArray())
         }
     }
 
@@ -578,6 +677,12 @@ class MainActivity : ComponentActivity() {
         callEventJobs += lifecycleScope.launch {
             socketManager.webrtcClose.collect { event ->
                 callManager.handleWebRTCClose(event.from)
+            }
+        }
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.callToggleCamera.collect { event ->
+                callManager.handleRemoteCameraToggle(event.from, event.enabled)
             }
         }
     }

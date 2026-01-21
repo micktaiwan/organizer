@@ -1,7 +1,10 @@
 package com.organizer.chat.webrtc
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.organizer.chat.data.socket.SocketManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +49,12 @@ class CallManager(
 
     private val _remoteAudioTrack = MutableStateFlow<AudioTrack?>(null)
     val remoteAudioTrack: StateFlow<AudioTrack?> = _remoteAudioTrack.asStateFlow()
+
+    private val _localVideoTrack = MutableStateFlow<VideoTrack?>(null)
+    val localVideoTrack: StateFlow<VideoTrack?> = _localVideoTrack.asStateFlow()
+
+    private val _isRemoteCameraEnabled = MutableStateFlow(true)
+    val isRemoteCameraEnabled: StateFlow<Boolean> = _isRemoteCameraEnabled.asStateFlow()
 
     fun startCall(targetUserId: String, targetUsername: String, withCamera: Boolean) {
         Log.d(TAG, "Starting call to $targetUserId ($targetUsername) withCamera=$withCamera")
@@ -287,6 +296,18 @@ class CallManager(
         }
     }
 
+    fun handleRemoteCameraToggle(from: String, enabled: Boolean) {
+        val currentState = _callState.value
+        val isRelevant = when (currentState) {
+            is CallState.Connected -> currentState.remoteUserId == from
+            else -> false
+        }
+        if (isRelevant) {
+            Log.d(TAG, "Remote camera toggled: $enabled")
+            _isRemoteCameraEnabled.value = enabled
+        }
+    }
+
     private fun initializeWebRTC(withCamera: Boolean) {
         Log.d(TAG, "Initializing WebRTC")
 
@@ -295,14 +316,43 @@ class CallManager(
         webRTCClient?.createPeerConnection()
         webRTCClient?.startLocalAudio()
 
-        if (withCamera) {
+        // Only start video if we have camera permission
+        val hasCameraPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (withCamera && hasCameraPermission) {
             webRTCClient?.startLocalVideo(null)
+            _localVideoTrack.value = webRTCClient?.getLocalVideoTrack()
+        } else if (withCamera) {
+            Log.w(TAG, "Camera requested but permission not granted, skipping video")
         }
+    }
+
+    fun setLocalAudioEnabled(enabled: Boolean) {
+        webRTCClient?.setLocalAudioEnabled(enabled)
+    }
+
+    fun setLocalVideoEnabled(enabled: Boolean) {
+        webRTCClient?.setLocalVideoEnabled(enabled)
+
+        // Notify the remote (symmetry with Desktop)
+        val remoteUserId = when (val state = _callState.value) {
+            is CallState.Connected -> state.remoteUserId
+            else -> null
+        }
+        remoteUserId?.let { socketManager.toggleCamera(it, enabled) }
     }
 
     fun initRemoteRenderer(renderer: SurfaceViewRenderer) {
         webRTCClient?.initRemoteRenderer(renderer)
         _remoteVideoTrack.value?.addSink(renderer)
+    }
+
+    fun initLocalRenderer(renderer: SurfaceViewRenderer) {
+        webRTCClient?.initLocalRenderer(renderer)
+        _localVideoTrack.value?.addSink(renderer)
     }
 
     private fun cleanup() {
@@ -313,12 +363,14 @@ class CallManager(
         isCleaningUp = true
         Log.d(TAG, "Cleaning up")
 
-        // Clear state first to update UI
+        // Clear state first to update UI and trigger Compose cleanup
         _callState.value = CallState.Idle
 
         // Clear tracks
         _remoteVideoTrack.value = null
         _remoteAudioTrack.value = null
+        _localVideoTrack.value = null
+        _isRemoteCameraEnabled.value = true
 
         // Clear pending signaling
         pendingOffer = null
@@ -328,17 +380,20 @@ class CallManager(
             pendingIceCandidates.clear()
         }
 
-        // Close WebRTC client if it exists
+        // Close WebRTC client AFTER a delay to let Compose dispose the renderer first
+        // This prevents crashes when the renderer tries to use disposed resources
         val client = webRTCClient
         webRTCClient = null
-        try {
-            client?.close()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error closing WebRTC client", e)
+        scope.launch {
+            kotlinx.coroutines.delay(150) // Give Compose time to clean up renderer
+            try {
+                client?.close()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error closing WebRTC client", e)
+            }
+            isCleaningUp = false
+            Log.d(TAG, "Cleanup complete")
         }
-
-        isCleaningUp = false
-        Log.d(TAG, "Cleanup complete")
     }
 
     // WebRTCClient.PeerConnectionObserver implementation

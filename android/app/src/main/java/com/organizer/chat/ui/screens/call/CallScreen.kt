@@ -1,12 +1,17 @@
 package com.organizer.chat.ui.screens.call
 
+import android.util.Log
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CallEnd
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -14,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -21,25 +27,42 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.organizer.chat.ui.theme.AccentBlue
-import com.organizer.chat.webrtc.CallManager
 import com.organizer.chat.webrtc.CallState
 import kotlinx.coroutines.delay
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 
+private const val TAG = "CallScreen"
+
 @Composable
 fun CallScreen(
     callState: CallState,
     remoteVideoTrack: VideoTrack?,
-    callManager: CallManager,
-    onEndCall: () -> Unit
+    localVideoTrack: VideoTrack?,
+    isMuted: Boolean,
+    isCameraEnabled: Boolean,
+    isRemoteCameraEnabled: Boolean,
+    onToggleMute: () -> Unit,
+    onToggleCamera: () -> Unit,
+    onEndCall: () -> Unit,
+    onInitRemoteRenderer: (SurfaceViewRenderer) -> Unit,
+    onInitLocalRenderer: (SurfaceViewRenderer) -> Unit
 ) {
     var remoteRenderer by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
-    var attachedTrack by remember { mutableStateOf<VideoTrack?>(null) }
+    var localRenderer by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
+    var attachedRemoteTrack by remember { mutableStateOf<VideoTrack?>(null) }
+    var attachedLocalTrack by remember { mutableStateOf<VideoTrack?>(null) }
 
     // Call duration timer
     var callDurationSeconds by remember { mutableStateOf(0) }
     val isConnected = callState is CallState.Connected
+
+    // Determine if this is a video call
+    val withCamera = when (callState) {
+        is CallState.Calling -> callState.withCamera
+        is CallState.Connected -> callState.withCamera
+        else -> false
+    }
 
     LaunchedEffect(isConnected) {
         if (isConnected) {
@@ -57,30 +80,116 @@ fun CallScreen(
         val track = remoteVideoTrack
 
         if (track != null && renderer != null) {
-            track.addSink(renderer)
-            attachedTrack = track
+            try {
+                track.addSink(renderer)
+                attachedRemoteTrack = track
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding sink to remote track", e)
+            }
         }
 
         onDispose {
-            if (renderer != null && attachedTrack != null) {
-                attachedTrack?.removeSink(renderer)
-                attachedTrack = null
+            if (renderer != null && attachedRemoteTrack != null) {
+                try {
+                    attachedRemoteTrack?.removeSink(renderer)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing sink from remote track", e)
+                }
+                attachedRemoteTrack = null
             }
         }
     }
 
-    // Release renderer on final dispose
+    // Attach/detach local video track to renderer when either changes
+    DisposableEffect(localVideoTrack, localRenderer) {
+        val renderer = localRenderer
+        val track = localVideoTrack
+
+        if (track != null && renderer != null) {
+            try {
+                track.addSink(renderer)
+                attachedLocalTrack = track
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding sink to local track", e)
+            }
+        }
+
+        onDispose {
+            if (renderer != null && attachedLocalTrack != null) {
+                try {
+                    attachedLocalTrack?.removeSink(renderer)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing sink from local track", e)
+                }
+                attachedLocalTrack = null
+            }
+        }
+    }
+
+    // Release renderers on final dispose
     DisposableEffect(Unit) {
         onDispose {
             remoteRenderer?.let { renderer ->
-                attachedTrack?.removeSink(renderer)
-                attachedTrack = null
-                renderer.release()
+                try {
+                    attachedRemoteTrack?.removeSink(renderer)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing sink on dispose", e)
+                }
+                attachedRemoteTrack = null
+                try {
+                    renderer.release()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error releasing remote renderer", e)
+                }
+            }
+            localRenderer?.let { renderer ->
+                try {
+                    attachedLocalTrack?.removeSink(renderer)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing local sink on dispose", e)
+                }
+                attachedLocalTrack = null
+                try {
+                    renderer.release()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error releasing local renderer", e)
+                }
             }
         }
     }
 
-    val hasVideo = remoteVideoTrack != null && isConnected
+    val hasRemoteVideo = remoteVideoTrack != null && isConnected && isRemoteCameraEnabled
+    val hasLocalVideo = localVideoTrack != null && withCamera && isCameraEnabled
+
+    // Debug logging
+    Log.d(TAG, "hasRemoteVideo=$hasRemoteVideo (track=${remoteVideoTrack != null}, connected=$isConnected, remoteCamEnabled=$isRemoteCameraEnabled)")
+
+    // Clear remote renderer when remote camera is disabled
+    LaunchedEffect(isRemoteCameraEnabled) {
+        if (!isRemoteCameraEnabled && remoteRenderer != null) {
+            Log.d(TAG, "Remote camera disabled, clearing renderer")
+            try {
+                attachedRemoteTrack?.removeSink(remoteRenderer!!)
+                remoteRenderer?.clearImage()
+                attachedRemoteTrack = null
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing remote renderer", e)
+            }
+        }
+    }
+
+    // Re-attach sink when remote camera is re-enabled
+    LaunchedEffect(isRemoteCameraEnabled, remoteVideoTrack, remoteRenderer) {
+        if (isRemoteCameraEnabled && remoteVideoTrack != null && remoteRenderer != null && attachedRemoteTrack == null) {
+            Log.d(TAG, "Remote camera re-enabled, re-attaching sink")
+            try {
+                remoteVideoTrack.addSink(remoteRenderer!!)
+                attachedRemoteTrack = remoteVideoTrack
+            } catch (e: Exception) {
+                Log.e(TAG, "Error re-attaching sink", e)
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -96,12 +205,12 @@ fun CallScreen(
             )
     ) {
         // Remote video (full screen, only when we have video)
-        if (hasVideo) {
+        if (hasRemoteVideo) {
             AndroidView(
                 factory = { context ->
                     SurfaceViewRenderer(context).apply {
                         setEnableHardwareScaler(true)
-                        callManager.initRemoteRenderer(this)
+                        onInitRemoteRenderer(this)
                         remoteRenderer = this
                     }
                 },
@@ -118,7 +227,7 @@ fun CallScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Avatar placeholder (hide when video is showing)
-            if (!hasVideo) {
+            if (!hasRemoteVideo) {
                 val username = when (callState) {
                     is CallState.Calling -> callState.targetUsername
                     is CallState.Connected -> callState.remoteUsername
@@ -166,18 +275,88 @@ fun CallScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // End call button
-            IconButton(
-                onClick = onEndCall,
-                modifier = Modifier
-                    .size(72.dp)
-                    .background(Color(0xFFE53935), CircleShape)
+            // Control buttons row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.CallEnd,
-                    contentDescription = "Raccrocher",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
+                // Mute button
+                IconButton(
+                    onClick = onToggleMute,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(
+                            if (isMuted) Color(0xFFE53935) else Color.White.copy(alpha = 0.2f),
+                            CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                        contentDescription = if (isMuted) "Activer le micro" else "Couper le micro",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                // End call button
+                IconButton(
+                    onClick = onEndCall,
+                    modifier = Modifier
+                        .size(72.dp)
+                        .background(Color(0xFFE53935), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CallEnd,
+                        contentDescription = "Raccrocher",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+
+                // Camera button (only shown for video calls)
+                if (withCamera) {
+                    IconButton(
+                        onClick = onToggleCamera,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(
+                                if (!isCameraEnabled) Color(0xFFE53935) else Color.White.copy(alpha = 0.2f),
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = if (isCameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff,
+                            contentDescription = if (isCameraEnabled) "Couper la camera" else "Activer la camera",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                } else {
+                    // Placeholder to keep layout balanced
+                    Spacer(modifier = Modifier.size(56.dp))
+                }
+            }
+        }
+
+        // Local video PiP (bottom right)
+        if (hasLocalVideo) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 140.dp)
+                    .size(width = 100.dp, height = 140.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black)
+            ) {
+                AndroidView(
+                    factory = { context ->
+                        SurfaceViewRenderer(context).apply {
+                            setEnableHardwareScaler(true)
+                            onInitLocalRenderer(this)
+                            localRenderer = this
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
                 )
             }
         }

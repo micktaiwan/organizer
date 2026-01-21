@@ -3,11 +3,16 @@ import { CallState } from '../types';
 import { socketService } from '../services/socket';
 import { playRingtone, stopRingtone, playRingback, stopRingback } from '../utils/audio';
 
-// STUN servers configuration
+// ICE servers configuration (STUN + TURN)
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    {
+      urls: 'turn:51.210.150.25:3478',
+      username: 'organizer',
+      credential: 'SecurePassword123!',
+    },
   ],
 };
 
@@ -305,12 +310,22 @@ export const useWebRTCCall = ({
   const toggleCamera = useCallback(async () => {
     if (!localStreamRef.current || !targetUserId) return;
 
+    const pc = pcRef.current;
     const videoTracks = localStreamRef.current.getVideoTracks();
 
     if (isCameraEnabled && videoTracks.length > 0) {
       console.log('Disabling camera');
+
+      // Find the video sender and replace its track with null
+      const videoSender = pc?.getSenders().find(s => s.track?.kind === 'video');
+      if (videoSender) {
+        await videoSender.replaceTrack(null);
+      }
+
+      // Stop and remove tracks from local stream
       videoTracks.forEach(track => track.stop());
       videoTracks.forEach(track => localStreamRef.current?.removeTrack(track));
+
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = null;
       }
@@ -323,9 +338,13 @@ export const useWebRTCCall = ({
         const videoTrack = videoStream.getVideoTracks()[0];
         localStreamRef.current.addTrack(videoTrack);
 
-        // Add the new video track to the peer connection
-        const pc = pcRef.current;
-        if (pc) {
+        // Find existing video sender and replace its track, or add new one
+        const videoSender = pc?.getSenders().find(s => s.track === null || s.track?.kind === 'video');
+        if (videoSender) {
+          console.log('Replacing track on existing sender');
+          await videoSender.replaceTrack(videoTrack);
+        } else if (pc) {
+          console.log('Adding new video track to peer connection');
           const sender = pc.addTrack(videoTrack, localStreamRef.current);
           sendersRef.current.push(sender);
         }

@@ -18,3 +18,7 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 
 - Les appels WebRTC doivent marcher
 
+## User Switcher
+
+- Desktop: dropdown dans RoomHeader pour switcher rapidement entre comptes (stocke tokens, pas les mots de passe)
+

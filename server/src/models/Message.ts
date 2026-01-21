@@ -2,7 +2,7 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export type MessageType = 'text' | 'image' | 'audio' | 'system' | 'file';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
-export type ClientSource = 'desktop' | 'android' | 'api';
+export type ClientSource = 'desktop' | 'android' | 'api' | 'mcp' | 'mcp-bot';
 export type ReactionEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '😡' | '✅' | '⚠️' | '🙏' | '🎉' | '👋' | '😘';
 
 export const ALLOWED_EMOJIS: ReactionEmoji[] = ['👍', '❤️', '😂', '😮', '😢', '😡', '✅', '⚠️', '🙏', '🎉', '👋', '😘'];
@@ -100,7 +100,7 @@ const MessageSchema = new Schema<IMessage>(
     }],
     clientSource: {
       type: String,
-      enum: ['desktop', 'android', 'api'],
+      enum: ['desktop', 'android', 'api', 'mcp', 'mcp-bot'],
     },
   },
   {

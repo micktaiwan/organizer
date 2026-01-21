@@ -16,7 +16,11 @@ class WebRTCClient(
 
         private val ICE_SERVERS = listOf(
             PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
-            PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer()
+            PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
+            PeerConnection.IceServer.builder("turn:51.210.150.25:3478")
+                .setUsername("organizer")
+                .setPassword("SecurePassword123!")
+                .createIceServer()
         )
     }
 
@@ -192,6 +196,11 @@ class WebRTCClient(
         renderer.setMirror(false)
     }
 
+    fun initLocalRenderer(renderer: SurfaceViewRenderer) {
+        renderer.init(eglBase?.eglBaseContext, null)
+        renderer.setMirror(true)
+    }
+
     suspend fun createOffer(): String = suspendCancellableCoroutine { continuation ->
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
@@ -280,33 +289,95 @@ class WebRTCClient(
         Log.d(TAG, "ICE candidate added")
     }
 
+    fun setLocalAudioEnabled(enabled: Boolean) {
+        localAudioTrack?.setEnabled(enabled)
+        Log.d(TAG, "Local audio enabled: $enabled")
+    }
+
+    fun setLocalVideoEnabled(enabled: Boolean) {
+        localVideoTrack?.setEnabled(enabled)
+        if (enabled) {
+            try {
+                videoCapturer?.startCapture(640, 480, 30)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting video capture", e)
+            }
+        } else {
+            try {
+                videoCapturer?.stopCapture()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping video capture", e)
+            }
+        }
+        Log.d(TAG, "Local video enabled: $enabled")
+    }
+
+    fun getLocalVideoTrack(): VideoTrack? = localVideoTrack
+
     fun close() {
         Log.d(TAG, "Closing WebRTC client")
 
-        localAudioTrack?.setEnabled(false)
-        localVideoTrack?.setEnabled(false)
+        try {
+            localAudioTrack?.setEnabled(false)
+            localVideoTrack?.setEnabled(false)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disabling tracks", e)
+        }
 
-        videoCapturer?.stopCapture()
-        videoCapturer?.dispose()
+        try {
+            videoCapturer?.stopCapture()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping video capture", e)
+        }
+
+        try {
+            videoCapturer?.dispose()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing video capturer", e)
+        }
         videoCapturer = null
 
-        localAudioTrack?.dispose()
+        try {
+            localAudioTrack?.dispose()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing audio track", e)
+        }
         localAudioTrack = null
 
-        localVideoTrack?.dispose()
+        try {
+            localVideoTrack?.dispose()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing video track", e)
+        }
         localVideoTrack = null
 
-        surfaceTextureHelper?.dispose()
+        try {
+            surfaceTextureHelper?.dispose()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing surface texture helper", e)
+        }
         surfaceTextureHelper = null
 
-        peerConnection?.close()
-        peerConnection?.dispose()
+        try {
+            peerConnection?.close()
+            peerConnection?.dispose()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing peer connection", e)
+        }
         peerConnection = null
 
-        peerConnectionFactory?.dispose()
+        try {
+            peerConnectionFactory?.dispose()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing peer connection factory", e)
+        }
         peerConnectionFactory = null
 
-        eglBase?.release()
+        try {
+            eglBase?.release()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing EGL base", e)
+        }
         eglBase = null
 
         Log.d(TAG, "WebRTC client closed")

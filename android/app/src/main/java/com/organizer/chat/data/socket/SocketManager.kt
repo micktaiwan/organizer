@@ -121,6 +121,9 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _callEnd = MutableSharedFlow<CallEndEvent>(extraBufferCapacity = 5)
     val callEnd: SharedFlow<CallEndEvent> = _callEnd.asSharedFlow()
 
+    private val _callToggleCamera = MutableSharedFlow<CallToggleCameraEvent>(replay = 0, extraBufferCapacity = 1)
+    val callToggleCamera: SharedFlow<CallToggleCameraEvent> = _callToggleCamera.asSharedFlow()
+
     fun connect(versionName: String? = null, versionCode: Int? = null) {
         // Guard against multiple connections (BUG-003 fix)
         if (socket?.connected() == true) {
@@ -662,6 +665,20 @@ class SocketManager(private val tokenManager: TokenManager) {
                     Log.e(TAG, "Error parsing call:end", e)
                 }
             }
+
+            on("call:toggle-camera") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = CallToggleCameraEvent(
+                        from = data.getString("from"),
+                        enabled = data.getBoolean("enabled")
+                    )
+                    Log.d(TAG, "Received call:toggle-camera from ${event.from}, enabled=${event.enabled}")
+                    _callToggleCamera.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing call:toggle-camera", e)
+                }
+            }
         }
     }
 
@@ -797,6 +814,14 @@ class SocketManager(private val tokenManager: TokenManager) {
             put("to", to)
         })
         Log.d(TAG, "Sent call end to $to")
+    }
+
+    fun toggleCamera(to: String, enabled: Boolean) {
+        socket?.emit("call:toggle-camera", JSONObject().apply {
+            put("to", to)
+            put("enabled", enabled)
+        })
+        Log.d(TAG, "Sent call:toggle-camera to $to, enabled=$enabled")
     }
 }
 
@@ -979,4 +1004,9 @@ data class CallRejectEvent(
 
 data class CallEndEvent(
     val from: String
+)
+
+data class CallToggleCameraEvent(
+    val from: String,
+    val enabled: Boolean
 )
