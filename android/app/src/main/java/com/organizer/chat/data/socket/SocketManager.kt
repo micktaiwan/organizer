@@ -124,6 +124,9 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _callToggleCamera = MutableSharedFlow<CallToggleCameraEvent>(replay = 0, extraBufferCapacity = 1)
     val callToggleCamera: SharedFlow<CallToggleCameraEvent> = _callToggleCamera.asSharedFlow()
 
+    private val _callAnsweredElsewhere = MutableSharedFlow<CallAnsweredElsewhereEvent>(extraBufferCapacity = 5)
+    val callAnsweredElsewhere: SharedFlow<CallAnsweredElsewhereEvent> = _callAnsweredElsewhere.asSharedFlow()
+
     fun connect(versionName: String? = null, versionCode: Int? = null) {
         // Guard against multiple connections (BUG-003 fix)
         if (socket?.connected() == true) {
@@ -679,6 +682,20 @@ class SocketManager(private val tokenManager: TokenManager) {
                     Log.e(TAG, "Error parsing call:toggle-camera", e)
                 }
             }
+
+            on("call:answered-elsewhere") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = CallAnsweredElsewhereEvent(
+                        answeredBy = data.optString("answeredBy", ""),
+                        caller = data.optString("caller", "")
+                    )
+                    Log.d(TAG, "Call answered elsewhere by ${event.answeredBy}")
+                    _callAnsweredElsewhere.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing call:answered-elsewhere", e)
+                }
+            }
         }
     }
 
@@ -1009,4 +1026,9 @@ data class CallEndEvent(
 data class CallToggleCameraEvent(
     val from: String,
     val enabled: Boolean
+)
+
+data class CallAnsweredElsewhereEvent(
+    val answeredBy: String,
+    val caller: String
 )

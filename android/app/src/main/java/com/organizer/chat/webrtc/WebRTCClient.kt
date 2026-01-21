@@ -295,20 +295,14 @@ class WebRTCClient(
     }
 
     fun setLocalVideoEnabled(enabled: Boolean) {
+        // Only use track.setEnabled() - don't stop/start the capturer
+        // stopCapture()/startCapture() causes issues:
+        // - startCapture() after stopCapture() may fail silently
+        // - The capturer state becomes inconsistent
+        //
+        // track.setEnabled(false) stops sending frames to the peer connection
+        // while keeping the capturer running (minimal CPU impact)
         localVideoTrack?.setEnabled(enabled)
-        if (enabled) {
-            try {
-                videoCapturer?.startCapture(640, 480, 30)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error starting video capture", e)
-            }
-        } else {
-            try {
-                videoCapturer?.stopCapture()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error stopping video capture", e)
-            }
-        }
         Log.d(TAG, "Local video enabled: $enabled")
     }
 

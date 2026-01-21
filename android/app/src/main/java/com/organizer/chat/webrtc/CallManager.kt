@@ -308,6 +308,14 @@ class CallManager(
         }
     }
 
+    fun handleCallAnsweredElsewhere() {
+        val currentState = _callState.value
+        if (currentState is CallState.Incoming) {
+            Log.d(TAG, "Call answered on another device, dismissing")
+            cleanup()
+        }
+    }
+
     private fun initializeWebRTC(withCamera: Boolean) {
         Log.d(TAG, "Initializing WebRTC")
 
@@ -352,7 +360,13 @@ class CallManager(
 
     fun initLocalRenderer(renderer: SurfaceViewRenderer) {
         webRTCClient?.initLocalRenderer(renderer)
-        _localVideoTrack.value?.addSink(renderer)
+        val track = _localVideoTrack.value
+        if (track != null) {
+            track.addSink(renderer)
+            Log.d(TAG, "Local video track attached to renderer")
+        } else {
+            Log.w(TAG, "initLocalRenderer called but localVideoTrack is null")
+        }
     }
 
     private fun cleanup() {
@@ -446,6 +460,18 @@ class CallManager(
     }
 
     override fun onRemoveTrack(receiver: RtpReceiver) {
-        Log.d(TAG, "Track removed")
+        val track = receiver.track()
+        Log.d(TAG, "Track removed: ${track?.kind()}")
+
+        when (track) {
+            is VideoTrack -> {
+                Log.d(TAG, "Remote video track removed")
+                _remoteVideoTrack.value = null
+            }
+            is AudioTrack -> {
+                Log.d(TAG, "Remote audio track removed")
+                _remoteAudioTrack.value = null
+            }
+        }
     }
 }
