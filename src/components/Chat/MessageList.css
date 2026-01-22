@@ -401,6 +401,11 @@
   align-self: flex-start;
 }
 
+.message-group-wrapper.system {
+  align-self: center;
+  max-width: 80%;
+}
+
 .message-group-wrapper > .message {
   max-width: 100%;
   margin-top: 0;
