@@ -86,11 +86,17 @@ export const MessageList: React.FC<MessageListProps> = ({
         const senderId = firstMsg.sender === 'them' ? firstMsg.senderId : currentUserId;
         const senderStatusData = senderId ? getStatus(senderId) : undefined;
 
+        // System messages (announcements, calls) should not have left/right alignment
+        const isSystemMessage = firstMsg.isSystemMessage || firstMsg.type === 'system';
+        const wrapperClass = isSystemMessage
+          ? `message-group-wrapper system ${isGroupHighlighted(group) ? 'message-group-highlight' : ''}`
+          : `message-group-wrapper ${firstMsg.sender === 'me' ? 'me' : 'them'} ${isGroupHighlighted(group) ? 'message-group-highlight' : ''}`;
+
         return (
           <div
             key={`group-${groupIndex}-${firstMsg.id}`}
             data-group-index={groupIndex}
-            className={`message-group-wrapper ${firstMsg.sender === 'me' ? 'me' : 'them'} ${isGroupHighlighted(group) ? 'message-group-highlight' : ''}`}
+            className={wrapperClass}
           >
             <MessageItem
               messages={group.messages}
