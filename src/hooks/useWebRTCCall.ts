@@ -411,8 +411,8 @@ export const useWebRTCCall = ({
     };
 
     const handleAnsweredElsewhere = () => {
-      // Only dismiss if we're in receiving state (ringing)
-      if (callState !== 'receiving') return;
+      // Only dismiss if we're in incoming state (ringing)
+      if (callState !== 'incoming') return;
 
       console.log('Call answered on another device');
       stopRingtone();
