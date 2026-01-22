@@ -2,9 +2,12 @@ package com.organizer.chat.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.organizer.chat.audio.CallAudioManager
+import com.organizer.chat.webrtc.CallError
 import com.organizer.chat.webrtc.CallManager
 import com.organizer.chat.webrtc.CallState
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.webrtc.VideoTrack
@@ -18,6 +21,8 @@ class CallViewModel(
     val remoteVideoTrack: StateFlow<VideoTrack?> = callManager.remoteVideoTrack
     val localVideoTrack: StateFlow<VideoTrack?> = callManager.localVideoTrack
     val isRemoteCameraEnabled: StateFlow<Boolean> = callManager.isRemoteCameraEnabled
+    val audioRoute: StateFlow<CallAudioManager.AudioRoute> = callManager.audioRoute
+    val callError: SharedFlow<CallError> = callManager.callError
 
     // UI-local states
     private val _isMuted = MutableStateFlow(false)
@@ -57,6 +62,10 @@ class CallViewModel(
         callManager.setLocalVideoEnabled(newEnabled)
     }
 
+    fun toggleSpeaker() {
+        callManager.toggleSpeaker()
+    }
+
     fun resetUIState() {
         _isMuted.value = false
         _isCameraEnabled.value = true
@@ -68,6 +77,14 @@ class CallViewModel(
 
     fun initLocalRenderer(renderer: org.webrtc.SurfaceViewRenderer) {
         callManager.initLocalRenderer(renderer)
+    }
+
+    /**
+     * Start camera if it was deferred (e.g., when accepting call from notification).
+     * Call this when CallScreen becomes visible.
+     */
+    fun startCameraIfPending() {
+        callManager.startCameraIfPending()
     }
 }
 

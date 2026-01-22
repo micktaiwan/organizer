@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -30,6 +31,7 @@ import androidx.compose.material3.TextButton
 import com.organizer.chat.ui.theme.AccentBlue
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import com.organizer.chat.webrtc.CallErrorType
 import com.organizer.chat.data.model.AppUpdateInfo
 import com.organizer.chat.data.model.DownloadStatus
 import com.organizer.chat.data.model.SharedContent
@@ -368,6 +370,23 @@ class MainActivity : ComponentActivity() {
                     val isMuted by viewModel.isMuted.collectAsState()
                     val isCameraEnabled by viewModel.isCameraEnabled.collectAsState()
                     val isRemoteCameraEnabled by viewModel.isRemoteCameraEnabled.collectAsState()
+                    val audioRoute by viewModel.audioRoute.collectAsState()
+
+                    // Handle call errors
+                    LaunchedEffect(Unit) {
+                        viewModel.callError.collect { error ->
+                            val message = when (error.type) {
+                                CallErrorType.TIMEOUT_NO_ANSWER -> "Pas de réponse"
+                                CallErrorType.TIMEOUT_INCOMING -> "Appel manqué"
+                                CallErrorType.REJECTED -> "Appel refusé"
+                                CallErrorType.NETWORK_ERROR -> "Connexion perdue"
+                                CallErrorType.PERMISSION_DENIED -> "Permission refusée"
+                                CallErrorType.ANSWERED_ELSEWHERE -> "Appel pris sur un autre appareil"
+                                CallErrorType.UNKNOWN -> error.message
+                            }
+                            Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
+                        }
+                    }
 
                     when (val state = currentCallState) {
                         is CallState.Incoming -> {
@@ -385,7 +404,10 @@ class MainActivity : ComponentActivity() {
                                 onReject = { viewModel.rejectCall() }
                             )
                         }
-                        is CallState.Calling, is CallState.Connected -> {
+                        is CallState.Calling,
+                        is CallState.Connecting,
+                        is CallState.Connected,
+                        is CallState.Reconnecting -> {
                             CallScreen(
                                 callState = state,
                                 remoteVideoTrack = remoteVideoTrack,
@@ -393,11 +415,14 @@ class MainActivity : ComponentActivity() {
                                 isMuted = isMuted,
                                 isCameraEnabled = isCameraEnabled,
                                 isRemoteCameraEnabled = isRemoteCameraEnabled,
+                                audioRoute = audioRoute,
                                 onToggleMute = { viewModel.toggleMute() },
                                 onToggleCamera = { viewModel.toggleCamera() },
+                                onToggleSpeaker = { viewModel.toggleSpeaker() },
                                 onEndCall = { viewModel.endCall() },
                                 onInitRemoteRenderer = { renderer -> viewModel.initRemoteRenderer(renderer) },
-                                onInitLocalRenderer = { renderer -> viewModel.initLocalRenderer(renderer) }
+                                onInitLocalRenderer = { renderer -> viewModel.initLocalRenderer(renderer) },
+                                onScreenVisible = { viewModel.startCameraIfPending() }
                             )
                         }
                         CallState.Idle -> {
@@ -442,6 +467,17 @@ class MainActivity : ComponentActivity() {
             Log.d(TAG, "Received roomId from notification: $roomId")
             pendingRoomId.value = roomId
             pendingRoomName.value = intent.getStringExtra("roomName") ?: "Chat"
+        }
+
+        // Handle incoming call intent from notification
+        if (intent?.getBooleanExtra("incoming_call", false) == true) {
+            val callerId = intent.getStringExtra("caller_id")
+            val callerName = intent.getStringExtra("caller_name") ?: "Unknown"
+            val withCamera = intent.getBooleanExtra("with_camera", false)
+            Log.d(TAG, "Received incoming call intent: $callerId ($callerName)")
+            // The call UI will be shown automatically when CallManager state is Incoming
+            // Clear the extras to prevent re-processing
+            intent.removeExtra("incoming_call")
         }
     }
 

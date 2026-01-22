@@ -559,6 +559,11 @@ export function BrainDashboard({ serverUrl, getAuthHeaders }: BrainDashboardProp
                     </button>
                   </div>
                 ))}
+                {liveCount > livePreview.length && (
+                  <div className="preview-more">
+                    + {liveCount - livePreview.length} other messages not shown
+                  </div>
+                )}
               </div>
             )}
             {liveCount === 0 && (

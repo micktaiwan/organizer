@@ -12,6 +12,8 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -26,9 +28,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.organizer.chat.audio.CallAudioManager
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.webrtc.CallState
 import kotlinx.coroutines.delay
+import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 
@@ -42,12 +46,21 @@ fun CallScreen(
     isMuted: Boolean,
     isCameraEnabled: Boolean,
     isRemoteCameraEnabled: Boolean,
+    audioRoute: CallAudioManager.AudioRoute = CallAudioManager.AudioRoute.EARPIECE,
     onToggleMute: () -> Unit,
     onToggleCamera: () -> Unit,
+    onToggleSpeaker: () -> Unit = {},
     onEndCall: () -> Unit,
     onInitRemoteRenderer: (SurfaceViewRenderer) -> Unit,
-    onInitLocalRenderer: (SurfaceViewRenderer) -> Unit
+    onInitLocalRenderer: (SurfaceViewRenderer) -> Unit,
+    onScreenVisible: () -> Unit = {}
 ) {
+    // Notify that screen is now visible (for deferred camera start)
+    LaunchedEffect(Unit) {
+        Log.d(TAG, "CallScreen visible, calling onScreenVisible")
+        onScreenVisible()
+    }
+
     var remoteRenderer by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
     var localRenderer by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
     var attachedRemoteTrack by remember { mutableStateOf<VideoTrack?>(null) }
@@ -60,7 +73,9 @@ fun CallScreen(
     // Determine if this is a video call
     val withCamera = when (callState) {
         is CallState.Calling -> callState.withCamera
+        is CallState.Connecting -> callState.withCamera
         is CallState.Connected -> callState.withCamera
+        is CallState.Reconnecting -> callState.withCamera
         else -> false
     }
 
@@ -210,6 +225,7 @@ fun CallScreen(
                 factory = { context ->
                     SurfaceViewRenderer(context).apply {
                         setEnableHardwareScaler(true)
+                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
                         onInitRemoteRenderer(this)
                         remoteRenderer = this
                     }
@@ -230,13 +246,19 @@ fun CallScreen(
             if (!hasRemoteVideo) {
                 val username = when (callState) {
                     is CallState.Calling -> callState.targetUsername
+                    is CallState.Connecting -> callState.remoteUsername
                     is CallState.Connected -> callState.remoteUsername
+                    is CallState.Reconnecting -> callState.remoteUsername
                     else -> ""
                 }
 
+                val isPulsing = callState is CallState.Calling ||
+                        callState is CallState.Connecting ||
+                        callState is CallState.Reconnecting
+
                 AvatarWithPulse(
                     username = username,
-                    isPulsing = callState is CallState.Calling
+                    isPulsing = isPulsing
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -245,7 +267,9 @@ fun CallScreen(
             // Username
             val displayName = when (callState) {
                 is CallState.Calling -> callState.targetUsername
+                is CallState.Connecting -> callState.remoteUsername
                 is CallState.Connected -> callState.remoteUsername
+                is CallState.Reconnecting -> callState.remoteUsername
                 else -> ""
             }
 
@@ -263,6 +287,12 @@ fun CallScreen(
                 is CallState.Calling -> {
                     CallingAnimation()
                 }
+                is CallState.Connecting -> {
+                    ConnectingAnimation()
+                }
+                is CallState.Reconnecting -> {
+                    ReconnectingAnimation()
+                }
                 is CallState.Connected -> {
                     Text(
                         text = formatDuration(callDurationSeconds),
@@ -277,7 +307,7 @@ fun CallScreen(
 
             // Control buttons row
             Row(
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Mute button
@@ -296,6 +326,27 @@ fun CallScreen(
                         tint = Color.White,
                         modifier = Modifier.size(24.dp)
                     )
+                }
+
+                // Speaker button (only for audio calls)
+                if (!withCamera) {
+                    val isSpeakerOn = audioRoute == CallAudioManager.AudioRoute.SPEAKER
+                    IconButton(
+                        onClick = onToggleSpeaker,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(
+                                if (isSpeakerOn) AccentBlue else Color.White.copy(alpha = 0.2f),
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = if (isSpeakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                            contentDescription = if (isSpeakerOn) "Désactiver haut-parleur" else "Activer haut-parleur",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
 
                 // End call button
@@ -352,6 +403,8 @@ fun CallScreen(
                     factory = { context ->
                         SurfaceViewRenderer(context).apply {
                             setEnableHardwareScaler(true)
+                            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                            setZOrderMediaOverlay(true) // Stay above remote video
                             onInitLocalRenderer(this)
                             localRenderer = this
                         }
@@ -445,6 +498,54 @@ private fun CallingAnimation() {
         text = "Appel en cours$dots",
         fontSize = 16.sp,
         color = Color.White.copy(alpha = 0.7f)
+    )
+}
+
+@Composable
+private fun ConnectingAnimation() {
+    val infiniteTransition = rememberInfiniteTransition(label = "connectingDots")
+
+    val dotCount by infiniteTransition.animateValue(
+        initialValue = 0,
+        targetValue = 4,
+        typeConverter = Int.VectorConverter,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "dotCount"
+    )
+
+    val dots = ".".repeat(dotCount)
+
+    Text(
+        text = "Connexion$dots",
+        fontSize = 16.sp,
+        color = Color(0xFFFFA726).copy(alpha = 0.9f)
+    )
+}
+
+@Composable
+private fun ReconnectingAnimation() {
+    val infiniteTransition = rememberInfiniteTransition(label = "reconnectingDots")
+
+    val dotCount by infiniteTransition.animateValue(
+        initialValue = 0,
+        targetValue = 4,
+        typeConverter = Int.VectorConverter,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "dotCount"
+    )
+
+    val dots = ".".repeat(dotCount)
+
+    Text(
+        text = "Reconnexion$dots",
+        fontSize = 16.sp,
+        color = Color(0xFFFF5722).copy(alpha = 0.9f)
     )
 }
 
