@@ -370,22 +370,20 @@ L'objectif : passer un appel entre Desktop et Android, voir et entendre l'autre.
 
 ---
 
-### V0.5 - Confort de test
+### V0.5 - Confort de test ✅
 
 Améliore V0 pour des tests plus confortables.
 
 - [x] `CallViewModel.kt` - State centralisé (state, remoteUser, isMuted, isCameraEnabled)
-- [ ] Afficher vidéo locale (petit encart) - **implémenté mais ne s'affiche pas**
+- [x] Afficher vidéo locale (petit encart PiP)
 - [x] Bouton mute micro
 - [x] Bouton toggle caméra on/off
 - [x] `IncomingCallScreen.kt` - UI plein écran appel entrant (remplace IncomingCallDialog)
 - [x] Multi-device : appel répondu ailleurs → dismiss sur les autres devices (server émet `call:answered-elsewhere`)
 
-**Bugs connus V0.5** :
-1. **Vidéo locale non affichée** : L'encart PiP est implémenté mais ne s'affiche pas (à investiguer)
-2. **Mute caméra Android cassé** : Toggle camera off sur Android ne coupe pas la vidéo
-3. **Mute caméra Desktop → freeze Android** : Quand Desktop coupe sa caméra, Android voit la dernière frame figée au lieu d'un écran noir
-4. **Reprise vidéo cassée** : Après avoir coupé puis réactivé la caméra, la vidéo ne reprend pas
+**Bugs corrigés** :
+- Z-order PiP : fix avec `setZOrderMediaOverlay(true)`
+- Connexion Desktop ↔ Android : fonctionnel
 
 ---
 

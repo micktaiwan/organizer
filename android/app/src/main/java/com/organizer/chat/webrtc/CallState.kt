@@ -15,7 +15,19 @@ sealed class CallState {
         val withCamera: Boolean
     ) : CallState()
 
+    data class Connecting(
+        val remoteUserId: String,
+        val remoteUsername: String,
+        val withCamera: Boolean
+    ) : CallState()
+
     data class Connected(
+        val remoteUserId: String,
+        val remoteUsername: String,
+        val withCamera: Boolean
+    ) : CallState()
+
+    data class Reconnecting(
         val remoteUserId: String,
         val remoteUsername: String,
         val withCamera: Boolean

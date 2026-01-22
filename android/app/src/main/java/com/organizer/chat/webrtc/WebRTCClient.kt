@@ -37,6 +37,7 @@ class WebRTCClient(
         fun onIceConnectionChange(state: PeerConnection.IceConnectionState)
         fun onAddTrack(track: MediaStreamTrack, streams: Array<out MediaStream>)
         fun onRemoveTrack(receiver: RtpReceiver)
+        fun onRenegotiationNeeded()
     }
 
     fun initPeerConnectionFactory() {
@@ -116,6 +117,7 @@ class WebRTCClient(
 
                 override fun onRenegotiationNeeded() {
                     Log.d(TAG, "Renegotiation needed")
+                    observer.onRenegotiationNeeded()
                 }
 
                 override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
@@ -287,6 +289,11 @@ class WebRTCClient(
         val iceCandidate = IceCandidate(sdpMid, sdpMLineIndex, candidate)
         peerConnection?.addIceCandidate(iceCandidate)
         Log.d(TAG, "ICE candidate added")
+    }
+
+    fun restartIce() {
+        Log.d(TAG, "Restarting ICE")
+        peerConnection?.restartIce()
     }
 
     fun setLocalAudioEnabled(enabled: Boolean) {

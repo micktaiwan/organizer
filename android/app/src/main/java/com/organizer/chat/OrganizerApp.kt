@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import com.organizer.chat.data.api.ApiClient
+import com.organizer.chat.service.CallService
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.service.TrackingService
 import com.organizer.chat.service.TrackSyncManager
@@ -66,8 +67,19 @@ class OrganizerApp : Application() {
                 setShowBadge(false)
             }
 
+            // Calls channel (high priority for heads-up notifications)
+            val callsChannel = NotificationChannel(
+                CallService.CHANNEL_CALLS,
+                "Appels",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications pour les appels entrants et en cours"
+                enableVibration(true)
+                setShowBadge(true)
+            }
+
             notificationManager.createNotificationChannels(
-                listOf(serviceChannel, messagesChannel, trackingChannel)
+                listOf(serviceChannel, messagesChannel, trackingChannel, callsChannel)
             )
         }
     }
