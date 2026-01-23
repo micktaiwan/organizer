@@ -357,8 +357,8 @@ class MainActivity : ComponentActivity() {
                     onLogout = {
                         stopChatService()
                     },
-                    onCallClick = { userId, username ->
-                        requestCallPermissionsAndStart(userId, username, withCamera = false, isIncoming = false)
+                    onCallClick = { userId, username, withCamera ->
+                        requestCallPermissionsAndStart(userId, username, withCamera = withCamera, isIncoming = false)
                     }
                 )
 

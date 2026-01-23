@@ -53,7 +53,7 @@ fun NavGraph(
     appPreferences: AppPreferences,
     onLoginSuccess: () -> Unit,
     onLogout: () -> Unit,
-    onCallClick: (userId: String, username: String) -> Unit = { _, _ -> }
+    onCallClick: (userId: String, username: String, withCamera: Boolean) -> Unit = { _, _, _ -> }
 ) {
     NavHost(
         navController = navController,
