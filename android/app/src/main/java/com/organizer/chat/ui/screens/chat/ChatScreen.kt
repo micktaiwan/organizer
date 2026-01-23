@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Videocam
 import android.net.Uri
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
@@ -82,7 +83,7 @@ fun ChatScreen(
     chatService: ChatService?,
     tokenManager: TokenManager,
     onBackClick: () -> Unit,
-    onCallClick: (userId: String, username: String) -> Unit = { _, _ -> }
+    onCallClick: (userId: String, username: String, withCamera: Boolean) -> Unit = { _, _, _ -> }
 ) {
     val context = LocalContext.current
     val viewModel = remember(roomId, chatService, context) {
@@ -227,13 +228,22 @@ fun ChatScreen(
                         if (otherMemberId != null) {
                             IconButton(
                                 onClick = {
-                                    // Use roomName as username for now (in private rooms, roomName is often the other user's name)
-                                    onCallClick(otherMemberId, roomName)
+                                    onCallClick(otherMemberId, roomName, false)
                                 }
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Call,
-                                    contentDescription = "Appeler"
+                                    contentDescription = "Appel audio"
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    onCallClick(otherMemberId, roomName, true)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Videocam,
+                                    contentDescription = "Appel vidéo"
                                 )
                             }
                         }
