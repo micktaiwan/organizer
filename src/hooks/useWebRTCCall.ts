@@ -38,6 +38,7 @@ export const useWebRTCCall = ({
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const sendersRef = useRef<RTCRtpSender[]>([]);
 
   // Store pending ICE candidates (received before remote description is set)
@@ -61,11 +62,12 @@ export const useWebRTCCall = ({
     // Handle remote tracks
     pc.ontrack = (event) => {
       console.log('[WebRTC][PC] Remote track received:', event.track.kind, 'enabled:', event.track.enabled, 'streams:', event.streams.length);
-      if (remoteVideoRef.current && event.streams[0]) {
-        remoteVideoRef.current.srcObject = event.streams[0];
-        console.log('[WebRTC][PC] Remote stream attached to video element');
-      } else {
-        console.warn('[WebRTC][PC] Cannot attach remote stream! videoRef:', !!remoteVideoRef.current, 'streams:', event.streams.length);
+      if (event.streams[0]) {
+        remoteStreamRef.current = event.streams[0];
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+          console.log('[WebRTC][PC] Remote stream attached to video element');
+        }
       }
     };
 
@@ -109,6 +111,7 @@ export const useWebRTCCall = ({
       pcRef.current = null;
     }
     pendingIceCandidatesRef.current = [];
+    remoteStreamRef.current = null;
   }, []);
 
   // Sync local video when camera is enabled
@@ -117,6 +120,13 @@ export const useWebRTCCall = ({
       localVideoRef.current.srcObject = localStreamRef.current;
     }
   }, [callState, isCameraEnabled]);
+
+  // Attach remote stream when video element mounts (callState becomes 'connected')
+  useEffect(() => {
+    if (callState === 'connected' && remoteVideoRef.current && remoteStreamRef.current) {
+      remoteVideoRef.current.srcObject = remoteStreamRef.current;
+    }
+  }, [callState]);
 
   // Stop local stream and cleanup
   const stopLocalStream = useCallback(() => {
@@ -280,7 +290,7 @@ export const useWebRTCCall = ({
         socketService.sendAnswer(callTarget, answer);
         console.log('[WebRTC][RECEIVER] Step 4: Answer sent to', callTarget);
       } else {
-        console.warn('[WebRTC][RECEIVER] Step 4: NO remoteDescription! Answer will be created when offer arrives.');
+        console.log('[WebRTC][RECEIVER] Step 4: Answer will be created when offer arrives.');
       }
 
       // 5. Send call accept via Socket.io
