@@ -31,6 +31,9 @@ class CallViewModel(
     private val _isCameraEnabled = MutableStateFlow(true)
     val isCameraEnabled: StateFlow<Boolean> = _isCameraEnabled.asStateFlow()
 
+    private val _isCallMinimized = MutableStateFlow(false)
+    val isCallMinimized: StateFlow<Boolean> = _isCallMinimized.asStateFlow()
+
     fun startCall(userId: String, username: String, withCamera: Boolean) {
         resetUIState()
         callManager.startCall(userId, username, withCamera)
@@ -43,6 +46,14 @@ class CallViewModel(
 
     fun rejectCall() {
         callManager.rejectCall()
+    }
+
+    fun minimizeCall() {
+        _isCallMinimized.value = true
+    }
+
+    fun expandCall() {
+        _isCallMinimized.value = false
     }
 
     fun endCall() {
@@ -69,6 +80,7 @@ class CallViewModel(
     fun resetUIState() {
         _isMuted.value = false
         _isCameraEnabled.value = true
+        _isCallMinimized.value = false
     }
 
     fun initRemoteRenderer(renderer: org.webrtc.SurfaceViewRenderer) {
