@@ -534,7 +534,10 @@ export const useWebRTCCall = ({
         console.error('[WebRTC][SIGNAL] No peer connection for answer!');
         return;
       }
-      console.log('[WebRTC][SIGNAL] PC state before setRemoteDescription:', pc.connectionState, 'signalingState:', pc.signalingState);
+      if (pc.signalingState !== 'have-local-offer') {
+        console.log('[WebRTC][SIGNAL] Ignoring answer - signalingState is', pc.signalingState, '(expected have-local-offer)');
+        return;
+      }
 
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
