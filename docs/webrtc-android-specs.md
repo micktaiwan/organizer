@@ -65,7 +65,7 @@ implementation("io.getstream:stream-webrtc-android:1.3.8")
 <uses-permission android:name="android.permission.RECORD_AUDIO" />
 <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
 <!-- V2 (Bluetooth) -->
@@ -392,38 +392,38 @@ Améliore V0 pour des tests plus confortables.
 Tout ce qu'il faut pour une vraie release.
 
 **Notifications & Background**
-- [ ] `CallService.kt` - Foreground service
-- [ ] Notification persistante pendant l'appel
-- [ ] Full-screen intent (appel entrant écran éteint)
-- [ ] Heads-up notification (appel entrant écran allumé)
-- [ ] Boutons Accepter/Refuser dans la notification
+- [x] `CallService.kt` - Foreground service
+- [x] Notification persistante pendant l'appel
+- [x] Full-screen intent (appel entrant écran éteint)
+- [x] Heads-up notification (appel entrant écran allumé)
+- [x] Boutons Accepter/Refuser dans la notification
 
 **Audio**
-- [ ] `CallAudioManager.kt` - Routing audio
-- [ ] Écouteur par défaut (appel audio)
-- [ ] Haut-parleur par défaut (appel vidéo)
-- [ ] Bouton pour basculer écouteur ↔ haut-parleur
-- [ ] Sonnerie système + vibration (appel entrant)
-- [ ] Proximity sensor (éteindre écran près de l'oreille)
+- [x] `CallAudioManager.kt` - Routing audio
+- [x] Écouteur par défaut (appel audio)
+- [x] Haut-parleur par défaut (appel vidéo)
+- [x] Bouton pour basculer écouteur ↔ haut-parleur
+- [x] Sonnerie système + vibration (appel entrant)
+- [x] Proximity sensor (éteindre écran près de l'oreille)
 
 **Robustesse**
-- [ ] Timeout 30s sonnerie
-- [ ] Timeout 30s appel sortant sans réponse
-- [ ] ICE restart automatique (reconnexion réseau)
-- [ ] UI "Reconnexion..." pendant ICE restart
-- [ ] Gestion call:error
-- [ ] Cleanup complet des ressources WebRTC
-- [ ] Respecter mode Ne Pas Déranger
+- [x] Timeout 30s sonnerie
+- [x] Timeout 30s appel sortant sans réponse
+- [x] ICE restart automatique (reconnexion réseau)
+- [x] UI "Reconnexion..." pendant ICE restart
+- [x] Gestion call:error
+- [x] Cleanup complet des ressources WebRTC
+- [x] Respecter mode Ne Pas Déranger
 
 **UI polish**
-- [ ] Timer durée d'appel
-- [ ] Avatar + nom de l'interlocuteur
-- [ ] État "Appel en cours..." pendant sonnerie sortante
-- [ ] État "Connexion..." pendant setup WebRTC
-- [ ] Toasts d'erreur explicites
+- [x] Timer durée d'appel
+- [x] Avatar + nom de l'interlocuteur
+- [x] État "Appel en cours..." pendant sonnerie sortante
+- [x] État "Connexion..." pendant setup WebRTC
+- [x] Toasts d'erreur explicites
 
 **Permissions**
-- [ ] Gestion refus de permissions (message + retour)
+- [x] Gestion refus de permissions (message + retour)
 
 ---
 
@@ -453,6 +453,19 @@ Améliorations futures, pas bloquantes pour la release.
 **Debug**
 - [ ] Afficher stats (bitrate, résolution, codec) en mode debug
 - [ ] Logs WebRTC exportables
+
+**Appel sur écran verrouillé / app tuée (ConnectionService + FCM)**
+- [ ] FCM data push comme fallback quand le socket est déconnecté
+  - Serveur envoie FCM high-priority data message si le destinataire n'a pas de socket actif
+  - `FirebaseMessagingService.onMessageReceived()` → déclenche l'appel entrant
+- [ ] `MyConnectionService.kt` - Intégration Android Telecom framework
+  - Enregistrer un `PhoneAccount` au démarrage de l'app
+  - `onCreateIncomingConnection()` → crée la connexion et déclenche la sonnerie système
+  - `onCreateOutgoingConnection()` pour les appels sortants
+- [ ] `TelecomManager.addNewIncomingCall()` depuis le FCM service ou le socket handler
+- [ ] Permissions : `MANAGE_OWN_CALLS`, `READ_PHONE_STATE`
+- [ ] Intégration Bluetooth / Android Auto / montres via le framework Telecom
+- [ ] Remplace le Full-Screen Intent de V1 (plus robuste sur tous les OEMs)
 
 **Desktop (parité)**
 - [x] Ringback tone sur Desktop (son pendant appel sortant en attente)
