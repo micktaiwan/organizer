@@ -42,6 +42,9 @@ import com.organizer.chat.data.repository.NoteRepository
 import com.organizer.chat.data.repository.RoomRepository
 import com.organizer.chat.data.repository.UpdateRepository
 import com.organizer.chat.service.ChatService
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import com.organizer.chat.ui.components.ActiveCallBanner
 import com.organizer.chat.ui.components.UpdateProgressDialog
 import com.organizer.chat.ui.components.ShareHandlerDialog
 import com.organizer.chat.ui.navigation.NavGraph
@@ -339,32 +342,49 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                NavGraph(
-                    navController = navController,
-                    startDestination = startDestination,
-                    tokenManager = tokenManager,
-                    chatService = chatService,
-                    authRepository = authRepository,
-                    roomRepository = roomRepository,
-                    messageRepository = messageRepository,
-                    noteRepository = noteRepository,
-                    appPreferences = appPreferences,
-                    onLoginSuccess = {
-                        startChatService()
-                        checkForUpdateOnLaunch()
-                        updateManager.checkPendingDownload()
-                    },
-                    onLogout = {
-                        stopChatService()
-                    },
-                    onCallClick = { userId, username, withCamera ->
-                        requestCallPermissionsAndStart(userId, username, withCamera = withCamera, isIncoming = false)
-                    }
-                )
+                // Collect call state for banner display
+                val currentCallState by callViewModel?.callState?.collectAsState()
+                    ?: remember { mutableStateOf<CallState>(CallState.Idle) }
+                val isCallMinimized by callViewModel?.isCallMinimized?.collectAsState()
+                    ?: remember { mutableStateOf(false) }
 
-                // Call UI - rendered AFTER NavGraph so it appears on top
+                Column(Modifier.fillMaxSize()) {
+                    // Active call banner when minimized
+                    if (isCallMinimized && currentCallState is CallState.Connected) {
+                        ActiveCallBanner(
+                            remoteUsername = (currentCallState as CallState.Connected).remoteUsername,
+                            onTap = { callViewModel?.expandCall() }
+                        )
+                    }
+
+                    Box(Modifier.weight(1f)) {
+                        NavGraph(
+                            navController = navController,
+                            startDestination = startDestination,
+                            tokenManager = tokenManager,
+                            chatService = chatService,
+                            authRepository = authRepository,
+                            roomRepository = roomRepository,
+                            messageRepository = messageRepository,
+                            noteRepository = noteRepository,
+                            appPreferences = appPreferences,
+                            onLoginSuccess = {
+                                startChatService()
+                                checkForUpdateOnLaunch()
+                                updateManager.checkPendingDownload()
+                            },
+                            onLogout = {
+                                stopChatService()
+                            },
+                            onCallClick = { userId, username, withCamera ->
+                                requestCallPermissionsAndStart(userId, username, withCamera = withCamera, isIncoming = false)
+                            }
+                        )
+                    }
+                }
+
+                // Call UI - rendered AFTER so it appears on top
                 callViewModel?.let { viewModel ->
-                    val currentCallState by viewModel.callState.collectAsState()
                     val remoteVideoTrack by viewModel.remoteVideoTrack.collectAsState()
                     val localVideoTrack by viewModel.localVideoTrack.collectAsState()
                     val isMuted by viewModel.isMuted.collectAsState()
@@ -406,7 +426,6 @@ class MainActivity : ComponentActivity() {
                         }
                         is CallState.Calling,
                         is CallState.Connecting,
-                        is CallState.Connected,
                         is CallState.Reconnecting -> {
                             CallScreen(
                                 callState = state,
@@ -424,6 +443,27 @@ class MainActivity : ComponentActivity() {
                                 onInitLocalRenderer = { renderer -> viewModel.initLocalRenderer(renderer) },
                                 onScreenVisible = { viewModel.startCameraIfPending() }
                             )
+                        }
+                        is CallState.Connected -> {
+                            if (!isCallMinimized) {
+                                CallScreen(
+                                    callState = state,
+                                    remoteVideoTrack = remoteVideoTrack,
+                                    localVideoTrack = localVideoTrack,
+                                    isMuted = isMuted,
+                                    isCameraEnabled = isCameraEnabled,
+                                    isRemoteCameraEnabled = isRemoteCameraEnabled,
+                                    audioRoute = audioRoute,
+                                    onToggleMute = { viewModel.toggleMute() },
+                                    onToggleCamera = { viewModel.toggleCamera() },
+                                    onToggleSpeaker = { viewModel.toggleSpeaker() },
+                                    onEndCall = { viewModel.endCall() },
+                                    onInitRemoteRenderer = { renderer -> viewModel.initRemoteRenderer(renderer) },
+                                    onInitLocalRenderer = { renderer -> viewModel.initLocalRenderer(renderer) },
+                                    onScreenVisible = { viewModel.startCameraIfPending() },
+                                    onMinimize = { viewModel.minimizeCall() }
+                                )
+                            }
                         }
                         CallState.Idle -> {
                             // No call UI

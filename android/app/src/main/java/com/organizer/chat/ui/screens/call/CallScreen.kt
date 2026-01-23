@@ -1,6 +1,7 @@
 package com.organizer.chat.ui.screens.call
 
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -53,8 +54,14 @@ fun CallScreen(
     onEndCall: () -> Unit,
     onInitRemoteRenderer: (SurfaceViewRenderer) -> Unit,
     onInitLocalRenderer: (SurfaceViewRenderer) -> Unit,
-    onScreenVisible: () -> Unit = {}
+    onScreenVisible: () -> Unit = {},
+    onMinimize: (() -> Unit)? = null
 ) {
+    // Allow back to minimize the call when connected
+    BackHandler(enabled = callState is CallState.Connected && onMinimize != null) {
+        onMinimize?.invoke()
+    }
+
     // Notify that screen is now visible (for deferred camera start)
     LaunchedEffect(Unit) {
         Log.d(TAG, "CallScreen visible, calling onScreenVisible")
