@@ -37,7 +37,6 @@ import { IncomingCallModal } from "./components/Call/IncomingCallModal";
 // import { ContactModal } from "./components/Contact/ContactModal";
 import { AdminPanel } from "./components/Admin/AdminPanel";
 import { NotesList, NoteEditor, LabelManager } from "./components/Notes";
-import { ConnectionBanner } from "./components/ui/ConnectionBanner";
 import { PetDebugScreen } from "./components/PetDebug";
 import { LogPanel } from "./components/LogPanel";
 import { ErrorIndicator } from "./components/ErrorIndicator";
@@ -576,7 +575,6 @@ function App() {
   return (
     <div className={`app-root ${showLogPanel ? 'with-log-panel' : ''}`}>
     <main className="chat-container">
-      <ConnectionBanner />
       <ErrorIndicator />
 
       {isCompressing && (

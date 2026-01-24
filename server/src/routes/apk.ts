@@ -177,8 +177,10 @@ router.get('/download/:filename', async (req: Request, res: Response): Promise<v
     );
 
     // Set headers for APK download
+    const stat = fs.statSync(filePath);
     res.setHeader('Content-Type', 'application/vnd.android.package-archive');
     res.setHeader('Content-Disposition', `attachment; filename="${sanitizedFilename}"`);
+    res.setHeader('Content-Length', stat.size);
 
     // Stream file
     const stream = fs.createReadStream(filePath);
