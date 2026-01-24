@@ -177,36 +177,40 @@ Show the user the lines to be added and get confirmation before writing.
 
 ### Step 3: Generate Release Notes
 
-Based on your analysis of the actual code changes (not just file names), write release notes in French that describe:
-- New features added (user-visible functionality)
-- Bugs fixed
-- Improvements made (UX improvements, performance, etc.)
+Based on your analysis of the actual code changes (not just file names), write release notes in French.
 
-**Categorize changes by platform** based on modified file paths:
-- `android/` → **Android**
-- `src/`, `src-tauri/` → **Desktop**
-- `server/` → **Serveur**
-- Changes affecting multiple platforms or shared logic → **Général**
+**CRITICAL: Write from the USER's perspective, not the developer's.**
 
-Format the release notes with sections using emojis (only include sections that have changes):
+- Describe what changes **for the user** (what they see, what works better, what's new)
+- NEVER describe technical implementation details (endpoints, sockets, ObjectIds, refs, handlers...)
+- If multiple technical changes (server + client) produce ONE user-visible improvement, write ONE bullet point describing the result
+- Use simple, non-technical language that any user can understand
+
+**Examples:**
+
+| ❌ Technical (wrong) | ✅ User-friendly (correct) |
+|---|---|
+| Le endpoint mark-room-as-read broadcast maintenant l'événement message:read | Les checkmarks de lecture se mettent à jour en temps réel |
+| Fix type mismatch ObjectId dans readBy | Fix des badges de messages non-lus qui restaient affichés |
+| Fix race condition au changement de room | Fix d'un bug rare quand on changeait rapidement de conversation |
+| Retry automatique du markAsRead en cas d'erreur réseau | Les messages se marquent comme lus même après une coupure réseau |
+
+**Categorize by platform** (only include sections that have changes):
 
 ```
 🌐 Général
-• Feature affecting all platforms
+• Improvement visible on all platforms
 
 🤖 Android
-• Android-specific feature
+• Android-specific improvement
 
 🖥️ Desktop
-• Desktop-specific feature
-
-⚙️ Serveur
-• Backend/API changes
+• Desktop-specific improvement
 ```
 
 Note: Use emojis instead of markdown bold (**) because the chat clients render plain text only.
 
-Be specific about what changed. Include all significant changes - the announcement message will use the same content as the release notes.
+Do NOT include a "⚙️ Serveur" section — server changes should be described through their user-visible impact in the relevant platform section (or 🌐 Général if they affect all platforms).
 
 ### Step 4: Show Summary and Get Confirmation
 
