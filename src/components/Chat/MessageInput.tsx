@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback } from "react";
 import { Image, Paperclip, FileText, Mic, X } from "lucide-react";
 import { formatDuration } from "../../utils/audio";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface PendingFile {
   file: File;
@@ -51,6 +52,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onSelectImageFile,
   onSelectFile,
 }) => {
+  const { user } = useAuth();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea based on content
@@ -154,7 +156,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               value={inputMessage}
               onChange={onInputChange}
               onKeyDown={handleKeyDown}
-              placeholder={pendingImage || pendingFile ? "Ajouter une légende..." : "Tapez un message ou collez une image..."}
+              placeholder={pendingImage || pendingFile ? "Ajouter une légende..." : `${user?.displayName || user?.username || ''}: Tapez un message...`}
               autoFocus
               autoCapitalize="off"
               autoCorrect="off"

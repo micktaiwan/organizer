@@ -1,0 +1,74 @@
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.25rem 0.75rem;
+  background: #f0f0f0;
+  border-top: 1px solid #e0e0e0;
+  font-size: 0.7rem;
+  color: #888;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.status-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.status-bar-item.version {
+  font-weight: 500;
+  color: #999;
+}
+
+.status-bar-item.connection.connected {
+  color: #4CAF50;
+}
+
+.status-bar-item.connection.disconnected,
+.status-bar-item.connection.connecting {
+  color: #FF9800;
+}
+
+.status-bar-item.connection.error {
+  color: #f44336;
+}
+
+.status-bar-item.ping {
+  color: #888;
+}
+
+.status-bar-item.users {
+  color: #888;
+}
+
+@media (prefers-color-scheme: dark) {
+  .status-bar {
+    background: #1e1e1e;
+    border-color: #333;
+    color: #666;
+  }
+
+  .status-bar-item.version {
+    color: #777;
+  }
+
+  .status-bar-item.connection.connected {
+    color: #66BB6A;
+  }
+
+  .status-bar-item.connection.disconnected,
+  .status-bar-item.connection.connecting {
+    color: #FFA726;
+  }
+
+  .status-bar-item.connection.error {
+    color: #EF5350;
+  }
+
+  .status-bar-item.ping,
+  .status-bar-item.users {
+    color: #666;
+  }
+}

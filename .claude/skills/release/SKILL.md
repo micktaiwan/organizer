@@ -67,17 +67,7 @@ Plateformes impactées :
 
 **If NO Android changes detected:**
 
-Ask the user with `AskUserQuestion`:
-- Question: "Pas de modifications Android détectées. Une release crée un APK et incrémente la version. Pourquoi veux-tu release ?"
-- Options:
-  1. "Continuer quand même" → Proceed with full release (APK + version bump)
-  2. "Commit sans release" → Just commit changes, no version bump, no APK, no announcement
-  3. "Annuler" → Stop and let user decide
-
-If user chooses "Commit sans release", skip Steps 5-9 (version bump, APK, upload, announcement) and only do:
-- Code review (Step 2)
-- Commit with descriptive message (not "release: vX.X.X")
-- Push to remote
+The release will still bump the version and tag, but skip APK build/upload (Steps 7-8).
 
 ### Step 2: Code Review
 
@@ -147,6 +137,44 @@ Compare the modified code against Context7's documentation:
 - For each issue, cite the source (Context7 documentation)
 - Ask user before making any fixes
 
+### Step 2.5: Regression Analysis
+
+Read `docs/specs.md` in full. This file contains the functional specifications of the app (expected behaviors, features, UX rules).
+
+For each spec listed in the file, check whether any of the uncommitted changes could **break or contradict** that spec. A regression is:
+- Removing or altering behavior that a spec explicitly requires
+- Changing a component/function in a way that violates a documented rule
+- Deleting code that implements a documented feature without replacing it
+
+**How to check:**
+1. Read `docs/specs.md` entirely
+2. For each spec entry, cross-reference with the diff from Step 1
+3. Flag any change that could violate an existing spec
+
+**If a potential regression is found:**
+- List each regression with:
+  - The spec it violates (quote the relevant line from specs.md)
+  - The file/change that causes it
+  - Why it's a regression
+- **STOP the release** and ask the user how to proceed:
+  - "Fix the regression" → Make corrections
+  - "Update the spec" → The spec is outdated, update `docs/specs.md` to match the new behavior
+  - "Ignore" → Proceed anyway (user takes responsibility)
+
+**If no regressions found:** proceed to Step 3.
+
+### Step 2.7: Update Specs
+
+If the changes introduce **new user-visible features or behaviors**, add them to `docs/specs.md`:
+
+1. Identify new features from the diff (UI changes, new interactions, new rules)
+2. For each new feature, add a one-line spec in the appropriate section
+3. Follow the existing format: `- [Platform prefix if applicable]: <concise behavior description>`
+4. Do NOT add specs for internal/technical changes (refactoring, dependencies, build config)
+5. Do NOT duplicate specs already present in the file
+
+Show the user the lines to be added and get confirmation before writing.
+
 ### Step 3: Generate Release Notes
 
 Based on your analysis of the actual code changes (not just file names), write release notes in French that describe:
@@ -192,15 +220,19 @@ Ask for confirmation before proceeding.
 
 ### Step 5: Update Version
 
-> **Skip if user chose "Commit sans release" in Step 1.5**
+Only update version files for **impacted platforms** (detected in Step 1.5). Desktop and Android versions can differ.
 
-Edit `android/app/build.gradle.kts` and increment:
-- `versionCode` by 1
-- `versionName` patch version (e.g., 1.2.0 -> 1.2.1)
+1. **Android** (only if Android changes detected) — `android/app/build.gradle.kts`:
+   - `versionCode` +1
+   - `versionName` to new version
+
+2. **Desktop** (only if Desktop changes detected) — Update these 3 files with the new version string:
+   - `src-tauri/tauri.conf.json` → `"version": "<version>"`
+   - `src-tauri/Cargo.toml` → `version = "<version>"`
+   - `package.json` → `"version": "<version>"`
 
 ### Step 6: Commit and Tag
 
-**For full release:**
 ```bash
 git add -A
 git commit -m "release: v<version>
@@ -212,21 +244,9 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
 git tag "v<version>"
 ```
 
-**For "Commit sans release" (no Android changes):**
-```bash
-git add -A
-git commit -m "<type>(<scope>): <description>
-
-<release-notes>
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
-# NO tag
-```
-Use conventional commit format: `feat`, `fix`, `refactor`, `docs`, `chore`, etc.
-
 ### Step 7: Build APK
 
-> **Skip if user chose "Commit sans release" in Step 1.5**
+> **Skip if no Android changes detected in Step 1.5**
 
 ```bash
 cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
@@ -234,7 +254,7 @@ cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Content
 
 ### Step 8: Upload APK
 
-> **Skip if user chose "Commit sans release" in Step 1.5**
+> **Skip if no Android changes detected in Step 1.5**
 
 Use the upload script:
 ```bash
@@ -242,8 +262,6 @@ cd server && ./upload-apk.sh ../android/app/build/outputs/apk/debug/app-debug.ap
 ```
 
 ### Step 9: Send Announcement to Lobby
-
-> **Skip if user chose "Commit sans release" in Step 1.5**
 
 Use the dedicated script that handles JSON encoding properly:
 
