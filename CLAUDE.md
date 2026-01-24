@@ -4,6 +4,11 @@ Cross-platform chat app: Tauri 2.0 (desktop), Android Kotlin, Node.js/Express/Mo
 
 ## Claude Code Rules
 
+### Git commits and push - CRITICAL
+**NEVER `git commit` or `git push` without explicit user confirmation.** The `/release` skill handles commits, tags, and push as part of its workflow. If you commit/push manually before `/release`, the skill can't analyze uncommitted changes.
+
+Only commit when the user explicitly says "commit" or approves a commit message. Never commit as a side effect of another action (like deploying).
+
 ### Git branches - CRITICAL
 **NEVER switch branches (`git checkout`, `git switch`) without explicit user confirmation.** Multiple Claude sessions may run in parallel on the same repo. Changing branch affects ALL sessions.
 
