@@ -126,7 +126,9 @@ fun MessageBubble(
             createdAt = firstMsg.createdAt,
             reactions = firstMsg.reactions,
             currentUserId = currentUserId,
-            onReact = onReact
+            onReact = onReact,
+            readBy = lastMsg.readBy,
+            humanMemberIds = humanMemberIds
         )
         return
     }
@@ -423,7 +425,9 @@ private fun SystemMessageContent(
     createdAt: String,
     reactions: List<Reaction> = emptyList(),
     currentUserId: String? = null,
-    onReact: ((String) -> Unit)? = null
+    onReact: ((String) -> Unit)? = null,
+    readBy: List<String> = emptyList(),
+    humanMemberIds: List<String> = emptyList()
 ) {
     var showReactionPicker by remember { mutableStateOf(false) }
 
@@ -471,11 +475,32 @@ private fun SystemMessageContent(
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = formatTime(createdAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.5f)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = formatTime(createdAt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+                    // Read indicator
+                    val isAllRead = if (currentUserId != null && humanMemberIds.isNotEmpty()) {
+                        val otherHumanMembers = humanMemberIds.filter { it != currentUserId }
+                        otherHumanMembers.isNotEmpty() && otherHumanMembers.all { readBy.contains(it) }
+                    } else false
+
+                    if (isAllRead) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Read",
+                            modifier = Modifier.size(12.dp),
+                            tint = Color(0xFF4CAF50)
+                        )
+                    }
+                }
             }
         }
     }

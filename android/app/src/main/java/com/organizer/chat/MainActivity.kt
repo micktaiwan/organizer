@@ -314,7 +314,7 @@ class MainActivity : ComponentActivity() {
                             onCancel = updateManager::cancelDownload,
                             onRetry = updateManager::retryDownload,
                             onInstall = updateManager::installApk,
-                            onDismiss = { /* Keep dialog visible */ }
+                            onDismiss = { updateManager.dismissDialog() }
                         )
                     }
                 }

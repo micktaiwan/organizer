@@ -352,6 +352,14 @@ class UpdateManager(private val context: Context) {
     }
 
     /**
+     * Dismiss the update dialog without canceling/deleting the downloaded file.
+     * The file remains on disk for later installation.
+     */
+    fun dismissDialog() {
+        _downloadState.value = UpdateDownloadState()
+    }
+
+    /**
      * Retry failed download
      */
     fun retryDownload() {

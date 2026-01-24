@@ -222,7 +222,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
   // Calculate if ALL other human members have read the last message
   const isAllRead = (() => {
-    if (firstMsg.sender !== 'me') return false;
+    const isSystem = firstMsg.isSystemMessage || firstMsg.type === 'system';
+    if (!isSystem && firstMsg.sender !== 'me') return false;
     if (!currentUserId || humanMemberIds.length === 0) return false;
 
     const readBy = lastMsg.readBy || [];
@@ -254,21 +255,44 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           {isCallMessage && <span className="system-message-text">{msg.text || msg.content}</span>}
         </div>
         {!isCallMessage && <span className="system-message-text">{msg.text || msg.content}</span>}
-        {aggregatedReactions.length > 0 && (
-          <div className="reaction-bar system-message-reactions">
-            {aggregatedReactions.map((r) => (
+        <div className="reaction-bar system-message-reactions">
+          {aggregatedReactions.map((r) => (
+            <button
+              key={r.emoji}
+              className={`reaction-chip ${r.userIds.includes(currentUserId || '') ? 'active' : ''}`}
+              onClick={() => handleReact(r.emoji)}
+            >
+              {r.emoji} {r.count}
+            </button>
+          ))}
+          {lastMsg.serverMessageId && (
+            <div className="reaction-add-container">
               <button
-                key={r.emoji}
-                className={`reaction-chip ${r.userIds.includes(currentUserId || '') ? 'active' : ''}`}
-                onClick={() => handleReact(r.emoji)}
+                className="reaction-add"
+                onClick={() => setShowReactionPicker(!showReactionPicker)}
+                title="Ajouter une réaction"
               >
-                {r.emoji} {r.count}
+                <SmilePlus size={14} />
               </button>
-            ))}
-          </div>
-        )}
+              {showReactionPicker && (
+                <div className="reaction-picker">
+                  {ALLOWED_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      className="reaction-picker-emoji"
+                      onClick={() => handleReact(emoji)}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         <span className="system-message-time">
           {formatMessageTimestamp(msg.timestamp)}
+          {isAllRead && <CheckCircle size={12} className="read-icon" />}
         </span>
       </div>
     );
