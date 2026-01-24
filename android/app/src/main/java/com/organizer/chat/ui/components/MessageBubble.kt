@@ -189,7 +189,7 @@ fun MessageBubble(
                     modifier = Modifier
                         .size(8.dp)
                         .background(
-                            color = getStatusColor(firstMsg.senderId.status),
+                            color = if (firstMsg.senderId.isOnline) getStatusColor(firstMsg.senderId.status) else Color(0xFFFF3B30),
                             shape = CircleShape
                         )
                 )

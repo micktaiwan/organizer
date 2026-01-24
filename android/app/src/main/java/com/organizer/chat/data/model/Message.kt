@@ -34,7 +34,8 @@ data class MessageSender(
     val username: String,
     val displayName: String,
     val status: String = "available",
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val isOnline: Boolean = false
 )
 
 data class MessagesResponse(

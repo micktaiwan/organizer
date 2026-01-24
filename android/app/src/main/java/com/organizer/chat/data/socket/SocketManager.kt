@@ -33,7 +33,7 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _userStatusChanged = MutableSharedFlow<UserStatusEvent>(extraBufferCapacity = 5)
     val userStatusChanged: SharedFlow<UserStatusEvent> = _userStatusChanged.asSharedFlow()
 
-    private val _userOffline = MutableSharedFlow<UserOfflineEvent>()
+    private val _userOffline = MutableSharedFlow<UserOfflineEvent>(extraBufferCapacity = 5)
     val userOffline: SharedFlow<UserOfflineEvent> = _userOffline.asSharedFlow()
 
     private val _typingStart = MutableSharedFlow<TypingEvent>(extraBufferCapacity = 5)

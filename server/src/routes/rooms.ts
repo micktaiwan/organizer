@@ -369,7 +369,7 @@ router.get('/:roomId/messages', async (req: AuthRequest, res: Response): Promise
     const messages = await Message.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate('senderId', 'username displayName status statusMessage');
+      .populate('senderId', 'username displayName isOnline status statusMessage');
 
     res.json({ messages: messages.reverse() });
   } catch (error) {
@@ -552,7 +552,7 @@ router.get('/:roomId/messages/around', async (req: AuthRequest, res: Response): 
     })
       .sort({ createdAt: -1 })
       .limit(halfLimit)
-      .populate('senderId', 'username displayName status statusMessage');
+      .populate('senderId', 'username displayName isOnline status statusMessage');
 
     // Get messages at or after the timestamp
     const messagesAfter = await Message.find({
@@ -561,7 +561,7 @@ router.get('/:roomId/messages/around', async (req: AuthRequest, res: Response): 
     })
       .sort({ createdAt: 1 })
       .limit(halfLimit)
-      .populate('senderId', 'username displayName status statusMessage');
+      .populate('senderId', 'username displayName isOnline status statusMessage');
 
     // Combine and sort by createdAt
     const messages = [...messagesBefore.reverse(), ...messagesAfter];

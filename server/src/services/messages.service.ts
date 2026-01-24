@@ -44,7 +44,7 @@ export async function listMessages(options: ListMessagesOptions) {
   return Message.find(query)
     .sort({ createdAt: -1 })
     .limit(limit)
-    .populate('senderId', 'username displayName');
+    .populate('senderId', 'username displayName isOnline status statusMessage');
 }
 
 /**
@@ -64,7 +64,7 @@ export async function createMessage(options: SendMessageOptions) {
   });
 
   await message.save();
-  await message.populate('senderId', 'username displayName status statusMessage');
+  await message.populate('senderId', 'username displayName isOnline status statusMessage');
 
   return message;
 }

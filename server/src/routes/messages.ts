@@ -67,7 +67,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
     });
 
     await message.save();
-    await message.populate('senderId', 'username displayName status statusMessage');
+    await message.populate('senderId', 'username displayName isOnline status statusMessage');
 
     // Update room's lastMessageAt for sorting
     await Room.findByIdAndUpdate(data.roomId, { lastMessageAt: new Date() });
@@ -98,7 +98,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
 router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const message = await Message.findById(req.params.id)
-      .populate('senderId', 'username displayName status statusMessage')
+      .populate('senderId', 'username displayName isOnline status statusMessage')
       .populate('reactions.userId', 'username displayName');
 
     if (!message) {
@@ -211,7 +211,7 @@ router.post('/:id/react', async (req: AuthRequest, res: Response): Promise<void>
     }
 
     await message.save();
-    await message.populate('senderId', 'username displayName status statusMessage');
+    await message.populate('senderId', 'username displayName isOnline status statusMessage');
     await message.populate('reactions.userId', 'username displayName');
 
     res.json({
