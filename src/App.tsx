@@ -41,6 +41,7 @@ import { ConnectionBanner } from "./components/ui/ConnectionBanner";
 import { PetDebugScreen } from "./components/PetDebug";
 import { LogPanel } from "./components/LogPanel";
 import { ErrorIndicator } from "./components/ErrorIndicator";
+import { StatusBar } from "./components/StatusBar";
 
 import "./App.css";
 
@@ -743,6 +744,8 @@ function App() {
           />
         </div>
       )}
+
+      <StatusBar />
 
       {callState === 'incoming' && incomingCallFrom && (
         <IncomingCallModal

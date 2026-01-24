@@ -1,14 +1,22 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import pkg from "./package.json";
+import { execSync } from "child_process";
 
 const host = process.env.TAURI_DEV_HOST;
+
+function getGitVersion(): string {
+  try {
+    return execSync("git describe --tags --abbrev=0", { encoding: "utf-8" }).trim().replace(/^v/, "");
+  } catch {
+    return "dev";
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(getGitVersion()),
     __BUILD_TIMESTAMP__: JSON.stringify(new Date().toLocaleString('fr-FR', {
       day: '2-digit',
       month: '2-digit',

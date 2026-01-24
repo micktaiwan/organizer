@@ -37,6 +37,32 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[derive(serde::Serialize)]
+struct DiskSpace {
+    free_gb: f64,
+    total_gb: f64,
+}
+
+#[tauri::command]
+fn get_disk_space() -> Result<DiskSpace, String> {
+    let output = std::process::Command::new("df")
+        .args(["-k", "/"])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout.lines().nth(1).ok_or("No df output")?;
+    let parts: Vec<&str> = line.split_whitespace().collect();
+
+    let total_kb: f64 = parts.get(1).ok_or("No total")?.parse().map_err(|e: std::num::ParseFloatError| e.to_string())?;
+    let available_kb: f64 = parts.get(3).ok_or("No available")?.parse().map_err(|e: std::num::ParseFloatError| e.to_string())?;
+
+    Ok(DiskSpace {
+        free_gb: available_kb / 1_048_576.0,
+        total_gb: total_kb / 1_048_576.0,
+    })
+}
+
 #[tauri::command]
 fn set_tray_badge(app: AppHandle, has_badge: bool) -> Result<(), String> {
     let icon_state = app
@@ -325,7 +351,7 @@ pub fn run() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![greet, set_tray_badge])
+        .invoke_handler(tauri::generate_handler![greet, set_tray_badge, get_disk_space])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
