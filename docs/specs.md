@@ -20,10 +20,16 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 - Dans un DM, le checkmark passe au vert dès que l'autre personne a lu le message
 - Dans un groupe, le checkmark passe au vert quand TOUS les membres humains ont lu
 - Si l'événement socket est manqué, l'indicateur doit se corriger au prochain chargement de la room (API = source de vérité)
+- L'indicateur de lecture (checkmark vert) s'affiche aussi sur les messages système (annonces, appels)
+- Desktop: les messages système affichent le bouton d'ajout de réaction (comme les messages normaux)
 
 ## Interface
 
 - Desktop: barre de statut en bas affichant version, état de connexion, latence, utilisateurs en ligne, espace disque
+
+## Mises à jour
+
+- Android: la popup de mise à jour peut être fermée sans annuler le téléchargement
 
 ## Partage
 
