@@ -114,6 +114,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Track message IDs already marked as read to prevent duplicate requests
   const markedAsReadRef = useRef<Set<string>>(new Set());
 
+  // Track which room the current messages belong to (prevents race conditions on room switch)
+  const messagesRoomIdRef = useRef<string | null>(null);
+
   // Track pending message sends to prevent duplicates from socket events
   const pendingSendsRef = useRef<Set<string>>(new Set());
 
@@ -178,6 +181,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
         const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
         const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
         setMessages(convertedMessages);
+        messagesRoomIdRef.current = currentRoomId;
       } catch (error) {
         console.error('Failed to load room:', error);
       } finally {
@@ -361,14 +365,21 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     return () => unsubReacted();
   }, [currentRoomId]);
 
-  // Listen for message read status updates in current room (from OTHER users only)
+  // Listen for message read status updates (from OTHER users only)
   useEffect(() => {
-    if (!currentRoomId || !userId) return;
+    if (!userId) return;
 
     const unsubMessageRead = socketService.on('message:read', (data: any) => {
       // Skip self-broadcasts (local state already updated in markAsRead)
-      if (data.roomId === currentRoomId && data.from !== userId) {
-        setMessages(prev => prev.map(m => {
+      if (data.from === userId) return;
+
+      setMessages(prev => {
+        const hasMatch = prev.some(m =>
+          data.messageIds.includes(m.serverMessageId || m.id)
+        );
+        if (!hasMatch) return prev;
+
+        return prev.map(m => {
           if (data.messageIds.includes(m.serverMessageId || m.id) &&
               !m.readBy?.includes(data.from)) {
             return {
@@ -377,12 +388,12 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
             };
           }
           return m;
-        }));
-      }
+        });
+      });
     });
 
     return () => unsubMessageRead();
-  }, [currentRoomId, userId]);
+  }, [userId]);
 
   // Note: user:status-changed is now handled by UserStatusContext
 
@@ -434,6 +445,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
       const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
       setMessages(convertedMessages);
+      messagesRoomIdRef.current = currentRoomId;
       setMessageMode('latest');
       setTargetMessageId(null);
       setHasNewerMessages(false);
@@ -588,6 +600,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   const markAsRead = useCallback(async (messageIds: string[]) => {
     if (!currentRoomId || messageIds.length === 0) return;
 
+    // Track IDs immediately to prevent duplicate requests
+    messageIds.forEach(id => markedAsReadRef.current.add(id));
+
     try {
       // Server will broadcast socket event to other clients
       await api.markMessagesAsRead(messageIds, currentRoomId);
@@ -600,12 +615,17 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       ));
     } catch (error) {
       console.error('Failed to mark messages as read:', error);
+      // Remove from tracking so they can be retried
+      messageIds.forEach(id => markedAsReadRef.current.delete(id));
     }
   }, [currentRoomId, userId]);
 
   // Auto-mark messages as read when viewing a room
   useEffect(() => {
     if (!currentRoomId || !userId || messages.length === 0) return;
+
+    // Guard: only mark if messages belong to the current room (prevents race condition on switch)
+    if (messagesRoomIdRef.current !== currentRoomId) return;
 
     // Find unread messages from other users (excluding already-requested IDs)
     const unreadMessageIds = messages
@@ -618,8 +638,6 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       .map(m => m.serverMessageId as string);
 
     if (unreadMessageIds.length > 0) {
-      // Track these IDs immediately to prevent duplicate requests
-      unreadMessageIds.forEach(id => markedAsReadRef.current.add(id));
       markAsRead(unreadMessageIds);
     }
   }, [currentRoomId, userId, messages, markAsRead]);
@@ -703,7 +721,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Select a room
   const selectRoom = useCallback((roomId: string) => {
     setCurrentRoomId(roomId);
-    // Clear tracked read IDs when switching rooms
+    // Clear messages and tracking when switching rooms to prevent race conditions
+    messagesRoomIdRef.current = null;
+    setMessages([]);
     markedAsReadRef.current.clear();
     // Clear badge when user selects a room (they're actively looking at the app)
     if (hasUnreadRef.current) {

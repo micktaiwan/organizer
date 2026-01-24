@@ -399,20 +399,31 @@ router.post('/:roomId/read', async (req: AuthRequest, res: Response): Promise<vo
     room.members[memberIndex].lastReadAt = new Date();
     await room.save();
 
-    // Mark all unread messages as read for this user
-    await Message.updateMany(
-      {
-        roomId: req.params.roomId,
-        senderId: { $ne: new Types.ObjectId(req.userId) },
-        readBy: { $ne: new Types.ObjectId(req.userId) },
-      },
-      {
-        $addToSet: { readBy: new Types.ObjectId(req.userId) },
-      }
-    );
+    // Find unread messages first so we can broadcast their IDs
+    const unreadMessages = await Message.find({
+      roomId: req.params.roomId,
+      senderId: { $ne: new Types.ObjectId(req.userId) },
+      readBy: { $ne: new Types.ObjectId(req.userId) },
+    }).select('_id');
+    const unreadMessageIds = unreadMessages.map(m => m._id.toString());
 
-    // Emit socket event to update unread count
+    // Mark all unread messages as read for this user
+    if (unreadMessages.length > 0) {
+      await Message.updateMany(
+        { _id: { $in: unreadMessages.map(m => m._id) } },
+        { $addToSet: { readBy: new Types.ObjectId(req.userId) } }
+      );
+    }
+
+    // Broadcast read status to room so other users update their UI
     const io = req.app.get('io');
+    if (io && unreadMessageIds.length > 0) {
+      io.to(`room:${req.params.roomId}`).emit('message:read', {
+        from: req.userId,
+        roomId: req.params.roomId,
+        messageIds: unreadMessageIds,
+      });
+    }
     if (io) {
       io.to(`user:${req.userId}`).emit('unread:updated', {
         roomId: req.params.roomId,

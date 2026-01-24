@@ -16,6 +16,11 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 - Android: les shortcodes emoji (:muscle :pray :fire :heart etc.) sont convertis en emojis à l'affichage (syntaxe sans colon fermant)
 - Desktop: le placeholder du champ de message affiche le nom de l'utilisateur connecté
 
+- L'indicateur de lecture (checkmark vert) doit s'afficher en temps réel quand le destinataire lit un message, sur Desktop et Android
+- Dans un DM, le checkmark passe au vert dès que l'autre personne a lu le message
+- Dans un groupe, le checkmark passe au vert quand TOUS les membres humains ont lu
+- Si l'événement socket est manqué, l'indicateur doit se corriger au prochain chargement de la room (API = source de vérité)
+
 ## Interface
 
 - Desktop: barre de statut en bas affichant version, état de connexion, latence, utilisateurs en ligne, espace disque
