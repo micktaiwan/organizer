@@ -263,14 +263,22 @@ cd server && ./upload-apk.sh ../android/app/build/outputs/apk/debug/app-debug.ap
 
 ### Step 9: Send Announcement to Lobby
 
-Use the dedicated script that handles JSON encoding properly:
+Use the dedicated script that handles JSON encoding properly.
 
+End the announcement with platform-specific update instructions (only include impacted platforms):
+
+```
+🤖 Android : mettez à jour depuis les Paramètres.
+🖥️ Desktop : git pull && npm run tauri dev
+```
+
+Example:
 ```bash
 cd server && ./send-announcement.sh "🚀 Nouvelle version <version> disponible !
 
 <same content as release notes>
 
-Mettez à jour depuis les Paramètres."
+🖥️ Desktop : git pull && npm run tauri dev"
 ```
 
 Ask user if they want to send the announcement before sending.

@@ -328,9 +328,10 @@ class MainActivity : ComponentActivity() {
                             Log.d(TAG, "Room selected for sharing: ${room.name}")
                             // Store the shared content to be picked up by ChatScreen
                             SharedContentManager.setPendingContent(content, room.id)
-                            // Navigate to the room
+                            // Navigate to the room - pop to rooms to ensure fresh ChatScreen
+                            // (launchSingleTop would skip recreation if already on this room)
                             navController.navigate(Routes.chat(room.id, room.name)) {
-                                launchSingleTop = true
+                                popUpTo(Routes.ROOMS) { inclusive = false }
                             }
                             sharedContent.value = null
                             availableRooms.value = emptyList()
