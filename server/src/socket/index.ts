@@ -371,17 +371,25 @@ export function setupSocket(httpServer: HttpServer): Server {
     socket.on('disconnect', async () => {
       console.log(`User disconnected: ${socket.username}`);
 
-      await User.findByIdAndUpdate(userId, {
-        isOnline: false,
-        lastSeen: new Date(),
-      });
+      // Check if user has other active sockets before marking offline
+      const allSockets = await io.fetchSockets();
+      const hasOtherSockets = allSockets.some(
+        s => (s as any).userId === userId && s.id !== socket.id
+      );
 
-      socket.broadcast.emit('user:offline', { userId });
+      if (!hasOtherSockets) {
+        await User.findByIdAndUpdate(userId, {
+          isOnline: false,
+          lastSeen: new Date(),
+        });
 
-      // Notifier les rooms que l'utilisateur est offline
-      userRooms.forEach(room => {
-        socket.to(`room:${room._id}`).emit('user:offline', { userId, roomId: room._id });
-      });
+        socket.broadcast.emit('user:offline', { userId });
+
+        // Notifier les rooms que l'utilisateur est offline
+        userRooms.forEach(room => {
+          socket.to(`room:${room._id}`).emit('user:offline', { userId, roomId: room._id });
+        });
+      }
 
       // Clean up typing timeouts for this user
       for (const [key, timeout] of typingTimeouts.entries()) {

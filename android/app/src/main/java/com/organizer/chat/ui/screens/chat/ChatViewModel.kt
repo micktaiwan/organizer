@@ -386,6 +386,29 @@ class ChatViewModel(
                     _uiState.value = _uiState.value.copy(messages = updatedMessages)
                 }
             }
+
+            // Observe user online/offline to update message sender dots
+            viewModelScope.launch {
+                service.socketManager.userOnline.collect { event ->
+                    val updatedMessages = _uiState.value.messages.map { msg ->
+                        if (msg.senderId.id == event.userId) {
+                            msg.copy(senderId = msg.senderId.copy(isOnline = true))
+                        } else msg
+                    }
+                    _uiState.value = _uiState.value.copy(messages = updatedMessages)
+                }
+            }
+
+            viewModelScope.launch {
+                service.socketManager.userOffline.collect { event ->
+                    val updatedMessages = _uiState.value.messages.map { msg ->
+                        if (msg.senderId.id == event.userId) {
+                            msg.copy(senderId = msg.senderId.copy(isOnline = false))
+                        } else msg
+                    }
+                    _uiState.value = _uiState.value.copy(messages = updatedMessages)
+                }
+            }
         }
     }
 
