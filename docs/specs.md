@@ -12,6 +12,8 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 
 - Desktop: les emoticons textuelles (:) :-) ;) :D :P :( :/ :O :* <3 xD ^^ B) etc.) sont converties en emojis à l'affichage (pas à l'envoi)
 - Desktop: les shortcodes emoji (:muscle :pray :fire :heart etc.) sont convertis en emojis à l'affichage (syntaxe sans colon fermant, base gemoji ~1800 emojis)
+- Android: les emoticons textuelles (:) :-) ;) :D :P :( :/ :O :* <3 xD ^^ B) etc.) sont converties en emojis à l'affichage (pas à l'envoi)
+- Android: les shortcodes emoji (:muscle :pray :fire :heart etc.) sont convertis en emojis à l'affichage (syntaxe sans colon fermant)
 - Desktop: le placeholder du champ de message affiche le nom de l'utilisateur connecté
 
 ## Interface

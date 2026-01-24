@@ -87,6 +87,7 @@ import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.CircularProgressIndicator
+import com.organizer.chat.util.EmojiUtils
 import com.organizer.chat.util.ImageDownloader
 import androidx.compose.ui.text.style.TextAlign
 import com.organizer.chat.ui.theme.AccentBlue
@@ -375,7 +376,7 @@ private fun TextMessageContent(
             .usePlugin(LinkifyPlugin.create())
             .build()
     }
-    val spanned = remember(content) { markwon.toMarkdown(content) }
+    val spanned = remember(content) { markwon.toMarkdown(EmojiUtils.convertEmojis(content)) }
 
     // Track long press state
     var longPressTriggered by remember { mutableStateOf(false) }
@@ -602,7 +603,7 @@ private fun DeletedFileContent(
         if (!caption.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = caption,
+                text = EmojiUtils.convertEmojis(caption),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MessageTextColor
             )
@@ -731,7 +732,7 @@ private fun ImageMessageContent(
         if (!caption.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = caption,
+                text = EmojiUtils.convertEmojis(caption),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MessageTextColor
             )
@@ -817,7 +818,7 @@ private fun FileMessageContent(
         if (!caption.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = caption,
+                text = EmojiUtils.convertEmojis(caption),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MessageTextColor
             )
