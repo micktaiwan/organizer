@@ -242,23 +242,29 @@ router.post('/read-bulk', async (req: AuthRequest, res: Response): Promise<void>
     await Message.updateMany(
       {
         _id: { $in: messageIds },
-        senderId: { $ne: req.userId },
+        senderId: { $ne: new Types.ObjectId(req.userId) },
       },
       {
-        $addToSet: { readBy: req.userId },
+        $addToSet: { readBy: new Types.ObjectId(req.userId) },
       }
     );
 
     // Broadcast read status to room via socket
-    if (roomId) {
-      const io = req.app.get('io');
-      if (io) {
-        io.to(`room:${roomId}`).emit('message:read', {
-          from: req.userId,
-          roomId,
-          messageIds,
-        });
-      }
+    const io = req.app.get('io');
+    if (roomId && io) {
+      io.to(`room:${roomId}`).emit('message:read', {
+        from: req.userId,
+        roomId,
+        messageIds,
+      });
+
+      // Send unread count update to the reader
+      const unreadCount = await Message.countDocuments({
+        roomId: new Types.ObjectId(roomId),
+        senderId: { $ne: new Types.ObjectId(req.userId) },
+        readBy: { $ne: new Types.ObjectId(req.userId) },
+      });
+      io.to(`user:${req.userId}`).emit('unread:updated', { roomId, unreadCount });
     }
 
     res.json({ success: true });
