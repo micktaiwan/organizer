@@ -2,7 +2,7 @@
 name = "organizer"
 version = "1.9.12"
 description = "Cross-platform chat application"
-authors = ["you"]
+authors = ["Mickael FM"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
