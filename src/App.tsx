@@ -437,7 +437,7 @@ function App() {
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) {
         const pendingRoomId = consumePendingNotificationRoomId();
-        if (pendingRoomId) {
+        if (pendingRoomId && pendingRoomId !== currentRoomId) {
           setActiveTab('chat');
           selectRoom(pendingRoomId);
         }
@@ -447,7 +447,7 @@ function App() {
     return () => {
       unlisten.then(fn => fn());
     };
-  }, [selectRoom]);
+  }, [selectRoom, currentRoomId]);
 
   // Keyboard shortcut: Cmd+K (Mac) / Ctrl+K (Win) to open search
   useEffect(() => {
