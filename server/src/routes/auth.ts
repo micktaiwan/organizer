@@ -66,6 +66,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         displayName: user.displayName,
         email: user.email,
         isAdmin: user.isAdmin,
+        isBot: user.isBot,
       },
     });
   } catch (error) {
@@ -118,6 +119,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
         displayName: user.displayName,
         email: user.email,
         isAdmin: user.isAdmin,
+        isBot: user.isBot,
       },
     });
   } catch (error) {
@@ -146,6 +148,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response): Promi
         statusMessage: req.user!.statusMessage,
         statusExpiresAt: req.user!.statusExpiresAt,
         isMuted: req.user!.isMuted,
+        isBot: req.user!.isBot,
       },
     });
   } catch (error) {

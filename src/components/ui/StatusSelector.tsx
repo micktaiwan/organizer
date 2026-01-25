@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserStatus } from '../../types';
 import { api } from '../../services/api';
 import './StatusSelector.css';
@@ -63,6 +63,16 @@ export const StatusSelector: React.FC<StatusSelectorProps> = ({
   const [statusMessage, setStatusMessage] = useState(currentStatusMessage || '');
   const [isMuted, setIsMuted] = useState(currentIsMuted);
   const [expiresIn, setExpiresIn] = useState(() => getInitialExpiresIn(currentStatusExpiresAt));
+
+  // Sync local state when props change (e.g., when users:init arrives from socket)
+  useEffect(() => {
+    if (!isOpen) {
+      setStatus(currentStatus);
+      setStatusMessage(currentStatusMessage || '');
+      setIsMuted(currentIsMuted);
+      setExpiresIn(getInitialExpiresIn(currentStatusExpiresAt));
+    }
+  }, [currentStatus, currentStatusMessage, currentIsMuted, currentStatusExpiresAt, isOpen]);
 
   const statuses: { value: UserStatus; label: string; emoji: string; color: string }[] = [
     { value: 'available', label: 'Disponible', emoji: '🟢', color: '#34c759' },

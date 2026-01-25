@@ -25,7 +25,10 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 
 ## Interface
 
-- Desktop: barre de statut en bas affichant version, état de connexion, latence, utilisateurs en ligne, espace disque
+- Desktop: barre de statut en bas affichant version, état de connexion, latence, utilisateurs en ligne, espace disque local et serveur
+- Desktop: tooltips sur tous les éléments de la barre de statut
+- Desktop: le compteur d'utilisateurs en ligne exclut les bots
+- Desktop: bordure rouge sur le champ de message quand connecté en tant que bot
 
 ## Mises à jour
 
@@ -50,4 +53,19 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 ## User Switcher
 
 - Desktop: dropdown dans RoomHeader pour switcher rapidement entre comptes (stocke tokens, pas les mots de passe)
+
+## Architecture: Sources de données utilisateur
+
+Il existe deux sources de données utilisateur qui doivent rester synchronisées :
+
+1. **API `/rooms`** (populate des membres) - données chargées au démarrage
+   - Fichier: `server/src/routes/rooms.ts`
+   - Champs: `username`, `displayName`, `isOnline`, `isBot`
+
+2. **Socket `users:init` + `user:online`** - données temps réel pour réactivité
+   - Fichier: `server/src/socket/index.ts`
+   - Client: `src/contexts/UserStatusContext.tsx`
+   - Champs: `username`, `displayName`, `status`, `statusMessage`, `statusExpiresAt`, `isMuted`, `isOnline`, `isBot`, `appVersion`
+
+**Règle**: tout champ utilisateur ajouté à l'une des sources doit être ajouté à l'autre si nécessaire. Les commentaires `[USER_DATA_SYNC]` marquent les endroits concernés.
 

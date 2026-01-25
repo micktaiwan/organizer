@@ -1,3 +1,8 @@
+/**
+ * [USER_DATA_SYNC] Member populates use user fields.
+ * These fields must stay synchronized with socket events (users:init, user:online).
+ * See docs/specs.md section "Architecture: Sources de données utilisateur".
+ */
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import fs from 'fs';
@@ -45,7 +50,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
         lastReadAt: null,
       });
       await room.save();
-      await room.populate('members.userId', 'username displayName isOnline');
+      await room.populate('members.userId', 'username displayName isOnline isBot');
       await room.populate('createdBy', 'username displayName');
       console.log(`User ${req.userId} auto-joined public room ${room.name}`);
 

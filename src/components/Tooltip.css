@@ -1,0 +1,133 @@
+.tooltip-container {
+  position: relative;
+  display: inline-flex;
+  cursor: default;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 1000;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: #fff;
+  background: #4a2c6a;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.tooltip.tooltip-ready {
+  animation: tooltip-fade-in 0.15s ease-out forwards;
+}
+
+.tooltip::after {
+  content: "";
+  position: absolute;
+  border: 5px solid transparent;
+}
+
+/* Top */
+.tooltip-top {
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(calc(-50% + var(--tooltip-offset, 0px)));
+}
+
+.tooltip-top::after {
+  top: 100%;
+  left: calc(50% - var(--tooltip-offset, 0px));
+  transform: translateX(-50%);
+  border-top-color: #4a2c6a;
+}
+
+/* Bottom */
+.tooltip-bottom {
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(calc(-50% + var(--tooltip-offset, 0px)));
+}
+
+.tooltip-bottom::after {
+  bottom: 100%;
+  left: calc(50% - var(--tooltip-offset, 0px));
+  transform: translateX(-50%);
+  border-bottom-color: #4a2c6a;
+}
+
+/* Left */
+.tooltip-left {
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tooltip-left::after {
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left-color: #4a2c6a;
+}
+
+/* Right */
+.tooltip-right {
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tooltip-right::after {
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-right-color: #4a2c6a;
+}
+
+@keyframes tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-50% + var(--tooltip-offset, 0px))) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(calc(-50% + var(--tooltip-offset, 0px))) translateY(0);
+  }
+}
+
+.tooltip-left.tooltip-ready,
+.tooltip-right.tooltip-ready {
+  animation-name: tooltip-fade-in-horizontal;
+}
+
+@keyframes tooltip-fade-in-horizontal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .tooltip {
+    background: #5a3c7a;
+  }
+
+  .tooltip-top::after {
+    border-top-color: #5a3c7a;
+  }
+
+  .tooltip-bottom::after {
+    border-bottom-color: #5a3c7a;
+  }
+
+  .tooltip-left::after {
+    border-left-color: #5a3c7a;
+  }
+
+  .tooltip-right::after {
+    border-right-color: #5a3c7a;
+  }
+}

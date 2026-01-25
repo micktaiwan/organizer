@@ -110,7 +110,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
-      <form className="message-input" onSubmit={onSendMessage}>
+      <form className={`message-input${user?.isBot ? ' bot-mode' : ''}`} onSubmit={onSendMessage}>
         {isRecording ? (
           <div className="recording-ui">
             <span className="recording-indicator">🔴</span>

@@ -217,6 +217,38 @@
   border-color: #007aff;
 }
 
+.message-input button[type="submit"] {
+  background: #6B9FFF;
+  color: white;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.message-input button[type="submit"]:hover:not(:disabled) {
+  background: #5a8de8;
+}
+
+.message-input button[type="submit"]:disabled {
+  background: transparent;
+  color: #888;
+  border: 1px solid #ddd;
+  cursor: default;
+}
+
+.message-input.bot-mode {
+  border-top: 2px solid #e53935;
+}
+
+.message-input.bot-mode textarea {
+  border-color: #e53935;
+}
+
+.message-input.bot-mode textarea:focus {
+  border-color: #c62828;
+}
+
 .message-image {
   max-width: 100%;
   max-height: 300px;
@@ -318,6 +350,24 @@
 
   .message-input textarea:focus {
     border-color: #0a84ff;
+  }
+
+  .message-input button[type="submit"]:disabled {
+    background: transparent;
+    color: #666;
+    border: 1px solid #444;
+  }
+
+  .message-input.bot-mode {
+    border-top-color: #f44336;
+  }
+
+  .message-input.bot-mode textarea {
+    border-color: #f44336;
+  }
+
+  .message-input.bot-mode textarea:focus {
+    border-color: #e53935;
   }
 
   /* Markdown dark mode styles */

@@ -1,3 +1,10 @@
+/**
+ * [USER_DATA_SYNC] Real-time source for user data.
+ *
+ * This source receives data via socket (users:init, user:online, user:offline).
+ * It must stay synchronized with /rooms API which populates members.
+ * See docs/specs.md section "Architecture: Sources de données utilisateur".
+ */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { socketService } from '../services/socket';
 import { UserStatus } from '../types';
@@ -17,6 +24,7 @@ interface UserStatusData {
   statusExpiresAt: string | null;
   isMuted: boolean;
   isOnline: boolean;
+  isBot?: boolean;
   appVersion?: AppVersion | null;
 }
 
@@ -107,6 +115,7 @@ export const UserStatusProvider: React.FC<UserStatusProviderProps> = ({ children
         status?: UserStatus;
         statusMessage?: string | null;
         isMuted?: boolean;
+        isBot?: boolean;
         appVersion?: AppVersion | null;
       };
       console.log('🟢 user:online received:', data.userId, data.appVersion ? `v${data.appVersion.versionName}` : '');
@@ -120,6 +129,7 @@ export const UserStatusProvider: React.FC<UserStatusProviderProps> = ({ children
           statusMessage: data.statusMessage ?? existing?.statusMessage ?? null,
           statusExpiresAt: existing?.statusExpiresAt ?? null,
           isMuted: data.isMuted ?? existing?.isMuted ?? false,
+          isBot: data.isBot ?? existing?.isBot,
           isOnline: true,
           appVersion: data.appVersion ?? existing?.appVersion,
         });

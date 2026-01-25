@@ -8,6 +8,8 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_store::StoreExt;
+#[cfg(not(target_os = "macos"))]
+use sysinfo::Disks;
 
 // Settings keys for persistent storage
 const SETTINGS_AUTOSTART: &str = "settings_autostart";
@@ -43,6 +45,8 @@ struct DiskSpace {
     total_gb: f64,
 }
 
+// macOS: use df to get accurate free space (sysinfo includes purgeable space)
+#[cfg(target_os = "macos")]
 #[tauri::command]
 fn get_disk_space() -> Result<DiskSpace, String> {
     let output = std::process::Command::new("df")
@@ -60,6 +64,30 @@ fn get_disk_space() -> Result<DiskSpace, String> {
     Ok(DiskSpace {
         free_gb: available_kb / 1_048_576.0,
         total_gb: total_kb / 1_048_576.0,
+    })
+}
+
+// Windows/Linux: use sysinfo
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn get_disk_space() -> Result<DiskSpace, String> {
+    let disks = Disks::new_with_refreshed_list();
+
+    let disk = disks
+        .iter()
+        .find(|d| {
+            let mount = d.mount_point().to_string_lossy();
+            mount == "/" || mount == "C:\\"
+        })
+        .or_else(|| disks.iter().next())
+        .ok_or("No disk found")?;
+
+    let total_bytes = disk.total_space() as f64;
+    let available_bytes = disk.available_space() as f64;
+
+    Ok(DiskSpace {
+        free_gb: available_bytes / 1_073_741_824.0,
+        total_gb: total_bytes / 1_073_741_824.0,
     })
 }
 
