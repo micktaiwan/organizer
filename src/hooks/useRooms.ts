@@ -123,6 +123,15 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   const [targetMessageId, setTargetMessageId] = useState<string | null>(null);
   const [hasNewerMessages, setHasNewerMessages] = useState(false);
 
+  // Unread messages state
+  const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null);
+  const [hasOlderUnread, setHasOlderUnread] = useState(false);
+  const [skippedUnreadCount, setSkippedUnreadCount] = useState(0);
+
+  // Pagination state
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
   // Typing indicator state
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
 
@@ -147,6 +156,11 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     setMessageMode('latest');
     setTargetMessageId(null);
     setHasNewerMessages(false);
+    setFirstUnreadId(null);
+    setHasOlderUnread(false);
+    setSkippedUnreadCount(0);
+    setHasMoreMessages(true);
+    setIsLoadingMore(false);
   }, [getApiBaseUrl()]);
 
   // Load rooms on mount and when user changes
@@ -189,17 +203,30 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
         setMessageMode('latest');
         setTargetMessageId(null);
         setHasNewerMessages(false);
+        setFirstUnreadId(null);
+        setHasOlderUnread(false);
+        setSkippedUnreadCount(0);
+        setHasMoreMessages(true);
+        setIsLoadingMore(false);
         const { room } = await api.getRoom(currentRoomId);
         setCurrentRoom(room);
 
         // Join Socket.io room
         socketService.joinRoom(currentRoomId);
 
-        // Load message history
-        const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
-        const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
+        // Load message history with unread info
+        const response = await api.getUnreadMessages(currentRoomId);
+        const convertedMessages = response.messages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
         setMessages(convertedMessages);
         messagesRoomIdRef.current = currentRoomId;
+
+        // Set unread state
+        setFirstUnreadId(response.firstUnreadId);
+        setHasOlderUnread(response.hasOlderUnread);
+        setSkippedUnreadCount(response.skippedUnread);
+
+        // Mark room as read (updates lastReadAt for future visits)
+        await api.markRoomAsRead(currentRoomId);
       } catch (error) {
         console.error('Failed to load room:', error);
       } finally {
@@ -232,6 +259,11 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       }
 
       if (data.roomId === currentRoomId && data.messageId) {
+        // Clear unread separator when new message arrives
+        setFirstUnreadId(null);
+        setHasOlderUnread(false);
+        setSkippedUnreadCount(0);
+
         // Retry logic for transient failures
         const maxRetries = 3;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -495,10 +527,41 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       setMessageMode('latest');
       setTargetMessageId(null);
       setHasNewerMessages(false);
+      setFirstUnreadId(null);
+      setHasOlderUnread(false);
+      setSkippedUnreadCount(0);
+      setHasMoreMessages(true);
     } catch (error) {
       console.error('Failed to load messages:', error);
     }
   }, [currentRoomId, userId]);
+
+  // Load older messages (pagination)
+  const loadOlderMessages = useCallback(async () => {
+    if (!currentRoomId || isLoadingMore || !hasMoreMessages) return;
+
+    const oldestMessage = messages[0];
+    if (!oldestMessage) return;
+
+    const beforeTimestamp = oldestMessage.timestamp.toISOString();
+
+    try {
+      setIsLoadingMore(true);
+      const { messages: serverMessages } = await api.getRoomMessages(currentRoomId, 20, beforeTimestamp);
+      const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
+
+      if (convertedMessages.length === 0) {
+        setHasMoreMessages(false);
+      } else {
+        setMessages(prev => [...convertedMessages, ...prev]);
+        setHasMoreMessages(convertedMessages.length === 20);
+      }
+    } catch (error) {
+      console.error('Failed to load older messages:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [currentRoomId, userId, messages, isLoadingMore, hasMoreMessages]);
 
   // Load messages around a specific timestamp (for search results)
   const loadMessagesAround = useCallback(async (timestamp: string, msgId?: string) => {
@@ -910,6 +973,16 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     messageMode,
     targetMessageId,
     hasNewerMessages,
+
+    // Unread messages state
+    firstUnreadId,
+    hasOlderUnread,
+    skippedUnreadCount,
+
+    // Pagination
+    hasMoreMessages,
+    isLoadingMore,
+    loadOlderMessages,
 
     // Typing indicators
     typingUsers,

@@ -65,6 +65,10 @@ data class ChatUiState(
     val isLoadingMore: Boolean = false,
     val shouldScrollToBottom: Boolean = true,
     val humanMemberIds: List<String> = emptyList(),
+    // Unread separator state
+    val firstUnreadId: String? = null,
+    val hasOlderUnread: Boolean = false,
+    val skippedUnreadCount: Int = 0,
     // Video recording state (screen recording)
     val videoRecordingState: VideoRecordingState = VideoRecordingState.IDLE,
     val recordedVideoFile: File? = null,
@@ -221,20 +225,26 @@ class ChatViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
 
-            val result = messageRepository.getMessages(roomId, limit = MESSAGE_PAGE_SIZE)
+            val result = messageRepository.getUnreadMessages(roomId)
 
             result.fold(
-                onSuccess = { messages ->
-                    Log.d(TAG, "Loaded ${messages.size} messages for room $roomId")
+                onSuccess = { response ->
+                    Log.d(TAG, "Loaded ${response.messages.size} messages for room $roomId (firstUnreadId=${response.firstUnreadId})")
                     _uiState.value = _uiState.value.copy(
-                        messages = messages,
+                        messages = response.messages,
                         isLoading = false,
-                        hasMoreMessages = messages.size == MESSAGE_PAGE_SIZE,
-                        shouldScrollToBottom = true
+                        hasMoreMessages = true, // Always assume more until loadMoreMessages proves otherwise
+                        // Scroll to first unread if there is one, otherwise scroll to bottom
+                        shouldScrollToBottom = response.firstUnreadId == null,
+                        firstUnreadId = response.firstUnreadId,
+                        hasOlderUnread = response.hasOlderUnread,
+                        skippedUnreadCount = response.skippedUnread
                     )
+                    // Mark room as read (updates lastReadAt for future visits)
+                    viewModelScope.launch { roomRepository.markRoomAsRead(roomId) }
                     // Mark unread messages as read only if app is in foreground
                     if (chatService?.isAppInForeground?.value == true) {
-                        markUnreadMessagesAsRead(messages)
+                        markUnreadMessagesAsRead(response.messages)
                     }
                 },
                 onFailure = { error ->
@@ -316,6 +326,12 @@ class ChatViewModel(
                 service.messages.collect { event ->
                     Log.d(TAG, "Received message event: roomId=${event.roomId}, current=$roomId")
                     if (event.roomId == roomId) {
+                        // Clear unread separator when new message arrives
+                        _uiState.value = _uiState.value.copy(
+                            firstUnreadId = null,
+                            hasOlderUnread = false,
+                            skippedUnreadCount = 0
+                        )
                         // Fetch full message from API (uniformized pattern with Desktop)
                         messageRepository.getMessage(event.messageId).fold(
                             onSuccess = { message ->

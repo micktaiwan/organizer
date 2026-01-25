@@ -360,6 +360,22 @@ class ApiService {
     }>(`/rooms/${roomId}/messages/around?timestamp=${encodeURIComponent(timestamp)}&limit=${limit}`);
   }
 
+  async getUnreadMessages(roomId: string): Promise<{
+    messages: Message[];
+    firstUnreadId: string | null;
+    hasOlderUnread: boolean;
+    totalUnread: number;
+    skippedUnread: number;
+  }> {
+    return this.request<{
+      messages: Message[];
+      firstUnreadId: string | null;
+      hasOlderUnread: boolean;
+      totalUnread: number;
+      skippedUnread: number;
+    }>(`/rooms/${roomId}/messages/unread`);
+  }
+
   async getMessage(messageId: string): Promise<{ message: Message }> {
     return this.request<{ message: Message }>(`/messages/${messageId}`);
   }
@@ -471,6 +487,12 @@ class ApiService {
     return this.request<{ success: boolean }>('/messages/read-bulk', {
       method: 'POST',
       body: JSON.stringify({ messageIds, roomId }),
+    });
+  }
+
+  async markRoomAsRead(roomId: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(`/rooms/${roomId}/read`, {
+      method: 'POST',
     });
   }
 

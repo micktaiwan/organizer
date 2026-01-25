@@ -7,15 +7,15 @@ plugins {
 
 android {
     namespace = "com.organizer.chat"
-    compileSdk = 34
-    buildToolsVersion = "34.0.0"
+    compileSdk = 35
+    buildToolsVersion = "35.0.0"
 
     defaultConfig {
         applicationId = "com.organizer.chat"
         minSdk = 34
         targetSdk = 34
-        versionCode = 61
-        versionName = "1.10.1"
+        versionCode = 62
+        versionName = "1.10.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -128,8 +128,8 @@ dependencies {
     implementation("io.getstream:stream-webrtc-android:1.3.8")
 
     // ExoPlayer (Media3) for video playback
-    implementation("androidx.media3:media3-exoplayer:1.2.1")
-    implementation("androidx.media3:media3-ui:1.2.1")
+    implementation("androidx.media3:media3-exoplayer:1.5.1")
+    implementation("androidx.media3:media3-ui:1.5.1")
 
     // CameraX for video recording
     val cameraxVersion = "1.3.1"

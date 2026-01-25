@@ -79,3 +79,8 @@ Il existe deux sources de données utilisateur qui doivent rester synchronisées
 - Android : onglet "Vidéos" dans la galerie pour filtrer les vidéos
 - Android : lecture plein écran avec ExoPlayer (contrôles natifs)
 
+## Messages non lus
+
+- Desktop + Android : séparateur visuel "Nouveaux messages" qui indique où commencent les messages non lus dans une conversation
+- Desktop + Android : au retour dans une room, l'app scrolle automatiquement vers le premier message non lu
+

@@ -55,6 +55,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import com.organizer.chat.ui.theme.CharcoalLight
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +65,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
@@ -225,12 +227,27 @@ fun ChatScreen(
         }
     }
 
-    // Auto-scroll to bottom when messages change (only if shouldScrollToBottom is true)
-    LaunchedEffect(uiState.messages, uiState.shouldScrollToBottom) {
-        if (uiState.messages.isNotEmpty() && uiState.shouldScrollToBottom) {
+    // Auto-scroll to first unread or bottom depending on context
+    LaunchedEffect(uiState.messages, uiState.shouldScrollToBottom, uiState.firstUnreadId) {
+        if (uiState.messages.isNotEmpty()) {
             // Small delay to let LazyColumn layout the new items
             delay(50)
-            listState.animateScrollToItem(uiState.messages.size - 1)
+
+            // If there's a first unread ID and we shouldn't scroll to bottom, find and scroll to it
+            if (uiState.firstUnreadId != null && !uiState.shouldScrollToBottom) {
+                // Find the index of the message with firstUnreadId
+                val groups = MessageGroupingUtils.groupConsecutiveMessages(uiState.messages, uiState.currentUserId)
+                val targetIndex = groups.indexOfFirst { group ->
+                    group.messages.any { it.id == uiState.firstUnreadId }
+                }
+                // Account for "load more" item at the top
+                val itemOffset = if (uiState.hasMoreMessages) 1 else 0
+                if (targetIndex >= 0) {
+                    listState.animateScrollToItem(targetIndex + itemOffset)
+                }
+            } else if (uiState.shouldScrollToBottom) {
+                listState.animateScrollToItem(uiState.messages.size - 1)
+            }
         }
     }
 
@@ -450,6 +467,14 @@ fun ChatScreen(
                         MessageGroupingUtils.groupConsecutiveMessages(uiState.messages, uiState.currentUserId)
                     }
 
+                    // Find the group index containing the first unread message
+                    val firstUnreadGroupIndex = remember(uiState.firstUnreadId, messageGroups) {
+                        if (uiState.firstUnreadId == null) -1
+                        else messageGroups.indexOfFirst { group ->
+                            group.messages.any { it.id == uiState.firstUnreadId }
+                        }
+                    }
+
                     LazyColumn(
                         state = listState,
                         modifier = Modifier
@@ -472,7 +497,10 @@ fun ChatScreen(
                                             strokeWidth = 2.dp
                                         )
                                     } else {
-                                        TextButton(onClick = { viewModel.loadMoreMessages() }) {
+                                        TextButton(
+                                            onClick = { viewModel.loadMoreMessages() },
+                                            colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+                                        ) {
                                             Text("Charger plus de messages")
                                         }
                                     }
@@ -480,10 +508,18 @@ fun ChatScreen(
                             }
                         }
 
-                        items(
+                        itemsIndexed(
                             items = messageGroups,
-                            key = { group -> group.messages.first().id }
-                        ) { group ->
+                            key = { _, group -> group.messages.first().id }
+                        ) { index, group ->
+                            // Show unread separator before the group containing first unread message
+                            if (index == firstUnreadGroupIndex && uiState.firstUnreadId != null) {
+                                UnreadSeparator(
+                                    skippedCount = uiState.skippedUnreadCount,
+                                    hasOlderUnread = uiState.hasOlderUnread
+                                )
+                            }
+
                             val lastMsg = group.messages.last()
                             MessageBubble(
                                 messages = group.messages,
@@ -505,6 +541,53 @@ fun ChatScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun UnreadSeparator(
+    skippedCount: Int,
+    hasOlderUnread: Boolean
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Show skipped message count if there are older unread
+        if (hasOlderUnread && skippedCount > 0) {
+            Text(
+                text = "$skippedCount messages plus anciens",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        // Separator line with "Nouveaux messages" text
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HorizontalDivider(
+                modifier = Modifier.weight(1f),
+                color = Color(0xFFFF3B30)
+            )
+            Text(
+                text = "NOUVEAUX MESSAGES",
+                modifier = Modifier.padding(horizontal = 12.dp),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                color = Color(0xFFFF3B30),
+                letterSpacing = 0.5.sp
+            )
+            HorizontalDivider(
+                modifier = Modifier.weight(1f),
+                color = Color(0xFFFF3B30)
+            )
         }
     }
 }

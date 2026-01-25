@@ -11,6 +11,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -670,13 +671,19 @@ private fun FullscreenVideoDialog(
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            // ExoPlayer PlayerView
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
+                        layoutParams = android.widget.FrameLayout.LayoutParams(
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                        )
                         player = exoPlayer
                         useController = true
                         setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        setEnableComposeSurfaceSyncWorkaround(true)
+                        // RESIZE_MODE_ZOOM fixes video not scaling in Compose AndroidView
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     }
                 },
                 modifier = Modifier.fillMaxSize()

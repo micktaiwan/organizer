@@ -15,6 +15,14 @@ interface MessageListProps {
   targetMessageId?: string | null;
   messageMode?: 'latest' | 'around';
   onReturnToLatest?: () => void;
+  // Unread separator props
+  firstUnreadId?: string | null;
+  hasOlderUnread?: boolean;
+  skippedUnreadCount?: number;
+  // Pagination props
+  hasMoreMessages?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -27,16 +35,23 @@ export const MessageList: React.FC<MessageListProps> = ({
   targetMessageId,
   messageMode = 'latest',
   onReturnToLatest,
+  firstUnreadId,
+  hasOlderUnread,
+  skippedUnreadCount,
+  hasMoreMessages,
+  isLoadingMore,
+  onLoadMore,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const firstUnreadRef = useRef<HTMLDivElement>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const { getStatus } = useUserStatus();
 
   // Group consecutive messages from same sender (< 1 min)
   const messageGroups = useMemo(() => groupConsecutiveMessages(messages), [messages]);
 
-  // Find which group contains the target message
+  // Find which group contains a message by ID
   const findGroupIndexForMessage = (msgId: string): number => {
     for (let i = 0; i < messageGroups.length; i++) {
       if (messageGroups[i].messages.some(m => m.serverMessageId === msgId || m.id === msgId)) {
@@ -45,6 +60,12 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
     return -1;
   };
+
+  // Find the group index containing the first unread message
+  const firstUnreadGroupIndex = useMemo(() => {
+    if (!firstUnreadId) return -1;
+    return findGroupIndexForMessage(firstUnreadId);
+  }, [firstUnreadId, messageGroups]);
 
   // Scroll to target message when it changes
   useEffect(() => {
@@ -65,12 +86,20 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
   }, [targetMessageId, messageMode, messageGroups]);
 
-  // Auto-scroll to bottom in latest mode
+  // Scroll to first unread message or bottom depending on context
   useEffect(() => {
-    if (messageMode === 'latest') {
+    if (messageMode === 'around') return; // Don't auto-scroll in around mode
+
+    // If there's a first unread message, scroll to it
+    if (firstUnreadId && firstUnreadRef.current) {
+      setTimeout(() => {
+        firstUnreadRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    } else {
+      // Otherwise scroll to bottom
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isRemoteTyping, messageMode]);
+  }, [messages, isRemoteTyping, messageMode, firstUnreadId]);
 
   // Check if a message group contains the highlighted message
   const isGroupHighlighted = (group: { messages: Message[] }): boolean => {
@@ -80,6 +109,19 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   return (
     <div className="messages" ref={containerRef}>
+      {/* Load More button at the top */}
+      {hasMoreMessages && onLoadMore && (
+        <div className="load-more-container">
+          {isLoadingMore ? (
+            <div className="load-more-spinner" />
+          ) : (
+            <button className="load-more-button" onClick={onLoadMore}>
+              Charger plus de messages
+            </button>
+          )}
+        </div>
+      )}
+
       {messageGroups.map((group, groupIndex) => {
         const firstMsg = group.messages[0];
         // Get sender status
@@ -92,23 +134,39 @@ export const MessageList: React.FC<MessageListProps> = ({
           ? `message-group-wrapper system ${isGroupHighlighted(group) ? 'message-group-highlight' : ''}`
           : `message-group-wrapper ${firstMsg.sender === 'me' ? 'me' : 'them'} ${isGroupHighlighted(group) ? 'message-group-highlight' : ''}`;
 
+        // Check if we need to show the unread separator before this group
+        const showUnreadSeparator = groupIndex === firstUnreadGroupIndex && firstUnreadId;
+
         return (
-          <div
-            key={`group-${groupIndex}-${firstMsg.id}`}
-            data-group-index={groupIndex}
-            className={wrapperClass}
-          >
-            <MessageItem
-              messages={group.messages}
-              onDelete={onDeleteMessage}
-              onReact={onReactMessage}
-              currentUserId={currentUserId}
-              senderStatus={senderStatusData?.status}
-              senderIsOnline={senderStatusData?.isOnline}
-              senderStatusMessage={senderStatusData?.statusMessage}
-              humanMemberIds={humanMemberIds}
-            />
-          </div>
+          <React.Fragment key={`group-${groupIndex}-${firstMsg.id}`}>
+            {showUnreadSeparator && (
+              <div className="unread-separator" ref={firstUnreadRef}>
+                {hasOlderUnread && skippedUnreadCount && skippedUnreadCount > 0 && (
+                  <div className="skipped-unread">
+                    {skippedUnreadCount} messages plus anciens
+                  </div>
+                )}
+                <div className="separator-line">
+                  <span>Nouveaux messages</span>
+                </div>
+              </div>
+            )}
+            <div
+              data-group-index={groupIndex}
+              className={wrapperClass}
+            >
+              <MessageItem
+                messages={group.messages}
+                onDelete={onDeleteMessage}
+                onReact={onReactMessage}
+                currentUserId={currentUserId}
+                senderStatus={senderStatusData?.status}
+                senderIsOnline={senderStatusData?.isOnline}
+                senderStatusMessage={senderStatusData?.statusMessage}
+                humanMemberIds={humanMemberIds}
+              />
+            </div>
+          </React.Fragment>
         );
       })}
       {isRemoteTyping && (

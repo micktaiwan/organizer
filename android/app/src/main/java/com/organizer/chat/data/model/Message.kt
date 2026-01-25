@@ -47,6 +47,14 @@ data class MessagesResponse(
     val messages: List<Message>
 )
 
+data class UnreadMessagesResponse(
+    val messages: List<Message>,
+    val firstUnreadId: String?,
+    val hasOlderUnread: Boolean,
+    val totalUnread: Int,
+    val skippedUnread: Int
+)
+
 data class SendMessageRequest(
     val roomId: String,
     val type: String = "text",
