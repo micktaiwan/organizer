@@ -86,6 +86,7 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.CircularProgressIndicator
 import com.organizer.chat.util.EmojiUtils
 import com.organizer.chat.util.ImageDownloader
@@ -258,6 +259,19 @@ fun MessageBubble(
                                         fileName = message.fileName,
                                         fileSize = message.fileSize,
                                         mimeType = message.mimeType,
+                                        caption = message.caption,
+                                        onLongPress = onLongPress
+                                    )
+                                }
+                            }
+                            "video" -> {
+                                if (message.fileDeleted) {
+                                    DeletedFileContent(caption = message.caption)
+                                } else {
+                                    VideoMessageContent(
+                                        videoUrl = message.content,
+                                        thumbnailUrl = message.thumbnailUrl,
+                                        duration = message.duration,
                                         caption = message.caption,
                                         onLongPress = onLongPress
                                     )
@@ -858,6 +872,217 @@ private fun getFileIcon(mimeType: String?): androidx.compose.ui.graphics.vector.
         mimeType?.contains("excel") == true -> Icons.Default.InsertDriveFile
         mimeType?.contains("powerpoint") == true -> Icons.Default.InsertDriveFile
         else -> Icons.Default.InsertDriveFile
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun VideoMessageContent(
+    videoUrl: String,
+    thumbnailUrl: String?,
+    duration: Double?,
+    caption: String?,
+    onLongPress: (() -> Unit)? = null
+) {
+    var showFullscreen by remember { mutableStateOf(false) }
+
+    // Build full URLs
+    val fullVideoUrl = if (videoUrl.startsWith("/")) {
+        ApiClient.getBaseUrl().trimEnd('/') + videoUrl
+    } else {
+        videoUrl
+    }
+
+    val fullThumbnailUrl = thumbnailUrl?.let {
+        if (it.startsWith("/")) {
+            ApiClient.getBaseUrl().trimEnd('/') + it
+        } else {
+            it
+        }
+    }
+
+    Column {
+        Box(
+            modifier = Modifier
+                .widthIn(max = 250.dp)
+                .heightIn(max = 200.dp)
+                .combinedClickable(
+                    onClick = { showFullscreen = true },
+                    onLongClick = { onLongPress?.invoke() }
+                )
+        ) {
+            // Thumbnail or placeholder
+            if (fullThumbnailUrl != null) {
+                AsyncImage(
+                    model = fullThumbnailUrl,
+                    contentDescription = "Video thumbnail",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                // Placeholder while thumbnail is generating
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp),
+                    color = CharcoalLight
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Videocam,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                                tint = Color.Gray
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Génération...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Play button overlay
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.Black.copy(alpha = 0.3f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.6f),
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Play video",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+            }
+
+            // Duration badge
+            if (duration != null && duration > 0) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color.Black.copy(alpha = 0.7f)
+                ) {
+                    Text(
+                        text = formatVideoDuration(duration),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+
+        // Caption
+        if (!caption.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = EmojiUtils.convertEmojis(caption),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MessageTextColor
+            )
+        }
+    }
+
+    // Fullscreen video player
+    if (showFullscreen) {
+        FullscreenVideoDialog(
+            videoUrl = fullVideoUrl,
+            onDismiss = { showFullscreen = false }
+        )
+    }
+}
+
+private fun formatVideoDuration(seconds: Double): String {
+    val totalSeconds = seconds.toInt()
+    val minutes = totalSeconds / 60
+    val secs = totalSeconds % 60
+    return "%d:%02d".format(minutes, secs)
+}
+
+@Composable
+private fun FullscreenVideoDialog(
+    videoUrl: String,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    // Create ExoPlayer instance
+    val exoPlayer = remember {
+        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+            val mediaItem = androidx.media3.common.MediaItem.fromUri(videoUrl)
+            setMediaItem(mediaItem)
+            prepare()
+            playWhenReady = true
+        }
+    }
+
+    // Release player when dialog closes
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            // ExoPlayer PlayerView
+            AndroidView(
+                factory = { ctx ->
+                    androidx.media3.ui.PlayerView(ctx).apply {
+                        player = exoPlayer
+                        useController = true
+                        setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Close button
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color.White
+                )
+            }
+        }
     }
 }
 

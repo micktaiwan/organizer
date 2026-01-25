@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText, Monitor, Smartphone, Bot, CheckCircle, Check } from "lucide-react";
+import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText, Monitor, Smartphone, Bot, CheckCircle, Check, Play, Film } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -53,6 +53,14 @@ const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+// Helper to format video duration (MM:SS)
+const formatVideoDuration = (seconds: number | undefined): string => {
+  if (!seconds) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
 // Helper to download a file using Tauri APIs
@@ -139,6 +147,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | undefined>(undefined);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
+  const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | undefined>(undefined);
 
   // Close fullscreen image on Escape key
   useEffect(() => {
@@ -151,6 +161,18 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showFullscreenImage]);
+
+  // Close video player on Escape key
+  useEffect(() => {
+    if (!showVideoPlayer) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowVideoPlayer(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showVideoPlayer]);
 
   // First and last message of the group
   if (!messages || messages.length === 0) {
@@ -372,6 +394,38 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 </div>
               )}
               {msg.caption && msg.type === 'file' && <span className="file-caption"><MarkdownText text={msg.caption} /></span>}
+              {msg.type === 'video' && msg.videoUrl && (
+                <div
+                  className="video-message"
+                  onClick={() => {
+                    setVideoPlayerUrl(msg.videoUrl);
+                    setShowVideoPlayer(true);
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="video-thumbnail-container">
+                    {msg.thumbnailUrl ? (
+                      <img
+                        src={getImageUrl(msg.thumbnailUrl)}
+                        alt="Video thumbnail"
+                        className="video-thumbnail"
+                      />
+                    ) : (
+                      <div className="video-thumbnail-placeholder">
+                        <Film size={32} />
+                        <span>Génération...</span>
+                      </div>
+                    )}
+                    <div className="video-play-overlay">
+                      <Play size={40} fill="white" />
+                    </div>
+                    {msg.duration !== undefined && (
+                      <span className="video-duration">{formatVideoDuration(msg.duration)}</span>
+                    )}
+                  </div>
+                  {msg.caption && <span className="video-caption"><MarkdownText text={msg.caption} /></span>}
+                </div>
+              )}
               {msg.text && (
                 <div className="message-text-content">
                   <MarkdownText text={msg.text} />
@@ -451,6 +505,20 @@ export const MessageItem: React.FC<MessageItemProps> = ({
             src={getImageUrl(fullscreenImageUrl)}
             alt="Image fullscreen"
             className="image-fullscreen"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+      {showVideoPlayer && videoPlayerUrl && (
+        <div className="video-player-overlay" onClick={() => setShowVideoPlayer(false)}>
+          <button className="video-player-close" onClick={() => setShowVideoPlayer(false)}>
+            <X size={24} />
+          </button>
+          <video
+            src={getImageUrl(videoPlayerUrl)}
+            controls
+            autoPlay
+            className="video-player-fullscreen"
             onClick={(e) => e.stopPropagation()}
           />
         </div>

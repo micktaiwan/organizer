@@ -14,7 +14,9 @@ Ce n'est **pas du WebRTC** - c'est de la capture locale + encodage + upload de f
 | Format vidéo | MP4/H.264 (universel, lisible partout) |
 | Audio | Micro seulement (pas d'audio système) |
 | Limites | Aucune (durée/taille illimitées) |
-| Qualité | Desktop : haute (~5 Mbps), Android : basse (~1 Mbps) - pas de choix utilisateur |
+| Qualité | Desktop : choix utilisateur (Haute 1080p/5Mbps, Moyenne 720p/2Mbps, Basse 480p/1Mbps). Android : basse (~1 Mbps) fixe |
+| Stockage temp | Fichier local (pas en mémoire) pour éviter la perte de données |
+| Preview | Oui, avant upload - permet de revoir/supprimer/recommencer |
 | Thumbnail | Première frame, générée côté **serveur** (async, non bloquant) |
 | Upload | Réutilise l'infra existante (pièces jointes) |
 | Pause/Resume | Supporté (`MediaRecorder.pause()`/`resume()`) |
@@ -32,11 +34,13 @@ Ce n'est **pas du WebRTC** - c'est de la capture locale + encodage + upload de f
 1. Bouton "Enregistrer" à côté du micro
 2. Choix : Écran / Webcam / Les deux
 3. Sélection de la source (fenêtre, écran, onglet)
-4. Enregistrement avec indicateur rouge visible
+4. Enregistrement avec indicateur rouge visible (sauvegarde en fichier temp)
 5. Pause/Resume possible pendant l'enregistrement
-6. Bouton Stop → Upload immédiat (pas de preview)
-7. Message envoyé avec placeholder "Génération thumbnail..."
-8. Serveur génère thumbnail async → message mis à jour avec thumbnail cliquable
+6. Bouton Stop → **Preview de la vidéo**
+7. Options : Envoyer / Supprimer / Recommencer
+8. Si Envoyer → Upload du fichier temp
+9. Message envoyé avec placeholder "Génération thumbnail..."
+10. Serveur génère thumbnail async → message mis à jour avec thumbnail cliquable
 
 ### Android
 
@@ -44,10 +48,54 @@ Ce n'est **pas du WebRTC** - c'est de la capture locale + encodage + upload de f
 2. Choix : Écran / Webcam (pas de mode combiné)
 3. **Preview de la caméra** avant de commencer (si webcam)
 4. Switch caméra front/back possible avant de lancer
-5. Lancer l'enregistrement
+5. Lancer l'enregistrement (sauvegarde dans cache app)
 6. Pause/Resume possible
-7. Stop → Upload immédiat (pas de preview)
-8. Message envoyé → thumbnail généré async côté serveur
+7. Stop → **Preview de la vidéo**
+8. Options : Envoyer / Supprimer / Recommencer
+9. Si Envoyer → Upload du fichier
+10. Message envoyé → thumbnail généré async côté serveur
+
+## Stockage temporaire
+
+La vidéo doit être sauvegardée sur disque pendant l'enregistrement (pas en mémoire) pour :
+- **Éviter la perte de données** si l'app crash ou si l'utilisateur ferme par erreur
+- **Permettre le preview** avant l'upload
+- **Supporter les longues vidéos** sans exploser la RAM
+
+### Desktop (Tauri)
+
+Utiliser l'API Tauri pour écrire dans un dossier temporaire :
+
+```typescript
+import { tempDir, join } from '@tauri-apps/api/path'
+import { writeBinaryFile, removeFile } from '@tauri-apps/api/fs'
+
+const tempPath = await join(await tempDir(), `recording-${Date.now()}.mp4`)
+
+// Pendant l'enregistrement : écrire les chunks
+mediaRecorder.ondataavailable = async (e) => {
+  // Accumuler et écrire périodiquement sur disque
+}
+
+// Après preview : cleanup si supprimé
+await removeFile(tempPath)
+```
+
+**Alternative plus simple** : Utiliser `URL.createObjectURL(blob)` pour le preview, mais sauvegarder le Blob complet dans IndexedDB comme backup en cas de crash.
+
+### Android
+
+`MediaRecorder` requiert un fichier de sortie :
+
+```kotlin
+val tempFile = File(context.cacheDir, "recording-${System.currentTimeMillis()}.mp4")
+mediaRecorder.setOutputFile(tempFile.absolutePath)
+
+// Après upload ou suppression
+tempFile.delete()
+```
+
+Le fichier est automatiquement dans le cache de l'app, nettoyé par le système si besoin.
 
 ## Architecture
 
@@ -243,41 +291,52 @@ interface VideoMessage {
 
 ### Server
 
-- [ ] Endpoint `POST /api/upload/video` (réutilise infra existante)
-- [ ] Job async génération thumbnail (ffmpeg)
-- [ ] Événement socket `video:thumbnail-ready`
-- [ ] Nouveau type de message `video` dans le schéma
+- [x] Endpoint `POST /api/upload/video` (réutilise infra existante)
+- [x] Job async génération thumbnail (ffmpeg)
+- [x] Événement socket `video:thumbnail-ready`
+- [x] Nouveau type de message `video` dans le schéma
 
 ### Desktop V1 - MVP
 
-- [ ] `useVideoRecorder.ts` - Hook avec states (idle, recording, paused, uploading)
-- [ ] Support `getDisplayMedia()` pour capture écran
-- [ ] Support `getUserMedia()` pour webcam
-- [ ] `MediaRecorder` avec codec detection (MP4 > WebM), haute qualité (~5 Mbps)
-- [ ] Pause/Resume pendant l'enregistrement
-- [ ] UI : bouton record (à côté du micro), indicateur rouge, pause, stop
-- [ ] Upload vidéo seule (pas de thumbnail côté client)
-- [ ] Écoute `video:thumbnail-ready` pour mise à jour message
-- [ ] Affichage placeholder puis thumbnail dans la room
-- [ ] Lecteur vidéo inline au clic
+- [x] `useVideoRecorder.ts` - Hook avec states (idle, recording, paused, previewing, uploading)
+- [x] Support `getDisplayMedia()` pour capture écran
+- [x] Support `getUserMedia()` pour webcam
+- [x] `MediaRecorder` avec codec detection (MP4 > WebM), haute qualité (~5 Mbps)
+- [x] Sauvegarde fichier temp (Tauri FS ou IndexedDB backup)
+- [x] Pause/Resume pendant l'enregistrement
+- [x] UI : bouton record (à côté du micro), indicateur rouge, pause, stop
+- [x] **Preview après stop** : lecteur vidéo + boutons Envoyer/Supprimer/Recommencer
+- [x] Upload vidéo seule (pas de thumbnail côté client)
+- [x] Cleanup fichier temp après upload ou suppression
+- [x] Écoute `video:thumbnail-ready` pour mise à jour message
+- [x] Affichage placeholder puis thumbnail dans la room
+- [x] Lecteur vidéo inline au clic
 
 ### Desktop V2 - Polish
 
 - [ ] Choix de la source (fenêtre/écran/onglet)
 - [ ] Mode Screen + Webcam (PiP composé dans la vidéo)
-- [ ] Barre de progression upload
-- [ ] Indicateur durée pendant l'enregistrement
+- [x] Barre de progression upload (XMLHttpRequest + upload.onprogress)
+- [x] Indicateur durée pendant l'enregistrement
 
 ### Android V1 - MVP
 
+**Affichage vidéo (lecture seule)** :
+- [x] Modèle `Message` avec champs video (`thumbnailUrl`, `duration`, `width`, `height`)
+- [x] `VideoMessageContent` composable (thumbnail + play overlay + durée)
+- [x] Placeholder "Génération..." pendant création thumbnail
+- [x] Lecteur vidéo plein écran (ExoPlayer/Media3)
+- [x] Groupage messages : vidéos cassent le groupe
+
+**Enregistrement vidéo (non implémenté)** :
 - [ ] Permission `FOREGROUND_SERVICE_MEDIA_PROJECTION`
 - [ ] `VideoRecorderService.kt` - Foreground service
 - [ ] `ScreenRecorder.kt` - MediaProjection + MediaRecorder, basse qualité (~1 Mbps)
+- [ ] Sauvegarde dans `cacheDir` (fichier temp)
 - [ ] UI : bouton record (à côté du micro), pause, stop
+- [ ] **Preview après stop** : lecteur ExoPlayer + boutons Envoyer/Supprimer/Recommencer
 - [ ] Upload vidéo seule
-- [ ] Écoute `video:thumbnail-ready`
-- [ ] Affichage placeholder puis thumbnail dans chat
-- [ ] Lecteur ExoPlayer
+- [ ] Cleanup fichier temp après upload ou suppression
 
 ### Android V2 - Webcam
 

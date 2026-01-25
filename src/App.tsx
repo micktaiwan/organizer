@@ -15,6 +15,7 @@ import { useUserStatus } from "./contexts/UserStatusContext";
 import { useWebRTCCall } from "./hooks/useWebRTCCall";
 // import { useContacts } from "./hooks/useContacts";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder";
+import { useVideoRecorder } from "./hooks/useVideoRecorder";
 import { useRooms } from "./hooks/useRooms";
 import { useNotes } from "./hooks/useNotes";
 import { useWindowState } from "./hooks/useWindowState";
@@ -42,6 +43,7 @@ import { LogPanel } from "./components/LogPanel";
 import { ErrorIndicator } from "./components/ErrorIndicator";
 import { StatusBar } from "./components/StatusBar";
 import { ConfirmModal } from "./components/ui/ConfirmModal";
+import { SourceSelectorModal, VideoPreviewModal } from "./components/Chat/VideoRecorder";
 
 import "./App.css";
 
@@ -197,6 +199,7 @@ function App() {
     setMessages,
     sendMessage,
     sendFile,
+    sendVideo,
     deleteMessage,
     reactToMessage,
     selectRoom,
@@ -270,6 +273,69 @@ function App() {
     stopRecording,
     cancelRecording
   } = useVoiceRecorder((base64) => sendMessage(undefined, undefined, base64));
+
+  // Video recording
+  const {
+    state: videoRecorderState,
+    source: videoSource,
+    quality: videoQuality,
+    duration: videoDuration,
+    previewUrl: videoPreviewUrl,
+    videoBlob,
+    error: videoError,
+    stream: videoStream,
+    uploadProgress: videoUploadProgress,
+    setQuality: setVideoQuality,
+    selectSource: selectVideoSource,
+    startRecording: startVideoRecording,
+    pauseRecording: pauseVideoRecording,
+    resumeRecording: resumeVideoRecording,
+    stopRecording: stopVideoRecording,
+    discardVideo,
+    restartRecording: restartVideoRecording,
+    setUploading: setVideoUploading,
+    setUploadProgress: setVideoUploadProgress,
+    reset: resetVideoRecorder,
+  } = useVideoRecorder();
+
+  // Video recording - show source selector when user clicks video button
+  const [showVideoSourceSelector, setShowVideoSourceSelector] = useState(false);
+
+  const handleStartVideoRecording = useCallback(() => {
+    setShowVideoSourceSelector(true);
+  }, []);
+
+  const handleSelectVideoSource = useCallback(async (source: 'screen' | 'webcam') => {
+    setShowVideoSourceSelector(false);
+    const success = await selectVideoSource(source);
+    if (success) {
+      startVideoRecording();
+    }
+  }, [selectVideoSource, startVideoRecording]);
+
+  const handleCancelVideoSourceSelector = useCallback(() => {
+    setShowVideoSourceSelector(false);
+    resetVideoRecorder();
+  }, [resetVideoRecorder]);
+
+  const handleSendVideo = useCallback(async () => {
+    if (!videoBlob) return;
+    setVideoUploading();
+    await sendVideo(videoBlob, undefined, setVideoUploadProgress);
+    resetVideoRecorder();
+  }, [videoBlob, setVideoUploading, sendVideo, setVideoUploadProgress, resetVideoRecorder]);
+
+  const handleDiscardVideo = useCallback(() => {
+    discardVideo();
+  }, [discardVideo]);
+
+  const handleRestartVideo = useCallback(() => {
+    restartVideoRecording();
+  }, [restartVideoRecording]);
+
+  const handleCancelVideoRecording = useCallback(() => {
+    resetVideoRecorder();
+  }, [resetVideoRecorder]);
 
   // Notes - only load when authenticated
   const {
@@ -687,6 +753,16 @@ function App() {
             targetMessageId={targetMessageId}
             messageMode={messageMode}
             onReturnToLatest={returnToLatest}
+            // Video recording
+            videoRecorderState={videoRecorderState}
+            videoSource={videoSource}
+            videoStream={videoStream}
+            videoDuration={videoDuration}
+            onStartVideoRecording={handleStartVideoRecording}
+            onPauseVideoRecording={pauseVideoRecording}
+            onResumeVideoRecording={resumeVideoRecording}
+            onStopVideoRecording={stopVideoRecording}
+            onCancelVideoRecording={handleCancelVideoRecording}
           />
         </div>
       </div>
@@ -757,6 +833,7 @@ function App() {
         onOpenAdmin={() => setShowAdminPanel(true)}
         onChangeServer={handleChangeServer}
         serverName={selectedServer?.name}
+        currentRoomId={currentRoomId}
       />
 
       {callState === 'incoming' && incomingCallFrom && (
@@ -837,6 +914,29 @@ function App() {
           onSelectResult={(timestamp, messageId) => {
             loadMessagesAround(timestamp, messageId);
           }}
+        />
+      )}
+
+      {/* Video Recording Modals */}
+      {showVideoSourceSelector && (
+        <SourceSelectorModal
+          quality={videoQuality}
+          onQualityChange={setVideoQuality}
+          onSelect={handleSelectVideoSource}
+          onCancel={handleCancelVideoSourceSelector}
+          error={videoError}
+        />
+      )}
+
+      {(videoRecorderState === 'previewing' || videoRecorderState === 'uploading') && videoPreviewUrl && (
+        <VideoPreviewModal
+          previewUrl={videoPreviewUrl}
+          duration={videoDuration}
+          isUploading={videoRecorderState === 'uploading'}
+          uploadProgress={videoUploadProgress}
+          onSend={handleSendVideo}
+          onDiscard={handleDiscardVideo}
+          onRestart={handleRestartVideo}
         />
       )}
     </main>

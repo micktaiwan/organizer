@@ -1,7 +1,9 @@
 import React, { useRef, useEffect, useCallback } from "react";
-import { Image, Paperclip, FileText, Mic, X } from "lucide-react";
+import { Image, Paperclip, FileText, Mic, X, Video } from "lucide-react";
 import { formatDuration } from "../../utils/audio";
 import { useAuth } from "../../contexts/AuthContext";
+import { VideoRecordingUI } from "./VideoRecorder";
+import { VideoRecorderState, VideoSource } from "../../hooks/useVideoRecorder";
 
 interface PendingFile {
   file: File;
@@ -33,6 +35,16 @@ interface MessageInputProps {
   cancelRecording: () => void;
   onSelectImageFile: () => void;
   onSelectFile: () => void;
+  // Video recording props
+  videoRecorderState: VideoRecorderState;
+  videoSource: VideoSource | null;
+  videoStream: MediaStream | null;
+  videoDuration: number;
+  onStartVideoRecording: () => void;
+  onPauseVideoRecording: () => void;
+  onResumeVideoRecording: () => void;
+  onStopVideoRecording: () => void;
+  onCancelVideoRecording: () => void;
 }
 
 export const MessageInput: React.FC<MessageInputProps> = ({
@@ -51,6 +63,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   cancelRecording,
   onSelectImageFile,
   onSelectFile,
+  // Video
+  videoRecorderState,
+  videoSource,
+  videoStream,
+  videoDuration,
+  onStartVideoRecording,
+  onPauseVideoRecording,
+  onResumeVideoRecording,
+  onStopVideoRecording,
+  onCancelVideoRecording,
 }) => {
   const { user } = useAuth();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -64,11 +86,13 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
   }, []);
 
+  const isVideoRecording = videoRecorderState === 'recording' || videoRecorderState === 'paused';
+
   useEffect(() => {
-    if (!isRecording) {
+    if (!isRecording && !isVideoRecording) {
       textareaRef.current?.focus();
     }
-  }, [isRecording]);
+  }, [isRecording, isVideoRecording]);
 
   useEffect(() => {
     adjustTextareaHeight();
@@ -111,7 +135,18 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       )}
 
       <form className={`message-input${user?.isBot ? ' bot-mode' : ''}`} onSubmit={onSendMessage}>
-        {isRecording ? (
+        {isVideoRecording ? (
+          <VideoRecordingUI
+            duration={videoDuration}
+            isPaused={videoRecorderState === 'paused'}
+            stream={videoStream}
+            source={videoSource}
+            onPause={onPauseVideoRecording}
+            onResume={onResumeVideoRecording}
+            onStop={onStopVideoRecording}
+            onCancel={onCancelVideoRecording}
+          />
+        ) : isRecording ? (
           <div className="recording-ui">
             <span className="recording-indicator">🔴</span>
             <span className="recording-duration">{formatDuration(recordingDuration)}</span>
@@ -146,10 +181,19 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               type="button"
               className="voice-btn"
               onClick={startRecording}
-              disabled={!canSend}
+              disabled={!canSend || isVideoRecording}
               title="Enregistrer un message vocal"
             >
               <Mic size={20} />
+            </button>
+            <button
+              type="button"
+              className="video-btn"
+              onClick={onStartVideoRecording}
+              disabled={!canSend || isRecording}
+              title="Enregistrer une vidéo"
+            >
+              <Video size={20} />
             </button>
             <textarea
               ref={textareaRef}

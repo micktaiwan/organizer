@@ -11,14 +11,18 @@ import com.organizer.chat.data.model.Message
 import com.organizer.chat.data.model.Reaction
 import com.organizer.chat.data.repository.MessageRepository
 import com.organizer.chat.data.socket.ConnectionState
+import com.organizer.chat.data.socket.VideoThumbnailReadyEvent
 import com.organizer.chat.data.repository.RoomRepository
 import java.time.Instant
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.util.DocumentInfo
 import com.organizer.chat.util.DocumentPicker
 import com.organizer.chat.util.ImageCompressor
+import com.organizer.chat.util.ScreenRecorder
 import com.organizer.chat.util.TokenManager
 import com.organizer.chat.util.VoiceRecorder
+import com.organizer.chat.service.VideoRecorderService
+import android.media.projection.MediaProjection
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.snapshotFlow
@@ -28,6 +32,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
+
+enum class VideoRecordingState {
+    IDLE,
+    RECORDING,
+    PREVIEW,
+    UPLOADING
+}
+
+enum class CameraRecordingState {
+    IDLE,
+    RECORDING,
+    PREVIEW,
+    UPLOADING
+}
 
 data class ChatUiState(
     val messages: List<Message> = emptyList(),
@@ -46,7 +64,14 @@ data class ChatUiState(
     val hasMoreMessages: Boolean = true,
     val isLoadingMore: Boolean = false,
     val shouldScrollToBottom: Boolean = true,
-    val humanMemberIds: List<String> = emptyList()
+    val humanMemberIds: List<String> = emptyList(),
+    // Video recording state (screen recording)
+    val videoRecordingState: VideoRecordingState = VideoRecordingState.IDLE,
+    val recordedVideoFile: File? = null,
+    val videoRecordingDuration: Int = 0,
+    // Camera recording state (webcam)
+    val cameraRecordingState: CameraRecordingState = CameraRecordingState.IDLE,
+    val cameraRecordedFile: File? = null
 )
 
 class ChatViewModel(
@@ -71,7 +96,9 @@ class ChatViewModel(
 
     private val voiceRecorder = VoiceRecorder(context)
     private val imageCompressor = ImageCompressor(context)
+    private val screenRecorder = ScreenRecorder(context)
     private var recordingTimerJob: Job? = null
+    private var videoRecordingTimerJob: Job? = null
     private var compressingJob: Job? = null
     private var tempCompressedFile: File? = null
 
@@ -409,7 +436,30 @@ class ChatViewModel(
                     _uiState.value = _uiState.value.copy(messages = updatedMessages)
                 }
             }
+
+            // Video thumbnail ready - update message when server finishes generating thumbnail
+            viewModelScope.launch {
+                service.socketManager.videoThumbnailReady.collect { event ->
+                    updateMessageThumbnail(event)
+                }
+            }
         }
+    }
+
+    private fun updateMessageThumbnail(event: VideoThumbnailReadyEvent) {
+        Log.d(TAG, "Updating thumbnail for message ${event.messageId}: ${event.thumbnailUrl}")
+        _uiState.value = _uiState.value.copy(
+            messages = _uiState.value.messages.map { msg ->
+                if (msg.id == event.messageId) {
+                    msg.copy(
+                        thumbnailUrl = event.thumbnailUrl,
+                        duration = event.duration,
+                        width = event.width,
+                        height = event.height
+                    )
+                } else msg
+            }
+        )
     }
 
     private fun observeMessageReadEvents() {
@@ -760,12 +810,255 @@ class ChatViewModel(
         }
     }
 
+    // Video recording functions
+
+    /**
+     * Called when the user taps the video record button.
+     * The activity should handle the result and call onScreenCaptureResult.
+     */
+    fun onScreenCaptureGranted(resultCode: Int, data: android.content.Intent) {
+        Log.d(TAG, "Screen capture permission granted")
+
+        // Set up callbacks before starting service
+        VideoRecorderService.setCallbacks(
+            onReady = { projection ->
+                Log.d(TAG, "MediaProjection ready, starting recording")
+                startVideoRecordingWithProjection(projection)
+            },
+            onStopped = {
+                Log.d(TAG, "MediaProjection stopped by system")
+                // If we were recording, try to save what we have
+                if (_uiState.value.videoRecordingState == VideoRecordingState.RECORDING) {
+                    videoRecordingTimerJob?.cancel()
+                    val file = screenRecorder.stopRecording()
+                    if (file != null && file.exists() && file.length() > 0) {
+                        _uiState.value = _uiState.value.copy(
+                            videoRecordingState = VideoRecordingState.PREVIEW,
+                            recordedVideoFile = file
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            videoRecordingState = VideoRecordingState.IDLE,
+                            videoRecordingDuration = 0
+                        )
+                    }
+                }
+            }
+        )
+
+        // Start the foreground service
+        VideoRecorderService.start(context, resultCode, data)
+    }
+
+    private fun startVideoRecordingWithProjection(projection: MediaProjection) {
+        val started = screenRecorder.startRecording(projection)
+        if (started) {
+            _uiState.value = _uiState.value.copy(
+                videoRecordingState = VideoRecordingState.RECORDING,
+                videoRecordingDuration = 0
+            )
+            startVideoRecordingTimer()
+            Log.d(TAG, "Video recording started")
+        } else {
+            Log.e(TAG, "Failed to start video recording")
+            VideoRecorderService.stop(context)
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Échec du démarrage de l'enregistrement"
+            )
+        }
+    }
+
+    private fun startVideoRecordingTimer() {
+        videoRecordingTimerJob?.cancel()
+        videoRecordingTimerJob = viewModelScope.launch {
+            while (_uiState.value.videoRecordingState == VideoRecordingState.RECORDING) {
+                delay(1000)
+                if (_uiState.value.videoRecordingState == VideoRecordingState.RECORDING) {
+                    _uiState.value = _uiState.value.copy(
+                        videoRecordingDuration = _uiState.value.videoRecordingDuration + 1
+                    )
+                }
+            }
+        }
+    }
+
+    fun stopVideoRecording() {
+        if (_uiState.value.videoRecordingState != VideoRecordingState.RECORDING) return
+
+        Log.d(TAG, "Stopping video recording")
+        videoRecordingTimerJob?.cancel()
+
+        val file = screenRecorder.stopRecording()
+        VideoRecorderService.stop(context)
+
+        if (file != null && file.exists() && file.length() > 0) {
+            Log.d(TAG, "Video recorded: ${file.absolutePath}, size: ${file.length()}")
+            _uiState.value = _uiState.value.copy(
+                videoRecordingState = VideoRecordingState.PREVIEW,
+                recordedVideoFile = file
+            )
+        } else {
+            Log.e(TAG, "Failed to get video file")
+            _uiState.value = _uiState.value.copy(
+                videoRecordingState = VideoRecordingState.IDLE,
+                videoRecordingDuration = 0,
+                errorMessage = "Échec de l'enregistrement"
+            )
+        }
+    }
+
+    fun sendRecordedVideo() {
+        val videoFile = _uiState.value.recordedVideoFile ?: return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                videoRecordingState = VideoRecordingState.UPLOADING
+            )
+
+            val result = messageRepository.uploadAndSendVideo(roomId, videoFile)
+
+            result.fold(
+                onSuccess = { message ->
+                    Log.d(TAG, "Video uploaded successfully: ${message.id}")
+                    addMessageIfNotExists(message)
+                    // Cleanup
+                    videoFile.delete()
+                    _uiState.value = _uiState.value.copy(
+                        videoRecordingState = VideoRecordingState.IDLE,
+                        recordedVideoFile = null,
+                        videoRecordingDuration = 0
+                    )
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Failed to upload video: ${error.message}")
+                    _uiState.value = _uiState.value.copy(
+                        videoRecordingState = VideoRecordingState.PREVIEW,
+                        errorMessage = error.message ?: "Erreur lors de l'envoi"
+                    )
+                }
+            )
+        }
+    }
+
+    fun discardRecordedVideo() {
+        val videoFile = _uiState.value.recordedVideoFile
+        videoFile?.delete()
+        screenRecorder.deleteRecordingFile()
+
+        _uiState.value = _uiState.value.copy(
+            videoRecordingState = VideoRecordingState.IDLE,
+            recordedVideoFile = null,
+            videoRecordingDuration = 0
+        )
+    }
+
+    fun retryVideoRecording() {
+        discardRecordedVideo()
+        // The activity needs to request screen capture again
+        // This will be handled by the UI layer
+    }
+
+    // Camera recording functions (webcam)
+
+    /**
+     * Open the camera recording screen.
+     */
+    fun startCameraRecording() {
+        _uiState.value = _uiState.value.copy(
+            cameraRecordingState = CameraRecordingState.RECORDING
+        )
+    }
+
+    /**
+     * Called when camera recording is complete.
+     */
+    fun onCameraRecordingComplete(file: File) {
+        Log.d(TAG, "Camera recording complete: ${file.absolutePath}, size: ${file.length()}")
+        _uiState.value = _uiState.value.copy(
+            cameraRecordingState = CameraRecordingState.PREVIEW,
+            cameraRecordedFile = file
+        )
+    }
+
+    /**
+     * Called when camera recording screen is dismissed without recording.
+     */
+    fun onCameraRecordingDismissed() {
+        _uiState.value = _uiState.value.copy(
+            cameraRecordingState = CameraRecordingState.IDLE
+        )
+    }
+
+    /**
+     * Send the recorded camera video.
+     */
+    fun sendCameraRecordedVideo() {
+        val videoFile = _uiState.value.cameraRecordedFile ?: return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                cameraRecordingState = CameraRecordingState.UPLOADING
+            )
+
+            val result = messageRepository.uploadAndSendVideo(roomId, videoFile)
+
+            result.fold(
+                onSuccess = { message ->
+                    Log.d(TAG, "Camera video uploaded successfully: ${message.id}")
+                    addMessageIfNotExists(message)
+                    // Cleanup
+                    videoFile.delete()
+                    _uiState.value = _uiState.value.copy(
+                        cameraRecordingState = CameraRecordingState.IDLE,
+                        cameraRecordedFile = null
+                    )
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Failed to upload camera video: ${error.message}")
+                    _uiState.value = _uiState.value.copy(
+                        cameraRecordingState = CameraRecordingState.PREVIEW,
+                        errorMessage = error.message ?: "Erreur lors de l'envoi"
+                    )
+                }
+            )
+        }
+    }
+
+    /**
+     * Discard the recorded camera video.
+     */
+    fun discardCameraRecordedVideo() {
+        val videoFile = _uiState.value.cameraRecordedFile
+        videoFile?.delete()
+
+        _uiState.value = _uiState.value.copy(
+            cameraRecordingState = CameraRecordingState.IDLE,
+            cameraRecordedFile = null
+        )
+    }
+
+    /**
+     * Retry camera recording - discard current and open camera again.
+     */
+    fun retryCameraRecording() {
+        discardCameraRecordedVideo()
+        startCameraRecording()
+    }
+
     override fun onCleared() {
         super.onCleared()
         recordingTimerJob?.cancel()
+        videoRecordingTimerJob?.cancel()
         compressingJob?.cancel()
         voiceRecorder.release()
+        screenRecorder.release()
         tempCompressedFile?.let { imageCompressor.cleanup(it) }
+        // Clean up video recording service if running
+        if (_uiState.value.videoRecordingState != VideoRecordingState.IDLE) {
+            VideoRecorderService.stop(context)
+        }
+        // Clean up camera recorded file if any
+        _uiState.value.cameraRecordedFile?.delete()
         chatService?.socketManager?.notifyTypingStop(roomId)
         chatService?.socketManager?.leaveRoom(roomId)
     }

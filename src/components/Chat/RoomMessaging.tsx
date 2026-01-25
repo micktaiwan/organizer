@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { Room } from '../../services/api';
 import { Message } from '../../types';
+import { VideoRecorderState, VideoSource } from '../../hooks/useVideoRecorder';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 
@@ -38,6 +39,16 @@ interface RoomMessagingProps {
   targetMessageId?: string | null;
   messageMode?: 'latest' | 'around';
   onReturnToLatest?: () => void;
+  // Video recording props
+  videoRecorderState: VideoRecorderState;
+  videoSource: VideoSource | null;
+  videoStream: MediaStream | null;
+  videoDuration: number;
+  onStartVideoRecording: () => void;
+  onPauseVideoRecording: () => void;
+  onResumeVideoRecording: () => void;
+  onStopVideoRecording: () => void;
+  onCancelVideoRecording: () => void;
 }
 
 export const RoomMessaging: React.FC<RoomMessagingProps> = ({
@@ -67,6 +78,16 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   targetMessageId,
   messageMode,
   onReturnToLatest,
+  // Video
+  videoRecorderState,
+  videoSource,
+  videoStream,
+  videoDuration,
+  onStartVideoRecording,
+  onPauseVideoRecording,
+  onResumeVideoRecording,
+  onStopVideoRecording,
+  onCancelVideoRecording,
 }) => {
   // Use refs to avoid re-triggering effects when callbacks change reference
   const onTypingStartRef = useRef(onTypingStart);
@@ -169,6 +190,16 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
         onSelectFile={onSelectFile}
         stopRecording={stopRecording}
         cancelRecording={cancelRecording}
+        // Video
+        videoRecorderState={videoRecorderState}
+        videoSource={videoSource}
+        videoStream={videoStream}
+        videoDuration={videoDuration}
+        onStartVideoRecording={onStartVideoRecording}
+        onPauseVideoRecording={onPauseVideoRecording}
+        onResumeVideoRecording={onResumeVideoRecording}
+        onStopVideoRecording={onStopVideoRecording}
+        onCancelVideoRecording={onCancelVideoRecording}
       />
     </div>
   );

@@ -542,7 +542,7 @@ fun CallScreen(
                     ConnectingAnimation()
                 }
                 is CallState.Reconnecting -> {
-                    ReconnectingAnimation()
+                    // Banner displayed separately at top
                 }
                 is CallState.Connected -> {
                     Text(
@@ -672,6 +672,15 @@ fun CallScreen(
                     Spacer(modifier = Modifier.size(56.dp))
                 }
             }
+        }
+
+        // Reconnection banner (top, independent from avatar)
+        if (callState is CallState.Reconnecting && !hideOverlays) {
+            ReconnectingBanner(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 60.dp)
+            )
         }
 
         // Local video PiP (bottom right, draggable) - hidden during screen share and PiP mode
@@ -845,27 +854,37 @@ private fun ConnectingAnimation() {
 }
 
 @Composable
-private fun ReconnectingAnimation() {
-    val infiniteTransition = rememberInfiniteTransition(label = "reconnectingDots")
+private fun ReconnectingBanner(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "reconnectingPulse")
 
-    val dotCount by infiniteTransition.animateValue(
-        initialValue = 0,
-        targetValue = 4,
-        typeConverter = Int.VectorConverter,
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.7f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
+            animation = tween(750, easing = EaseInOut),
+            repeatMode = RepeatMode.Reverse
         ),
-        label = "dotCount"
+        label = "bannerAlpha"
     )
 
-    val dots = ".".repeat(dotCount)
-
-    Text(
-        text = "Reconnexion$dots",
-        fontSize = 16.sp,
-        color = Color(0xFFFF5722).copy(alpha = 0.9f)
-    )
+    Box(
+        modifier = modifier
+            .padding(20.dp)
+            .alpha(alpha)
+            .background(
+                color = Color(0xFFCC5500),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "Reconnexion...",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White
+        )
+    }
 }
 
 private fun formatDuration(seconds: Int): String {

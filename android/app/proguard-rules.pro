@@ -21,3 +21,6 @@
 # WebRTC
 -keep class org.webrtc.** { *; }
 -keep class io.getstream.webrtc.** { *; }
+
+# ExoPlayer / Media3
+-keep class androidx.media3.** { *; }

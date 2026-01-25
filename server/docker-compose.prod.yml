@@ -12,9 +12,11 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
       - QDRANT_URL=http://qdrant:6333
+      - LOG_DIR=/app/logs
     volumes:
       - uploads_data:/app/public/uploads
       - apk_data:/app/public/apk
+      - logs_data:/app/logs
       - ./agent-config.json:/app/agent-config.json:ro
     depends_on:
       mongodb:
@@ -73,4 +75,5 @@ volumes:
   mongodb_data:
   uploads_data:
   apk_data:
+  logs_data:
   qdrant_data:

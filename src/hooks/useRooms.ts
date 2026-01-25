@@ -46,6 +46,11 @@ const convertServerMessage = (msg: ServerMessage, currentUserId: string | undefi
   let fileName: string | undefined;
   let fileSize: number | undefined;
   let mimeType: string | undefined;
+  let videoUrl: string | undefined;
+  let thumbnailUrl: string | null | undefined;
+  let duration: number | undefined;
+  let width: number | undefined;
+  let height: number | undefined;
 
   if (msg.type === 'image') {
     image = msg.content;
@@ -54,6 +59,14 @@ const convertServerMessage = (msg: ServerMessage, currentUserId: string | undefi
   } else if (msg.type === 'file') {
     fileUrl = msg.content;
     fileName = msg.fileName;
+    fileSize = msg.fileSize;
+    mimeType = msg.mimeType;
+  } else if (msg.type === 'video') {
+    videoUrl = msg.content;
+    thumbnailUrl = (msg as any).thumbnailUrl;
+    duration = (msg as any).duration;
+    width = (msg as any).width;
+    height = (msg as any).height;
     fileSize = msg.fileSize;
     mimeType = msg.mimeType;
   } else {
@@ -77,6 +90,11 @@ const convertServerMessage = (msg: ServerMessage, currentUserId: string | undefi
     fileName,
     fileSize,
     mimeType,
+    videoUrl,
+    thumbnailUrl,
+    duration,
+    width,
+    height,
     sender: isSender ? 'me' : 'them',
     senderName,
     senderId: actualSenderId,
@@ -395,6 +413,34 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     return () => unsubMessageRead();
   }, [userId]);
 
+  // Listen for video thumbnail ready events
+  useEffect(() => {
+    const unsubThumbnail = socketService.on('video:thumbnail-ready', (data: any) => {
+      const { messageId, thumbnailUrl, duration, width, height } = data;
+      console.log('[Thumbnail] Event received:', { messageId, thumbnailUrl });
+
+      setMessages(prev => {
+        console.log('[Thumbnail] Current messages:', prev.map(m => ({ id: m.id, serverMessageId: m.serverMessageId, type: m.type })));
+        return prev.map(m => {
+          // Match by serverMessageId or id
+          if (m.serverMessageId === messageId || m.id === messageId) {
+            console.log('[Thumbnail] Match found, updating message:', m.id);
+            return {
+              ...m,
+              thumbnailUrl,
+              duration: duration ?? m.duration,
+              width: width ?? m.width,
+              height: height ?? m.height,
+            };
+          }
+          return m;
+        });
+      });
+    });
+
+    return () => unsubThumbnail();
+  }, []);
+
   // Note: user:status-changed is now handled by UserStatusContext
 
   // Listen for room events (created, updated)
@@ -596,6 +642,69 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     }
   }, [currentRoomId, username]);
 
+  // Send video to current room
+  const sendVideo = useCallback(async (
+    videoBlob: Blob,
+    caption?: string,
+    onProgress?: (progress: number) => void
+  ) => {
+    if (!currentRoomId) return;
+
+    const messageId = crypto.randomUUID();
+
+    // Add optimistic message
+    const optimisticMessage: Message = {
+      id: messageId,
+      type: 'video',
+      fileSize: videoBlob.size,
+      mimeType: videoBlob.type,
+      caption,
+      thumbnailUrl: null, // Will be updated when server generates it
+      sender: 'me',
+      senderName: username,
+      timestamp: new Date(),
+      status: 'sending',
+      clientSource: 'desktop',
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+
+    // Track pending send to prevent duplicate from socket event
+    pendingSendsRef.current.add(messageId);
+
+    try {
+      const response = await api.uploadVideoWithProgress(
+        currentRoomId,
+        videoBlob,
+        caption,
+        onProgress || (() => {})
+      );
+
+      // Update message with server response
+      setMessages(prev => prev.map(m =>
+        m.id === messageId
+          ? {
+              ...m,
+              serverMessageId: response.message._id,
+              videoUrl: response.message.content,
+              thumbnailUrl: (response.message as any).thumbnailUrl || null,
+              duration: (response.message as any).duration,
+              width: (response.message as any).width,
+              height: (response.message as any).height,
+              status: 'sent',
+              clientSource: response.message.clientSource,
+            }
+          : m
+      ));
+    } catch (error) {
+      console.error('Failed to send video:', error);
+      setMessages(prev => prev.map(m =>
+        m.id === messageId ? { ...m, status: 'failed' } : m
+      ));
+    } finally {
+      pendingSendsRef.current.delete(messageId);
+    }
+  }, [currentRoomId, username]);
+
   // Mark messages as read
   const markAsRead = useCallback(async (messageIds: string[]) => {
     if (!currentRoomId || messageIds.length === 0) return;
@@ -789,6 +898,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     setMessages,
     sendMessage,
     sendFile,
+    sendVideo,
     markAsRead,
     deleteMessage,
     reactToMessage,

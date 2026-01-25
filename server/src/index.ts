@@ -20,6 +20,7 @@ import { Room, User } from './models/index.js';
 import { getCollectionInfo } from './memory/qdrant.service.js';
 import { ensureLiveCollection } from './memory/live.service.js';
 import { scheduleDigest } from './memory/digest.service.js';
+import { reflectionService } from './agent/reflection.service.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -57,6 +58,46 @@ app.use('/agent', agentRoutes);
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Eko reflection status
+app.get('/reflection/status', async (_req, res) => {
+  res.json({
+    status: reflectionService.getStatus(),
+    stats: await reflectionService.getStats(),
+  });
+});
+
+// Trigger manual reflection
+app.post('/reflection/trigger', async (req, res) => {
+  try {
+    const { roomId } = req.body;
+    const result = await reflectionService.triggerReflection({ roomId });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// Trigger dry-run reflection - doesn't post message
+app.post('/reflection/trigger/dry-run', async (req, res) => {
+  try {
+    const { roomId } = req.body;
+    const result = await reflectionService.triggerReflection({ roomId, dryRun: true });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// Reset reflection cooldown
+app.post('/reflection/reset-cooldown', async (_req, res) => {
+  try {
+    await reflectionService.resetCooldown();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+  }
 });
 
 // Server disk space
@@ -137,6 +178,9 @@ app.set('io', io);
 // Setup log streamer (admin-only, protected by auth)
 setupLogStreamer(io);
 
+// Initialize reflection service
+reflectionService.init(io);
+
 // Start server
 const PORT = process.env.PORT || 3001;
 
@@ -193,6 +237,7 @@ async function ensureLobby() {
 function ensureUploadDirectories() {
   const imageDir = path.join(process.cwd(), 'public', 'uploads', 'images');
   const fileDir = path.join(process.cwd(), 'public', 'uploads', 'files');
+  const videoDir = path.join(process.cwd(), 'public', 'uploads', 'videos');
 
   if (!fs.existsSync(imageDir)) {
     fs.mkdirSync(imageDir, { recursive: true });
@@ -201,6 +246,10 @@ function ensureUploadDirectories() {
   if (!fs.existsSync(fileDir)) {
     fs.mkdirSync(fileDir, { recursive: true });
     console.log('✓ Created files upload directory');
+  }
+  if (!fs.existsSync(videoDir)) {
+    fs.mkdirSync(videoDir, { recursive: true });
+    console.log('✓ Created videos upload directory');
   }
 }
 

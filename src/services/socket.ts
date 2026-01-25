@@ -55,6 +55,7 @@ class SocketService {
       'message:read',
       'message:deleted',
       'message:reacted',
+      'video:thumbnail-ready',
       // WebRTC signaling events
       'webrtc:offer',
       'webrtc:answer',
@@ -80,6 +81,10 @@ class SocketService {
       'room:deleted',
       // Unread count updates
       'unread:updated',
+      // Eko status
+      'eko:status',
+      'reflection:update',
+      'reflection:progress',
     ];
 
     events.forEach((event) => {
