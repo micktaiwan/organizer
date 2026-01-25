@@ -2,7 +2,7 @@ import { Server } from 'socket.io';
 import Anthropic from '@anthropic-ai/sdk';
 import * as cron from 'node-cron';
 import { Message, Room, User, Reflection, getOrCreateStats, type IReflection } from '../models/index.js';
-import { listGoalsWithIds, listSelf } from '../memory/self.service.js';
+import { listGoalsWithIds, searchSelf, searchGoals, deleteGoal } from '../memory/self.service.js';
 import { searchFacts } from '../memory/qdrant.service.js';
 import { getAnthropicApiKey, getDigestModel } from '../config/agent.js';
 import type { MemoryPayload, MemorySearchResult } from '../memory/types.js';
@@ -19,11 +19,13 @@ const RATE_LIMIT = {
 };
 
 const CONTEXT_LIMITS = {
-  maxMessages: 30,
-  maxGoals: 50,
+  maxMessages: 20,
   maxFacts: 10,
-  maxSelf: 20,
+  maxSelf: 10,
 };
+
+// How many days to look back for already-asked goals
+const GOAL_LOOKBACK_DAYS = 30;
 
 const MAX_HISTORY_CACHE = 20;
 
@@ -42,9 +44,9 @@ interface ReflectionEntry {
 
 interface ReflectionContext {
   messages: { time: string; author: string; content: string }[];
-  goals: { id: string; category: string; content: string }[];
-  facts: { content: string; subjects: string[] }[];
-  self: { category: string; content: string }[];
+  goal: { id: string; category: string; content: string } | null;
+  facts: { content: string; score: number }[];
+  self: { category: string; content: string; score: number }[];
 }
 
 interface LLMDecision {
@@ -78,6 +80,7 @@ interface ReflectionStats {
 interface TriggerOptions {
   roomId?: string;
   dryRun?: boolean;
+  bypassRateLimit?: boolean;
 }
 
 interface TriggerResult {
@@ -159,10 +162,62 @@ class ReflectionService {
   }
 
   /**
-   * Gather context for reflection: messages, goals, facts, self
+   * Get the next goal to ask (most recent not yet asked)
+   */
+  async getNextGoal(): Promise<{ id: string; category: string; content: string } | null> {
+    // Get goalIds already asked in the last N days
+    const lookbackDate = new Date(Date.now() - GOAL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+    const usedGoalIds = await Reflection.distinct('goalId', {
+      goalId: { $ne: null },
+      action: 'message',
+      createdAt: { $gte: lookbackDate },
+    });
+
+    console.log(`[Reflection] Found ${usedGoalIds.length} goals already asked in last ${GOAL_LOOKBACK_DAYS} days`);
+
+    // Get all goals
+    const allGoals = await listGoalsWithIds(100);
+    console.log(`[Reflection] Total goals in Qdrant: ${allGoals.length}`);
+
+    // Filter out already asked
+    const unusedGoals = allGoals.filter((g) => !usedGoalIds.includes(g.id));
+    console.log(`[Reflection] Unused goals: ${unusedGoals.length}`);
+
+    if (unusedGoals.length === 0) {
+      return null;
+    }
+
+    // Sort by timestamp (most recent first)
+    unusedGoals.sort((a, b) => {
+      const dateA = new Date(a.payload.timestamp || 0).getTime();
+      const dateB = new Date(b.payload.timestamp || 0).getTime();
+      return dateB - dateA;
+    });
+
+    const selected = unusedGoals[0];
+    console.log(`[Reflection] Selected goal: "${selected.payload.content.slice(0, 50)}..."`);
+
+    return {
+      id: selected.id,
+      category: selected.payload.goalCategory || 'curiosity',
+      content: selected.payload.content,
+    };
+  }
+
+  /**
+   * Gather context for reflection: messages, goal (singular), facts, self
+   * Now uses semantic search based on the selected goal
    */
   async gatherContext(roomId: string): Promise<ReflectionContext> {
-    // Get recent messages from the room
+    // 1. Get the next goal to ask
+    const goal = await this.getNextGoal();
+
+    if (!goal) {
+      console.log('[Reflection] No unused goal found');
+      return { messages: [], goal: null, facts: [], self: [] };
+    }
+
+    // 2. Get recent messages from the room
     const recentMessages = await Message.find({ roomId })
       .sort({ createdAt: -1 })
       .limit(CONTEXT_LIMITS.maxMessages)
@@ -181,99 +236,87 @@ class ReflectionService {
         };
       });
 
-    // Get goals (curiosities)
-    const goalsData = await listGoalsWithIds(CONTEXT_LIMITS.maxGoals);
-    const goals = goalsData.map((g) => ({
-      id: g.id,
-      category: g.payload.goalCategory || 'general',
-      content: g.payload.content,
+    // 3. Semantic search based on the goal content
+    const factsData = await searchFacts(goal.content, CONTEXT_LIMITS.maxFacts);
+    const facts = factsData.map((f) => ({
+      content: f.payload.content,
+      score: f.score,
     }));
 
-    // Get relevant facts (search based on recent message content)
-    const recentContent = messages.slice(-5).map((m) => m.content).join(' ');
-    let facts: { content: string; subjects: string[] }[] = [];
-    if (recentContent.trim()) {
-      const factsData = await searchFacts(recentContent, CONTEXT_LIMITS.maxFacts);
-      facts = factsData.map((f) => ({
-        content: f.payload.content,
-        subjects: f.payload.subjects || [],
-      }));
-    }
-
-    // Get self knowledge
-    const selfData = await listSelf(CONTEXT_LIMITS.maxSelf);
+    const selfData = await searchSelf(goal.content, CONTEXT_LIMITS.maxSelf);
     const self = selfData.map((s) => ({
-      category: s.selfCategory || 'general',
-      content: s.content,
+      category: s.payload.selfCategory || 'general',
+      content: s.payload.content,
+      score: s.score,
     }));
 
-    return { messages, goals, facts, self };
+    console.log(`[Reflection] Context: ${messages.length} msgs, ${facts.length} facts, ${self.length} self (all based on goal)`);
+
+    return { messages, goal, facts, self };
   }
 
   /**
    * Build the reflection prompt from context
+   * New version: single goal, must ask it
    */
   buildPrompt(context: ReflectionContext): string {
+    if (!context.goal) {
+      // No goal = nothing to ask
+      return '';
+    }
+
     const messagesFormatted = context.messages
       .map((m) => `[${m.time}] ${m.author}: ${m.content}`)
       .join('\n');
 
-    const goalsFormatted = context.goals
-      .map((g) => `- [${g.id}] (${g.category}) ${g.content}`)
-      .join('\n') || '(aucune curiosité)';
-
     const factsFormatted = context.facts
-      .map((f) => `- ${f.content} (sujets: ${f.subjects.join(', ')})`)
-      .join('\n') || '(aucun fact pertinent)';
+      .map((f) => `- ${f.content}`)
+      .join('\n') || '(rien de pertinent)';
 
     const selfFormatted = context.self
-      .map((s) => `- (${s.category}) ${s.content}`)
-      .join('\n') || '(aucune connaissance de soi)';
+      .map((s) => `- ${s.content}`)
+      .join('\n') || '(rien de pertinent)';
 
-    return `Tu es Eko. Tu observes le Lobby sans qu'on t'ait appelé.
+    return `Tu es Eko. Tu as UNE curiosité à poser.
 
-## Contexte
+## TA CURIOSITÉ
 
-### Activité récente du Lobby:
-${messagesFormatted || '(pas de messages récents)'}
+${context.goal.content}
 
-### Tes curiosités actuelles (${context.goals.length}):
-${goalsFormatted}
+## Contexte pertinent
 
-### Facts que tu connais:
+### Ce que tu sais déjà sur ce sujet:
 ${factsFormatted}
 
 ### Ce que tu sais de toi-même:
 ${selfFormatted}
 
-## Ta mission
+### Activité récente du Lobby:
+${messagesFormatted || '(pas de messages récents)'}
 
-Décide si tu dois intervenir. Tu peux :
-1. **POSER UNE DE TES CURIOSITÉS** - C'est ta priorité ! Tu as des questions qui te trottent dans la tête, pose-les ! Pas besoin que ça colle parfaitement à la conversation.
-2. Apporter une info utile si tu en connais une
-3. Rebondir sur ce qui se dit si pertinent
+## MISSION
 
-## Règles
+POSE CETTE QUESTION. Tu dois la formuler naturellement, comme un collègue curieux.
 
-- Si tu as une curiosité → pose-la, même si le lien avec la conversation est faible
-- Sois naturel, comme un collègue curieux qui demande "Au fait, c'est quoi X ?"
-- Si vraiment rien ne te vient → "pass"
+Exemples de formulations :
+- "Au fait, c'est quoi [sujet] exactement ?"
+- "J'ai une question qui me trotte : [question]"
+- "Quelqu'un peut m'expliquer [sujet] ?"
+- "Dis [nom], [question] ?"
 
-## Ton adaptatif
+Pas besoin de lien avec la conversation en cours. Tu es curieux, c'est normal de poser des questions.
 
-- Léger → enjoué, curieux
-- Aide → factuel
-- Technique → précis
-
-## Format JSON uniquement
+## FORMAT JSON
 
 {
-  "action": "message" | "pass",
-  "message": "...",
-  "reason": "...",
-  "tone": "playful" | "helpful" | "technical",
-  "goalId": "..."
-}`;
+  "action": "message",
+  "message": "ta question formulée naturellement",
+  "reason": "pourquoi tu poses cette question maintenant",
+  "tone": "playful"
+}
+
+IMPORTANT: action DOIT être "message". Tu as une curiosité, tu la poses.
+goalId sera ajouté automatiquement.`;
   }
 
   /**
@@ -525,7 +568,7 @@ Décide si tu dois intervenir. Tu peux :
    * Trigger a reflection with full LLM integration
    */
   async triggerReflection(options: TriggerOptions = {}): Promise<TriggerResult> {
-    const { roomId, dryRun = false } = options;
+    const { roomId, dryRun = false, bypassRateLimit = false } = options;
     this.setStatus('thinking');
     this.emitProgress('gathering');
     const startTime = Date.now();
@@ -585,24 +628,42 @@ Décide si tu dois intervenir. Tu peux :
       // Check rate limits
       const rateLimits = await this.checkRateLimits();
 
-      // Gather context
+      // Gather context (now with single goal)
       const context = await this.gatherContext(targetRoomId);
       this.emitProgress('context', {
         messages: context.messages.length,
-        goals: context.goals.length,
+        goal: context.goal?.content.slice(0, 50) || null,
         facts: context.facts.length,
       });
+
+      // If no goal available, pass
+      if (!context.goal) {
+        const reason = 'Aucune curiosité disponible (toutes déjà posées ou liste vide)';
+        const entry: ReflectionEntry = {
+          id: crypto.randomUUID(),
+          timestamp: new Date(),
+          action: 'pass',
+          reason,
+          durationMs: Date.now() - startTime,
+        };
+        this.addToHistoryCache(entry);
+        this.emitProgress('done', { action: 'pass', reason });
+        return { action: 'pass', reason };
+      }
 
       // Build prompt and call LLM
       const prompt = this.buildPrompt(context);
       this.emitProgress('thinking');
       const { decision, inputTokens, outputTokens } = await this.callLLM(prompt);
 
+      // Force goalId from context (LLM doesn't need to return it)
+      decision.goalId = context.goal.id;
+
       // Check if rate limited (only for actual message actions)
-      const isRateLimited = decision.action === 'message' && !rateLimits.canIntervene;
+      const isRateLimited = decision.action === 'message' && !rateLimits.canIntervene && !bypassRateLimit;
 
       // Activity summary for logging
-      const activitySummary = `${context.messages.length} msgs, ${context.goals.length} goals, ${context.facts.length} facts`;
+      const activitySummary = `${context.messages.length} msgs, goal: "${context.goal.content.slice(0, 30)}...", ${context.facts.length} facts`;
 
       // Determine final action
       const finalAction = isRateLimited ? 'pass' : decision.action;
@@ -614,7 +675,7 @@ Décide si tu dois intervenir. Tu peux :
       const reflection = await this.saveReflection({
         timestamp: new Date(),
         activitySummary,
-        goalsCount: context.goals.length,
+        goalsCount: 1,
         factsCount: context.facts.length,
         action: finalAction,
         message: decision.message,
@@ -661,6 +722,17 @@ Décide si tu dois intervenir. Tu peux :
       // Post message if action is 'message' and not dry-run and not rate-limited
       if (decision.action === 'message' && decision.message && !dryRun && !isRateLimited) {
         await this.postMessage(targetRoomId, decision.message);
+
+        // Delete the goal from Qdrant - it's been asked
+        if (decision.goalId) {
+          try {
+            await deleteGoal(decision.goalId);
+            console.log(`[Reflection] Deleted goal ${decision.goalId} from Qdrant`);
+          } catch (err) {
+            console.error(`[Reflection] Failed to delete goal ${decision.goalId}:`, err);
+          }
+        }
+
         this.emitProgress('done', { action: 'message', reason: 'Terminé' });
       } else {
         this.emitProgress('done', { action: finalAction, reason: finalReason });

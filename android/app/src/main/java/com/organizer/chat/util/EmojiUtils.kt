@@ -475,9 +475,9 @@ object EmojiUtils {
         """(?<=^|\s)(?:$pattern)(?=${'$'}|\s|[.,!?;:\])"'()])""".toRegex()
     }
 
-    // Compile shortcode regex once: :name (single colon, no closing colon)
+    // Compile shortcode regex once: :name or :name: (optional closing colon)
     private val SHORTCODE_REGEX: Regex =
-        """(?<=^|\s):([a-z0-9_+-]+)(?=${'$'}|\s|[.,!?;:\])"'()])""".toRegex()
+        """(?<=^|\s):([a-z0-9_+-]+):?(?=${'$'}|\s|[.,!?;\])"'()])""".toRegex()
 
     fun convertEmojis(text: String): String {
         var result = EMOTICON_REGEX.replace(text) { match ->
