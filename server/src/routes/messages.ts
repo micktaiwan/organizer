@@ -254,6 +254,14 @@ router.post('/read-bulk', async (req: AuthRequest, res: Response): Promise<void>
       }
     );
 
+    // Update lastReadAt for this member in the room
+    if (roomId) {
+      await Room.updateOne(
+        { _id: roomId, 'members.userId': new Types.ObjectId(req.userId) },
+        { $set: { 'members.$.lastReadAt': new Date() } }
+      );
+    }
+
     // Broadcast read status to room via socket
     const io = req.app.get('io');
     if (roomId && io) {
