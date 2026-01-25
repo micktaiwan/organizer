@@ -1,9 +1,19 @@
 package com.organizer.chat.ui.screens.call
 
+import android.app.Activity
+import android.os.Build
 import android.util.Log
+import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -19,12 +30,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import android.content.res.Configuration
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,9 +50,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.organizer.chat.audio.CallAudioManager
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.webrtc.CallState
+import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
+import org.webrtc.VideoFrame
+import org.webrtc.VideoSink
 import org.webrtc.VideoTrack
 
 private const val TAG = "CallScreen"
@@ -43,20 +65,34 @@ private const val TAG = "CallScreen"
 fun CallScreen(
     callState: CallState,
     remoteVideoTrack: VideoTrack?,
+    remoteScreenTrack: VideoTrack? = null,
     localVideoTrack: VideoTrack?,
     isMuted: Boolean,
     isCameraEnabled: Boolean,
     isRemoteCameraEnabled: Boolean,
+    isRemoteScreenSharing: Boolean = false,
     audioRoute: CallAudioManager.AudioRoute = CallAudioManager.AudioRoute.EARPIECE,
+    isFrontCamera: Boolean = true,
     onToggleMute: () -> Unit,
     onToggleCamera: () -> Unit,
+    onSwitchCamera: () -> Unit = {},
     onToggleSpeaker: () -> Unit = {},
     onEndCall: () -> Unit,
     onInitRemoteRenderer: (SurfaceViewRenderer) -> Unit,
+    onInitScreenShareRenderer: (SurfaceViewRenderer) -> Unit = {},
     onInitLocalRenderer: (SurfaceViewRenderer) -> Unit,
     onScreenVisible: () -> Unit = {},
     onMinimize: (() -> Unit)? = null
 ) {
+    // Keep screen on during the call
+    val activity = LocalContext.current as? Activity
+    DisposableEffect(Unit) {
+        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     // Allow back to minimize the call when connected
     BackHandler(enabled = callState is CallState.Connected && onMinimize != null) {
         onMinimize?.invoke()
@@ -69,9 +105,13 @@ fun CallScreen(
     }
 
     var remoteRenderer by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
+    var screenShareRenderer by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
     var localRenderer by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
     var attachedRemoteTrack by remember { mutableStateOf<VideoTrack?>(null) }
+    var attachedScreenTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var attachedLocalTrack by remember { mutableStateOf<VideoTrack?>(null) }
+    var screenVideoWidth by remember { mutableIntStateOf(0) }
+    var screenVideoHeight by remember { mutableIntStateOf(0) }
 
     // Call duration timer
     var callDurationSeconds by remember { mutableStateOf(0) }
@@ -85,6 +125,10 @@ fun CallScreen(
         is CallState.Reconnecting -> callState.withCamera
         else -> false
     }
+
+    // Detect landscape orientation
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     LaunchedEffect(isConnected) {
         if (isConnected) {
@@ -118,6 +162,45 @@ fun CallScreen(
                     Log.e(TAG, "Error removing sink from remote track", e)
                 }
                 attachedRemoteTrack = null
+            }
+        }
+    }
+
+    // Attach/detach screen share track to renderer when either changes
+    DisposableEffect(remoteScreenTrack, screenShareRenderer) {
+        val renderer = screenShareRenderer
+        val track = remoteScreenTrack
+        var dimensionSink: VideoSink? = null
+
+        if (track != null && renderer != null) {
+            try {
+                track.addSink(renderer)
+                attachedScreenTrack = track
+                // Add a lightweight sink to track video frame dimensions
+                dimensionSink = VideoSink { frame: VideoFrame ->
+                    val w = frame.rotatedWidth
+                    val h = frame.rotatedHeight
+                    if (w != screenVideoWidth || h != screenVideoHeight) {
+                        screenVideoWidth = w
+                        screenVideoHeight = h
+                        Log.d(TAG, "ScreenShare frame dimensions: ${w}x${h} (AR=${w.toFloat()/h})")
+                    }
+                }
+                track.addSink(dimensionSink)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding sink to screen share track", e)
+            }
+        }
+
+        onDispose {
+            if (renderer != null && attachedScreenTrack != null) {
+                try {
+                    attachedScreenTrack?.removeSink(renderer)
+                    dimensionSink?.let { attachedScreenTrack?.removeSink(it) }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing sink from screen share track", e)
+                }
+                attachedScreenTrack = null
             }
         }
     }
@@ -164,6 +247,19 @@ fun CallScreen(
                     Log.e(TAG, "Error releasing remote renderer", e)
                 }
             }
+            screenShareRenderer?.let { renderer ->
+                try {
+                    attachedScreenTrack?.removeSink(renderer)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing screen share sink on dispose", e)
+                }
+                attachedScreenTrack = null
+                try {
+                    renderer.release()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error releasing screen share renderer", e)
+                }
+            }
             localRenderer?.let { renderer ->
                 try {
                     attachedLocalTrack?.removeSink(renderer)
@@ -181,7 +277,40 @@ fun CallScreen(
     }
 
     val hasRemoteVideo = remoteVideoTrack != null && isConnected && isRemoteCameraEnabled
+    val hasScreenShare = remoteScreenTrack != null && isConnected && isRemoteScreenSharing
     val hasLocalVideo = localVideoTrack != null && withCamera && isCameraEnabled
+
+    // Hide all overlays in landscape mode during screen share (fullscreen mode)
+    val hideOverlays = isLandscape && hasScreenShare
+
+    // Enable immersive fullscreen mode when hideOverlays is true
+    DisposableEffect(hideOverlays) {
+        if (hideOverlays && activity != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                activity.window.insetsController?.let { controller ->
+                    controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                    controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                activity.window.decorView.systemUiVisibility = (
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                )
+            }
+        }
+        onDispose {
+            if (activity != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    activity.window.insetsController?.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                } else {
+                    @Suppress("DEPRECATION")
+                    activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                }
+            }
+        }
+    }
 
     // Debug logging
     Log.d(TAG, "hasRemoteVideo=$hasRemoteVideo (track=${remoteVideoTrack != null}, connected=$isConnected, remoteCamEnabled=$isRemoteCameraEnabled)")
@@ -226,31 +355,179 @@ fun CallScreen(
                 )
             )
     ) {
-        // Remote video (full screen, only when we have video)
-        if (hasRemoteVideo) {
-            AndroidView(
-                factory = { context ->
-                    SurfaceViewRenderer(context).apply {
-                        setEnableHardwareScaler(true)
-                        setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                        onInitRemoteRenderer(this)
-                        remoteRenderer = this
+        // Screen share video (full screen, when receiving screen share)
+        if (hasScreenShare) {
+            var scale by remember { mutableFloatStateOf(1f) }
+            var offsetX by remember { mutableFloatStateOf(0f) }
+            var offsetY by remember { mutableFloatStateOf(0f) }
+            var containerWidth by remember { mutableFloatStateOf(0f) }
+            var containerHeight by remember { mutableFloatStateOf(0f) }
+            var initialScaleApplied by remember { mutableStateOf(false) }
+
+            // TEST: Disabled auto-zoom - scale stays at 1
+            // LaunchedEffect(screenVideoWidth, screenVideoHeight, containerWidth, containerHeight) {
+            //     if (!initialScaleApplied && screenVideoWidth > 0 && screenVideoHeight > 0
+            //         && containerWidth > 0 && containerHeight > 0) {
+            //         val videoAR = screenVideoWidth.toFloat() / screenVideoHeight.toFloat()
+            //         val containerAR = containerWidth / containerHeight
+            //         val fitWidth: Float
+            //         val fitHeight: Float
+            //         if (videoAR > containerAR) {
+            //             fitWidth = containerWidth
+            //             fitHeight = containerWidth / videoAR
+            //         } else {
+            //             fitHeight = containerHeight
+            //             fitWidth = containerHeight * videoAR
+            //         }
+            //         val fillScale = max(containerWidth / fitWidth, containerHeight / fitHeight)
+            //         scale = fillScale.coerceAtMost(5f)
+            //         initialScaleApplied = true
+            //     }
+            // }
+
+            Box(
+                contentAlignment = androidx.compose.ui.Alignment.Center,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { size ->
+                        containerWidth = size.width.toFloat()
+                        containerHeight = size.height.toFloat()
                     }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                // Reset to fill scale
+                                val videoAR = if (screenVideoWidth > 0 && screenVideoHeight > 0)
+                                    screenVideoWidth.toFloat() / screenVideoHeight.toFloat()
+                                else 16f / 9f
+                                val containerAR = if (containerHeight > 0) containerWidth / containerHeight else 1f
+                                val fitHeight = if (videoAR > containerAR) containerWidth / videoAR else containerHeight
+                                val fitWidth = if (videoAR > containerAR) containerWidth else containerHeight * videoAR
+                                val fillScale = max(containerWidth / fitWidth, containerHeight / fitHeight)
+                                scale = fillScale
+                                offsetX = 0f
+                                offsetY = 0f
+                            }
+                        )
+                    }
+                    .pointerInput(Unit) {
+                        detectTransformGestures { centroid, pan, zoom, _ ->
+                            val oldScale = scale
+                            val newScale = oldScale * zoom
+
+                            // Adjust offset to keep centroid fixed during zoom
+                            val centroidX = centroid.x - containerWidth / 2f
+                            val centroidY = centroid.y - containerHeight / 2f
+                            offsetX = (offsetX - centroidX) * (newScale / oldScale) + centroidX + pan.x
+                            offsetY = (offsetY - centroidY) * (newScale / oldScale) + centroidY + pan.y
+
+                            scale = newScale
+                        }
+                    }
+            ) {
+                AndroidView(
+                    factory = { context ->
+                        SurfaceViewRenderer(context).apply {
+                            setEnableHardwareScaler(false)
+                            onInitScreenShareRenderer(this)
+                            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                            Log.d(TAG, "ScreenShare renderer: FIT, hardware scaler OFF")
+                            screenShareRenderer = this
+                            viewTreeObserver.addOnGlobalLayoutListener {
+                                Log.d(TAG, "ScreenShare SurfaceView laid out: ${width}x${height}")
+                            }
+                        }
+                    },
+                    update = { view ->
+                        view.scaleX = scale
+                        view.scaleY = scale
+                        view.translationX = offsetX
+                        view.translationY = offsetY
+                    },
+                    modifier = if (screenVideoWidth > 0 && screenVideoHeight > 0) {
+                        // Force view to video aspect ratio - eliminates scaling ambiguity
+                        val videoAR = screenVideoWidth.toFloat() / screenVideoHeight.toFloat()
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(videoAR)
+                    } else {
+                        Modifier.fillMaxSize()
+                    }
+                )
+            }
         }
 
-        // Content overlay
-        Column(
+        // Remote video - always present, changes size based on screen share state
+        // (avoids destroying/recreating renderer which breaks track frame delivery)
+        // Hide PIP in landscape fullscreen mode
+        if (hasRemoteVideo && !(hasScreenShare && hideOverlays)) {
+            var camPipOffsetX by remember { mutableFloatStateOf(0f) }
+            var camPipOffsetY by remember { mutableFloatStateOf(0f) }
+            var isCamPipDragging by remember { mutableStateOf(false) }
+
+            // Reset PiP offset when transitioning back to fullscreen
+            LaunchedEffect(hasScreenShare) {
+                if (!hasScreenShare) {
+                    camPipOffsetX = 0f
+                    camPipOffsetY = 0f
+                }
+            }
+
+            val remoteVideoModifier = if (hasScreenShare) {
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 16.dp, top = 80.dp)
+                    .offset { IntOffset(camPipOffsetX.roundToInt(), camPipOffsetY.roundToInt()) }
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { isCamPipDragging = true },
+                            onDragEnd = { isCamPipDragging = false },
+                            onDragCancel = { isCamPipDragging = false },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                camPipOffsetX += dragAmount.x
+                                camPipOffsetY += dragAmount.y
+                            }
+                        )
+                    }
+                    .size(width = 120.dp, height = 160.dp)
+                    .border(
+                        width = if (isCamPipDragging) 3.dp else 2.dp,
+                        color = if (isCamPipDragging) Color(0xFFFFA726) else Color.White.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black)
+            } else {
+                Modifier.fillMaxSize()
+            }
+
+            Box(modifier = remoteVideoModifier) {
+                AndroidView(
+                    factory = { context ->
+                        SurfaceViewRenderer(context).apply {
+                            setEnableHardwareScaler(true)
+                            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                            setZOrderMediaOverlay(true)
+                            onInitRemoteRenderer(this)
+                            remoteRenderer = this
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        // Content overlay (hidden in landscape fullscreen mode)
+        if (!hideOverlays) Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp)
                 .padding(top = 80.dp, bottom = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Avatar placeholder (hide when video is showing)
-            if (!hasRemoteVideo) {
+            // Avatar placeholder (hide when video or screen share is showing)
+            if (!hasRemoteVideo && !hasScreenShare) {
                 val username = when (callState) {
                     is CallState.Calling -> callState.targetUsername
                     is CallState.Connecting -> callState.remoteUsername
@@ -271,24 +548,6 @@ fun CallScreen(
                 Spacer(modifier = Modifier.height(32.dp))
             }
 
-            // Username
-            val displayName = when (callState) {
-                is CallState.Calling -> callState.targetUsername
-                is CallState.Connecting -> callState.remoteUsername
-                is CallState.Connected -> callState.remoteUsername
-                is CallState.Reconnecting -> callState.remoteUsername
-                else -> ""
-            }
-
-            Text(
-                text = displayName,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
             // Status text
             when (callState) {
                 is CallState.Calling -> {
@@ -304,8 +563,22 @@ fun CallScreen(
                     Text(
                         text = formatDuration(callDurationSeconds),
                         fontSize = 16.sp,
-                        color = Color(0xFF4CAF50)
+                        color = Color.White,
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
                     )
+                    if (isRemoteScreenSharing) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Partage d'écran",
+                            fontSize = 13.sp,
+                            color = Color.White,
+                            modifier = Modifier
+                                .background(AccentBlue.copy(alpha = 0.9f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 10.dp, vertical = 3.dp)
+                        )
+                    }
                 }
                 else -> {}
             }
@@ -389,6 +662,26 @@ fun CallScreen(
                             modifier = Modifier.size(24.dp)
                         )
                     }
+
+                    // Switch camera button (only when camera is enabled)
+                    if (isCameraEnabled) {
+                        IconButton(
+                            onClick = onSwitchCamera,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(
+                                    Color.White.copy(alpha = 0.2f),
+                                    CircleShape
+                                )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Cameraswitch,
+                                contentDescription = if (isFrontCamera) "Caméra arrière" else "Caméra avant",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
                 } else {
                     // Placeholder to keep layout balanced
                     Spacer(modifier = Modifier.size(56.dp))
@@ -396,13 +689,35 @@ fun CallScreen(
             }
         }
 
-        // Local video PiP (bottom right)
-        if (hasLocalVideo) {
+        // Local video PiP (bottom right, draggable) - hidden during screen share
+        if (hasLocalVideo && !hasScreenShare) {
+            var pipOffsetX by remember { mutableFloatStateOf(0f) }
+            var pipOffsetY by remember { mutableFloatStateOf(0f) }
+            var isDragging by remember { mutableStateOf(false) }
+
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 16.dp, bottom = 140.dp)
+                    .offset { IntOffset(pipOffsetX.roundToInt(), pipOffsetY.roundToInt()) }
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { isDragging = true },
+                            onDragEnd = { isDragging = false },
+                            onDragCancel = { isDragging = false },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                pipOffsetX += dragAmount.x
+                                pipOffsetY += dragAmount.y
+                            }
+                        )
+                    }
                     .size(width = 100.dp, height = 140.dp)
+                    .border(
+                        width = if (isDragging) 3.dp else 0.dp,
+                        color = Color(0xFFFFA726),
+                        shape = RoundedCornerShape(12.dp)
+                    )
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color.Black)
             ) {

@@ -124,6 +124,9 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _callToggleCamera = MutableSharedFlow<CallToggleCameraEvent>(replay = 0, extraBufferCapacity = 1)
     val callToggleCamera: SharedFlow<CallToggleCameraEvent> = _callToggleCamera.asSharedFlow()
 
+    private val _callScreenShare = MutableSharedFlow<CallScreenShareEvent>(replay = 0, extraBufferCapacity = 1)
+    val callScreenShare: SharedFlow<CallScreenShareEvent> = _callScreenShare.asSharedFlow()
+
     private val _callAnsweredElsewhere = MutableSharedFlow<CallAnsweredElsewhereEvent>(extraBufferCapacity = 5)
     val callAnsweredElsewhere: SharedFlow<CallAnsweredElsewhereEvent> = _callAnsweredElsewhere.asSharedFlow()
 
@@ -683,6 +686,21 @@ class SocketManager(private val tokenManager: TokenManager) {
                 }
             }
 
+            on("call:screen-share") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = CallScreenShareEvent(
+                        from = data.getString("from"),
+                        enabled = data.getBoolean("enabled"),
+                        trackId = if (data.has("trackId")) data.optString("trackId", null) else null
+                    )
+                    Log.d(TAG, "Received call:screen-share from ${event.from}, enabled=${event.enabled}, trackId=${event.trackId}")
+                    _callScreenShare.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing call:screen-share", e)
+                }
+            }
+
             on("call:answered-elsewhere") { args ->
                 try {
                     val data = args[0] as JSONObject
@@ -1026,6 +1044,12 @@ data class CallEndEvent(
 data class CallToggleCameraEvent(
     val from: String,
     val enabled: Boolean
+)
+
+data class CallScreenShareEvent(
+    val from: String,
+    val enabled: Boolean,
+    val trackId: String?
 )
 
 data class CallAnsweredElsewhereEvent(

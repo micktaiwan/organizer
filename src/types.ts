@@ -66,7 +66,7 @@ export interface Contact {
   createdAt: Date;
 }
 
-export type CallState = 'idle' | 'calling' | 'incoming' | 'connected';
+export type CallState = 'idle' | 'calling' | 'incoming' | 'connected' | 'reconnecting';
 
 export type UserStatus = 'available' | 'busy' | 'away' | 'dnd';
 

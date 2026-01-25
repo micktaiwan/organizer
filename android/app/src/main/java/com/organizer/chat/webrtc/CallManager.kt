@@ -111,8 +111,19 @@ class CallManager(
     private val _localVideoTrack = MutableStateFlow<VideoTrack?>(null)
     val localVideoTrack: StateFlow<VideoTrack?> = _localVideoTrack.asStateFlow()
 
+    private val _isFrontCamera = MutableStateFlow(true)
+    val isFrontCamera: StateFlow<Boolean> = _isFrontCamera.asStateFlow()
+
     private val _isRemoteCameraEnabled = MutableStateFlow(true)
     val isRemoteCameraEnabled: StateFlow<Boolean> = _isRemoteCameraEnabled.asStateFlow()
+
+    private val _remoteScreenTrack = MutableStateFlow<VideoTrack?>(null)
+    val remoteScreenTrack: StateFlow<VideoTrack?> = _remoteScreenTrack.asStateFlow()
+
+    private val _isRemoteScreenSharing = MutableStateFlow(false)
+    val isRemoteScreenSharing: StateFlow<Boolean> = _isRemoteScreenSharing.asStateFlow()
+
+    private var remoteScreenTrackId: String? = null
 
     init {
         // Register as callback for notification actions
@@ -120,7 +131,6 @@ class CallManager(
     }
 
     fun startCall(targetUserId: String, targetUsername: String, withCamera: Boolean) {
-        Log.d(TAG, "Starting call to $targetUserId ($targetUsername) withCamera=$withCamera")
 
         _callState.value = CallState.Calling(targetUserId, targetUsername, withCamera)
 
@@ -152,7 +162,6 @@ class CallManager(
             delay(OUTGOING_CALL_TIMEOUT_MS)
             val currentState = _callState.value
             if (currentState is CallState.Calling && currentState.targetUserId == targetUserId) {
-                Log.d(TAG, "Outgoing call timeout - no answer")
                 _callError.tryEmit(CallError(CallErrorType.TIMEOUT_NO_ANSWER, "Pas de réponse"))
                 cleanup()
             }
@@ -166,7 +175,6 @@ class CallManager(
 
     fun acceptCall(withCamera: Boolean, fromBackground: Boolean = false) {
         val incomingState = _callState.value as? CallState.Incoming ?: return
-        Log.d(TAG, "Accepting call from ${incomingState.fromUserId}, fromBackground=$fromBackground")
 
         // Cancel incoming timeout
         cancelIncomingCallTimeout()
@@ -212,7 +220,6 @@ class CallManager(
         pendingOfferFrom = null
 
         if (offer != null && offerFrom == fromUserId) {
-            Log.d(TAG, "Processing buffered offer")
             processOfferWithPendingCandidates(fromUserId, offer)
         } else {
             // No offer, but process any pending candidates
@@ -223,7 +230,6 @@ class CallManager(
     private fun processPendingIceCandidates() {
         synchronized(candidatesLock) {
             if (pendingIceCandidates.isNotEmpty()) {
-                Log.d(TAG, "Processing ${pendingIceCandidates.size} buffered ICE candidates")
                 pendingIceCandidates.forEach { pending ->
                     webRTCClient?.addIceCandidate(pending.candidate, pending.sdpMid ?: "", pending.sdpMLineIndex)
                 }
@@ -235,10 +241,8 @@ class CallManager(
     private fun processOfferWithPendingCandidates(from: String, offer: String) {
         scope.launch {
             try {
-                Log.d(TAG, "Setting remote description...")
                 webRTCClient?.setRemoteDescription(offer, SessionDescription.Type.OFFER)
                 isRemoteDescriptionSet = true
-                Log.d(TAG, "Remote description set successfully")
 
                 // Now process pending ICE candidates
                 processPendingIceCandidates()
@@ -247,7 +251,6 @@ class CallManager(
                 val answer = webRTCClient?.createAnswer()
                 answer?.let {
                     socketManager.sendWebRTCAnswer(from, it)
-                    Log.d(TAG, "Sent WebRTC answer to $from")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to handle offer", e)
@@ -259,7 +262,6 @@ class CallManager(
 
     fun rejectCall() {
         val incomingState = _callState.value as? CallState.Incoming ?: return
-        Log.d(TAG, "Rejecting call from ${incomingState.fromUserId}")
 
         // Cancel incoming timeout
         cancelIncomingCallTimeout()
@@ -277,7 +279,6 @@ class CallManager(
 
     fun endCall() {
         val remoteUserId = _callState.value.remoteUserIdOrNull
-        Log.d(TAG, "Ending call with $remoteUserId")
 
         remoteUserId?.let {
             socketManager.endCall(it)
@@ -289,10 +290,8 @@ class CallManager(
 
     // Handlers for socket events
     fun handleCallRequest(from: String, fromUsername: String, withCamera: Boolean) {
-        Log.d(TAG, "Incoming call from $from ($fromUsername)")
 
         if (_callState.value != CallState.Idle) {
-            Log.d(TAG, "Already in a call, rejecting")
             socketManager.rejectCall(from)
             return
         }
@@ -302,7 +301,6 @@ class CallManager(
         // Check Do Not Disturb mode
         val isDndActive = isDndEnabled()
         if (isDndActive) {
-            Log.d(TAG, "DND mode active, silent notification only")
         } else {
             // Start ringing
             audioManager.startRinging()
@@ -321,7 +319,6 @@ class CallManager(
             delay(INCOMING_CALL_TIMEOUT_MS)
             val currentState = _callState.value
             if (currentState is CallState.Incoming && currentState.fromUserId == fromUserId) {
-                Log.d(TAG, "Incoming call timeout - auto rejecting")
                 _callError.tryEmit(CallError(CallErrorType.TIMEOUT_INCOMING, "Appel manqué"))
                 rejectCall()
             }
@@ -351,7 +348,6 @@ class CallManager(
             return
         }
 
-        Log.d(TAG, "Call accepted by $from")
 
         // Cancel outgoing timeout
         cancelOutgoingCallTimeout()
@@ -383,25 +379,21 @@ class CallManager(
 
         if (callingState.targetUserId != from) return
 
-        Log.d(TAG, "Call rejected by $from")
         cancelOutgoingCallTimeout()
         _callError.tryEmit(CallError(CallErrorType.REJECTED, "Appel refusé"))
         cleanup()
     }
 
     fun handleCallEnd(from: String) {
-        Log.d(TAG, "Call ended by $from")
         if (_callState.value.involvesUser(from)) {
             cleanup()
         }
     }
 
     fun handleWebRTCOffer(from: String, offer: String) {
-        Log.d(TAG, "Received WebRTC offer from $from")
 
         // If WebRTC not initialized yet, buffer the offer
         if (webRTCClient == null) {
-            Log.d(TAG, "WebRTC not ready, buffering offer")
             pendingOffer = offer
             pendingOfferFrom = from
             return
@@ -411,13 +403,11 @@ class CallManager(
     }
 
     fun handleWebRTCAnswer(from: String, answer: String) {
-        Log.d(TAG, "Received WebRTC answer from $from")
 
         scope.launch {
             try {
                 webRTCClient?.setRemoteDescription(answer, SessionDescription.Type.ANSWER)
                 isRemoteDescriptionSet = true
-                Log.d(TAG, "Remote description set from answer")
 
                 // Process any pending ICE candidates from remote
                 processPendingIceCandidates()
@@ -430,11 +420,9 @@ class CallManager(
     }
 
     fun handleIceCandidate(from: String, candidate: String, sdpMid: String?, sdpMLineIndex: Int) {
-        Log.d(TAG, "Received ICE candidate from $from")
 
         // If WebRTC not initialized or remote description not set yet, buffer the candidate
         if (webRTCClient == null || !isRemoteDescriptionSet) {
-            Log.d(TAG, "WebRTC not ready or remote description not set, buffering ICE candidate")
             synchronized(candidatesLock) {
                 pendingIceCandidates.add(PendingIceCandidate(candidate, sdpMid, sdpMLineIndex))
             }
@@ -445,7 +433,6 @@ class CallManager(
     }
 
     fun handleWebRTCClose(from: String) {
-        Log.d(TAG, "WebRTC close from $from")
         if (_callState.value.involvesUser(from)) {
             cleanup()
         }
@@ -459,15 +446,32 @@ class CallManager(
             else -> false
         }
         if (isRelevant) {
-            Log.d(TAG, "Remote camera toggled: $enabled")
             _isRemoteCameraEnabled.value = enabled
+        }
+    }
+
+    fun handleRemoteScreenShare(from: String, enabled: Boolean, trackId: String?) {
+        val currentState = _callState.value
+        val isRelevant = when (currentState) {
+            is CallState.Connected -> currentState.remoteUserId == from
+            is CallState.Reconnecting -> currentState.remoteUserId == from
+            else -> false
+        }
+        if (!isRelevant) return
+
+        if (enabled && trackId != null) {
+            remoteScreenTrackId = trackId
+            _isRemoteScreenSharing.value = true
+        } else {
+            remoteScreenTrackId = null
+            _isRemoteScreenSharing.value = false
+            _remoteScreenTrack.value = null
         }
     }
 
     fun handleCallAnsweredElsewhere() {
         val currentState = _callState.value
         if (currentState is CallState.Incoming) {
-            Log.d(TAG, "Call answered on another device, dismissing")
             cancelIncomingCallTimeout()
             audioManager.stopRinging()
             _callError.tryEmit(CallError(CallErrorType.ANSWERED_ELSEWHERE, "Appel pris sur un autre appareil"))
@@ -477,7 +481,6 @@ class CallManager(
     }
 
     private fun initializeWebRTC(withCamera: Boolean, startCameraImmediately: Boolean = true) {
-        Log.d(TAG, "Initializing WebRTC, withCamera=$withCamera, startCameraImmediately=$startCameraImmediately")
 
         webRTCClient = WebRTCClient(context, this)
         webRTCClient?.initPeerConnectionFactory()
@@ -497,7 +500,6 @@ class CallManager(
                 pendingCameraStart = false
             } else {
                 // Defer camera start until UI is visible (e.g., accepting from notification in background)
-                Log.d(TAG, "Deferring camera start until UI is visible")
                 pendingCameraStart = true
             }
         } else if (withCamera) {
@@ -511,7 +513,6 @@ class CallManager(
      */
     fun startCameraIfPending() {
         if (!pendingCameraStart) {
-            Log.d(TAG, "startCameraIfPending: no pending camera start")
             return
         }
 
@@ -526,14 +527,12 @@ class CallManager(
             return
         }
 
-        Log.d(TAG, "Starting deferred camera")
         webRTCClient?.startLocalVideo(null)
         _localVideoTrack.value = webRTCClient?.getLocalVideoTrack()
         pendingCameraStart = false
 
         // Notify remote that our camera is now active
         _callState.value.remoteUserIdOrNull?.let {
-            Log.d(TAG, "Notifying remote that camera is active")
             socketManager.toggleCamera(it, true)
         }
     }
@@ -554,6 +553,12 @@ class CallManager(
         remoteUserId?.let { socketManager.toggleCamera(it, enabled) }
     }
 
+    fun switchCamera() {
+        webRTCClient?.switchCamera { isFront ->
+            _isFrontCamera.value = isFront
+        }
+    }
+
     fun toggleSpeaker() {
         audioManager.toggleSpeaker()
     }
@@ -563,12 +568,16 @@ class CallManager(
         _remoteVideoTrack.value?.addSink(renderer)
     }
 
+    fun initScreenShareRenderer(renderer: SurfaceViewRenderer) {
+        webRTCClient?.initRemoteRenderer(renderer)
+        _remoteScreenTrack.value?.addSink(renderer)
+    }
+
     fun initLocalRenderer(renderer: SurfaceViewRenderer) {
         webRTCClient?.initLocalRenderer(renderer)
         val track = _localVideoTrack.value
         if (track != null) {
             track.addSink(renderer)
-            Log.d(TAG, "Local video track attached to renderer")
         } else {
             Log.w(TAG, "initLocalRenderer called but localVideoTrack is null")
         }
@@ -576,11 +585,9 @@ class CallManager(
 
     private fun cleanup() {
         if (isCleaningUp) {
-            Log.d(TAG, "Already cleaning up, skipping")
             return
         }
         isCleaningUp = true
-        Log.d(TAG, "Cleaning up")
 
         // Cancel all timeouts
         cancelOutgoingCallTimeout()
@@ -602,7 +609,11 @@ class CallManager(
         _remoteVideoTrack.value = null
         _remoteAudioTrack.value = null
         _localVideoTrack.value = null
+        _remoteScreenTrack.value = null
         _isRemoteCameraEnabled.value = true
+        _isRemoteScreenSharing.value = false
+        _isFrontCamera.value = true
+        remoteScreenTrackId = null
 
         // Clear pending signaling
         pendingOffer = null
@@ -625,7 +636,6 @@ class CallManager(
                 Log.e(TAG, "Error closing WebRTC client", e)
             }
             isCleaningUp = false
-            Log.d(TAG, "Cleanup complete")
         }
     }
 
@@ -645,7 +655,6 @@ class CallManager(
     }
 
     override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
-        Log.d(TAG, "ICE connection state changed: $state")
 
         when (state) {
             PeerConnection.IceConnectionState.CONNECTED,
@@ -662,12 +671,10 @@ class CallManager(
                             remoteUsername = currentState.remoteUsername,
                             withCamera = currentState.withCamera
                         )
-                        Log.d(TAG, "Call connected")
 
                         // Perform pending renegotiation if needed (e.g., camera added after answer was sent)
                         if (pendingRenegotiation) {
                             pendingRenegotiation = false
-                            Log.d(TAG, "Performing deferred renegotiation")
                             performRenegotiation(currentState.remoteUserId)
                         }
                     }
@@ -677,7 +684,6 @@ class CallManager(
                             remoteUsername = currentState.remoteUsername,
                             withCamera = currentState.withCamera
                         )
-                        Log.d(TAG, "Call reconnected")
                     }
                     else -> {}
                 }
@@ -688,7 +694,6 @@ class CallManager(
                 val currentState = _callState.value
                 when (currentState) {
                     is CallState.Connected -> {
-                        Log.d(TAG, "Connection lost, attempting ICE restart")
                         _callState.value = CallState.Reconnecting(
                             remoteUserId = currentState.remoteUserId,
                             remoteUsername = currentState.remoteUsername,
@@ -699,7 +704,6 @@ class CallManager(
                     }
                     is CallState.Connecting -> {
                         // During initial connection, go to Reconnecting
-                        Log.d(TAG, "Connection interrupted during setup, attempting ICE restart")
                         _callState.value = CallState.Reconnecting(
                             remoteUserId = currentState.remoteUserId,
                             remoteUsername = currentState.remoteUsername,
@@ -713,13 +717,11 @@ class CallManager(
             }
 
             PeerConnection.IceConnectionState.FAILED -> {
-                Log.d(TAG, "ICE connection failed, cleaning up")
                 _callError.tryEmit(CallError(CallErrorType.NETWORK_ERROR, "Connexion perdue"))
                 cleanup()
             }
 
             PeerConnection.IceConnectionState.CLOSED -> {
-                Log.d(TAG, "ICE connection closed, cleaning up")
                 cleanup()
             }
 
@@ -733,7 +735,6 @@ class CallManager(
             delay(RECONNECT_TIMEOUT_MS)
             val currentState = _callState.value
             if (currentState is CallState.Reconnecting) {
-                Log.d(TAG, "Reconnect timeout - connection lost")
                 _callError.tryEmit(CallError(CallErrorType.NETWORK_ERROR, "Connexion perdue"))
                 cleanup()
             }
@@ -746,15 +747,18 @@ class CallManager(
     }
 
     override fun onAddTrack(track: MediaStreamTrack, streams: Array<out MediaStream>) {
-        Log.d(TAG, "Track added: ${track.kind()}")
 
         when (track) {
             is VideoTrack -> {
-                Log.d(TAG, "Remote video track added")
-                _remoteVideoTrack.value = track
+                // If we already have a camera track, any new video track is the screen share
+                if (_remoteVideoTrack.value != null) {
+                    _remoteScreenTrack.value = track
+                    _isRemoteScreenSharing.value = true
+                } else {
+                    _remoteVideoTrack.value = track
+                }
             }
             is AudioTrack -> {
-                Log.d(TAG, "Remote audio track added")
                 _remoteAudioTrack.value = track
                 track.setEnabled(true)
             }
@@ -763,15 +767,24 @@ class CallManager(
 
     override fun onRemoveTrack(receiver: RtpReceiver) {
         val track = receiver.track()
-        Log.d(TAG, "Track removed: ${track?.kind()}")
 
         when (track) {
             is VideoTrack -> {
-                Log.d(TAG, "Remote video track removed")
-                _remoteVideoTrack.value = null
+                val trackId = track.id()
+                when {
+                    _remoteVideoTrack.value?.id() == trackId -> {
+                        _remoteVideoTrack.value = null
+                    }
+                    _remoteScreenTrack.value?.id() == trackId -> {
+                        _remoteScreenTrack.value = null
+                        _isRemoteScreenSharing.value = false
+                        remoteScreenTrackId = null
+                    }
+                    else -> {
+                    }
+                }
             }
             is AudioTrack -> {
-                Log.d(TAG, "Remote audio track removed")
                 _remoteAudioTrack.value = null
             }
         }
@@ -782,7 +795,6 @@ class CallManager(
 
         // If we're connecting, defer renegotiation until connected
         if (currentState is CallState.Connecting) {
-            Log.d(TAG, "onRenegotiationNeeded: connecting, deferring renegotiation until connected")
             pendingRenegotiation = true
             return
         }
@@ -795,7 +807,6 @@ class CallManager(
         }
 
         if (remoteUserId == null) {
-            Log.d(TAG, "onRenegotiationNeeded: not in a call, ignoring")
             return
         }
 
@@ -803,13 +814,11 @@ class CallManager(
     }
 
     private fun performRenegotiation(remoteUserId: String) {
-        Log.d(TAG, "performRenegotiation: creating new offer for $remoteUserId")
         scope.launch {
             try {
                 val offer = webRTCClient?.createOffer()
                 offer?.let {
                     socketManager.sendWebRTCOffer(remoteUserId, it)
-                    Log.d(TAG, "Renegotiation offer sent to $remoteUserId")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to create renegotiation offer", e)
@@ -819,7 +828,6 @@ class CallManager(
 
     // CallService.CallActionCallback implementation
     override fun onAcceptCall(callerId: String, withCamera: Boolean) {
-        Log.d(TAG, "Accept call from notification: $callerId")
         val currentState = _callState.value
         if (currentState is CallState.Incoming && currentState.fromUserId == callerId) {
             // Accept from notification = background, defer camera start until UI is visible
@@ -828,7 +836,6 @@ class CallManager(
     }
 
     override fun onRejectCall(callerId: String) {
-        Log.d(TAG, "Reject call from notification: $callerId")
         val currentState = _callState.value
         if (currentState is CallState.Incoming && currentState.fromUserId == callerId) {
             rejectCall()
@@ -836,7 +843,6 @@ class CallManager(
     }
 
     override fun onEndCall() {
-        Log.d(TAG, "End call from notification")
         endCall()
     }
 }

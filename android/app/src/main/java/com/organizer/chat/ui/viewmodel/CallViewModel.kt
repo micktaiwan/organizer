@@ -19,9 +19,12 @@ class CallViewModel(
     // Delegated states from CallManager
     val callState: StateFlow<CallState> = callManager.callState
     val remoteVideoTrack: StateFlow<VideoTrack?> = callManager.remoteVideoTrack
+    val remoteScreenTrack: StateFlow<VideoTrack?> = callManager.remoteScreenTrack
     val localVideoTrack: StateFlow<VideoTrack?> = callManager.localVideoTrack
     val isRemoteCameraEnabled: StateFlow<Boolean> = callManager.isRemoteCameraEnabled
+    val isRemoteScreenSharing: StateFlow<Boolean> = callManager.isRemoteScreenSharing
     val audioRoute: StateFlow<CallAudioManager.AudioRoute> = callManager.audioRoute
+    val isFrontCamera: StateFlow<Boolean> = callManager.isFrontCamera
     val callError: SharedFlow<CallError> = callManager.callError
 
     // UI-local states
@@ -73,6 +76,10 @@ class CallViewModel(
         callManager.setLocalVideoEnabled(newEnabled)
     }
 
+    fun switchCamera() {
+        callManager.switchCamera()
+    }
+
     fun toggleSpeaker() {
         callManager.toggleSpeaker()
     }
@@ -85,6 +92,10 @@ class CallViewModel(
 
     fun initRemoteRenderer(renderer: org.webrtc.SurfaceViewRenderer) {
         callManager.initRemoteRenderer(renderer)
+    }
+
+    fun initScreenShareRenderer(renderer: org.webrtc.SurfaceViewRenderer) {
+        callManager.initScreenShareRenderer(renderer)
     }
 
     fun initLocalRenderer(renderer: org.webrtc.SurfaceViewRenderer) {

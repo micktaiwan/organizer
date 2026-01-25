@@ -335,6 +335,15 @@ export function setupSocket(httpServer: HttpServer): Server {
       });
     });
 
+    // Screen share toggle
+    socket.on('call:screen-share', (data: { to: string; enabled: boolean; trackId?: string }) => {
+      io.to(`user:${data.to}`).emit('call:screen-share', {
+        from: userId,
+        enabled: data.enabled,
+        trackId: data.trackId,
+      });
+    });
+
     // ===== End Signaling Events =====
 
     // ===== Notes Events =====

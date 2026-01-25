@@ -38,7 +38,7 @@
   border: 1px solid #e0e0e0;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  min-width: 280px;
+  min-width: 380px;
   max-height: 400px;
   display: flex;
   flex-direction: column;
@@ -73,6 +73,25 @@
   background: #f5f5f5;
 }
 
+.room-member-item.bot {
+  background: #1a1a1a;
+  border-radius: 8px;
+  margin: 0.25rem 0.5rem;
+  border-bottom: none;
+}
+
+.room-member-item.bot:hover {
+  background: #252525;
+}
+
+.room-member-item.bot .member-name {
+  color: #e0e0e0;
+}
+
+.room-member-item.bot .member-username {
+  color: #888;
+}
+
 .room-member-item:last-child {
   border-bottom: none;
 }
@@ -82,10 +101,22 @@
   min-width: 0;
 }
 
-.member-name {
+.member-line1 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.member-line2 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.member-name {
   font-weight: 500;
   font-size: 0.9rem;
   color: #333;
@@ -94,27 +125,15 @@
 .member-username {
   font-size: 0.75rem;
   color: #999;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .member-version {
-  margin-left: 0.5rem;
   padding: 0.125rem 0.375rem;
   background: rgba(107, 159, 255, 0.15);
   color: #6b9fff;
   border-radius: 4px;
   font-size: 0.65rem;
   font-weight: 500;
-}
-
-.member-status-info {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-  font-size: 0.75rem;
 }
 
 .member-status-label {
@@ -227,8 +246,7 @@
 }
 
 .member-status-message {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #666;
   font-style: italic;
-  margin-top: 0.25rem;
 }

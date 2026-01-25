@@ -66,6 +66,7 @@ class SocketService {
       'call:reject',
       'call:end',
       'call:toggle-camera',
+      'call:screen-share',
       // Notes events
       'note:created',
       'note:updated',
@@ -182,6 +183,10 @@ class SocketService {
 
   toggleCamera(to: string, enabled: boolean) {
     this.socket?.emit('call:toggle-camera', { to, enabled });
+  }
+
+  sendScreenShare(to: string, enabled: boolean, trackId?: string) {
+    this.socket?.emit('call:screen-share', { to, enabled, trackId });
   }
 
   get isConnected(): boolean {

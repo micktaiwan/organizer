@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Globe, Hash, Search } from 'lucide-react';
+import { Hash, Search } from 'lucide-react';
 import { Room } from '../../services/api';
 import { UserStatus } from '../../types';
 import { RoomMembers } from './RoomMembers';
@@ -10,7 +10,6 @@ interface RoomHeaderProps {
   room: Room;
   currentUserId?: string;
   username: string;
-  serverName?: string;
   userStatus: UserStatus;
   userStatusMessage: string | null;
   userStatusExpiresAt?: string | null;
@@ -18,8 +17,6 @@ interface RoomHeaderProps {
   callState: string;
   onStartCall: (targetUserId: string, withCamera: boolean) => void;
   onStatusChange: (status: UserStatus, statusMessage: string | null, isMuted: boolean) => void;
-  onOpenSettings: () => void;
-  onChangeServer: () => void;
   onOpenSearch?: () => void;
 }
 
@@ -27,7 +24,6 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   room,
   currentUserId,
   username,
-  serverName,
   userStatus,
   userStatusMessage,
   userStatusExpiresAt,
@@ -35,8 +31,6 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   callState,
   onStartCall,
   onStatusChange,
-  onOpenSettings,
-  onChangeServer,
   onOpenSearch,
 }) => {
   return (
@@ -66,44 +60,23 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
 
       {/* Right: User Controls */}
       <div className="room-header__controls">
-        <div className="room-header__toolbar">
-          {onOpenSearch && (
-            <button
-              className="room-header__btn"
-              onClick={onOpenSearch}
-              title="Rechercher"
-            >
-              <Search size={18} />
-            </button>
-          )}
+        {onOpenSearch && (
           <button
             className="room-header__btn"
-            onClick={onOpenSettings}
-            title="Paramètres"
+            onClick={onOpenSearch}
+            title="Rechercher"
           >
-            <Settings size={18} />
+            <Search size={18} />
           </button>
-          <button
-            className="room-header__btn"
-            onClick={onChangeServer}
-            title={serverName ? `Serveur: ${serverName}` : 'Changer de serveur'}
-          >
-            <Globe size={18} />
-          </button>
-        </div>
-
-        <div className="room-header__divider" />
-
-        <div className="room-header__user">
-          <StatusSelector
-            currentStatus={userStatus}
-            currentStatusMessage={userStatusMessage}
-            currentStatusExpiresAt={userStatusExpiresAt}
-            currentIsMuted={userIsMuted}
-            onStatusChange={onStatusChange}
-          />
-          <UserSwitcher username={username} />
-        </div>
+        )}
+        <StatusSelector
+          currentStatus={userStatus}
+          currentStatusMessage={userStatusMessage}
+          currentStatusExpiresAt={userStatusExpiresAt}
+          currentIsMuted={userIsMuted}
+          onStatusChange={onStatusChange}
+        />
+        <UserSwitcher username={username} />
       </div>
     </header>
   );

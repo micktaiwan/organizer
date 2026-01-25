@@ -105,17 +105,6 @@
   justify-content: flex-end;
 }
 
-.room-header__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem;
-  background: #fff;
-  border: 1px solid #e5e5e5;
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
 .room-header__btn {
   display: flex;
   align-items: center;
@@ -141,20 +130,8 @@
   transform: scale(0.96);
 }
 
-.room-header__divider {
-  width: 1px;
-  height: 28px;
-  background: linear-gradient(180deg, transparent 0%, #ddd 20%, #ddd 80%, transparent 100%);
-}
-
-.room-header__user {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 /* Override StatusSelector in header context */
-.room-header__user .status-selector-trigger {
+.room-header__controls .status-selector-trigger {
   height: 34px;
   padding: 0 0.625rem;
   border-radius: 8px;
@@ -164,51 +141,17 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-.room-header__user .status-selector-trigger:hover {
+.room-header__controls .status-selector-trigger:hover {
   background: #f8f8f8;
   border-color: #ddd;
 }
 
-.room-header__user .status-label {
+.room-header__controls .status-label {
   display: none;
 }
 
-.room-header__user .status-message {
+.room-header__controls .status-message {
   display: none;
-}
-
-.room-header__user-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 34px;
-  padding: 0 0.75rem;
-  border: 1px solid #e5e5e5;
-  border-radius: 8px;
-  background: #fff;
-  color: #444;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-.room-header__user-btn:hover {
-  background: #fff5f5;
-  border-color: #ffcccc;
-  color: #cc3333;
-}
-
-.room-header__user-btn:hover svg {
-  color: #cc3333;
-}
-
-.room-header__username {
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ============================================
@@ -236,11 +179,6 @@
     color: #777;
   }
 
-  .room-header__toolbar {
-    background: #2a2a2a;
-    border-color: #3a3a3a;
-  }
-
   .room-header__btn {
     color: #999;
   }
@@ -252,10 +190,6 @@
 
   .room-header__btn:active {
     background: #3a3a3a;
-  }
-
-  .room-header__divider {
-    background: linear-gradient(180deg, transparent 0%, #444 20%, #444 80%, transparent 100%);
   }
 
   .room-header__actions .room-members-toggle {
@@ -270,27 +204,16 @@
     color: #fff;
   }
 
-  .room-header__user .status-selector-trigger {
+  .room-header__controls .status-selector-trigger {
     background: #2a2a2a;
     border-color: #3a3a3a;
   }
 
-  .room-header__user .status-selector-trigger:hover {
+  .room-header__controls .status-selector-trigger:hover {
     background: #333;
     border-color: #444;
   }
 
-  .room-header__user-btn {
-    background: #2a2a2a;
-    border-color: #3a3a3a;
-    color: #ccc;
-  }
-
-  .room-header__user-btn:hover {
-    background: #3a2525;
-    border-color: #5a3333;
-    color: #ff6666;
-  }
 }
 
 /* ============================================
@@ -323,30 +246,11 @@
     font-size: 1rem;
   }
 
-  .room-header__toolbar {
-    padding: 0.125rem;
-    gap: 0.125rem;
-  }
-
   .room-header__btn {
     width: 28px;
     height: 28px;
   }
 
-  .room-header__divider {
-    display: none;
-  }
-
-  .room-header__username {
-    display: none;
-  }
-
-  .room-header__user-btn {
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    justify-content: center;
-  }
 }
 
 @media (max-width: 480px) {
@@ -354,14 +258,14 @@
     padding: 0.625rem 0.75rem;
   }
 
-  .room-header__user .status-selector-trigger {
+  .room-header__controls .status-selector-trigger {
     width: 32px;
     height: 32px;
     padding: 0;
     justify-content: center;
   }
 
-  .room-header__user .status-selector-trigger .status-dot {
+  .room-header__controls .status-selector-trigger .status-dot {
     margin: 0;
   }
 }

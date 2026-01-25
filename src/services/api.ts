@@ -15,6 +15,7 @@ interface ApiError {
 
 interface User {
   id: string;
+  _id?: string; // MongoDB ObjectId (present when populated)
   username: string;
   displayName: string;
   email: string;

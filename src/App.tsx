@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { load } from "@tauri-apps/plugin-store";
-import { MessageCircle, StickyNote, Bug } from "lucide-react";
+import { MessageCircle, StickyNote, Bug, Globe } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
@@ -41,6 +41,7 @@ import { PetDebugScreen } from "./components/PetDebug";
 import { LogPanel } from "./components/LogPanel";
 import { ErrorIndicator } from "./components/ErrorIndicator";
 import { StatusBar } from "./components/StatusBar";
+import { ConfirmModal } from "./components/ui/ConfirmModal";
 
 import "./App.css";
 
@@ -241,12 +242,17 @@ function App() {
     remoteUsername,
     localVideoRef,
     remoteVideoRef,
+    remoteScreenVideoRef,
+    isScreenSharing,
+    remoteIsScreenSharing,
     startCall,
     acceptCall,
     rejectCall,
     endCall,
     toggleMic,
     toggleCamera,
+    startScreenShare,
+    stopScreenShare,
   } = useWebRTCCall({ pcRef, addSystemMessage: addCallSystemMessage });
 
   // TODO: Implement contact management in room context
@@ -547,7 +553,14 @@ function App() {
     }
   };
 
-  const handleChangeServer = async () => {
+  const [showServerConfirm, setShowServerConfirm] = useState(false);
+
+  const handleChangeServer = () => {
+    setShowServerConfirm(true);
+  };
+
+  const confirmChangeServer = async () => {
+    setShowServerConfirm(false);
     await logout();
     await resetConfig();
   };
@@ -631,7 +644,6 @@ function App() {
               room={currentRoom}
               currentUserId={user?.id}
               username={username}
-              serverName={selectedServer?.name}
               userStatus={userStatus}
               userStatusMessage={userStatusMessage}
               userStatusExpiresAt={userStatusExpiresAt}
@@ -639,8 +651,6 @@ function App() {
               callState={callState}
               onStartCall={startCall}
               onStatusChange={handleStatusChange}
-              onOpenSettings={() => setShowAdminPanel(true)}
-              onChangeServer={handleChangeServer}
               onOpenSearch={() => setShowSearchOverlay(true)}
             />
           )}
@@ -743,7 +753,11 @@ function App() {
         </div>
       )}
 
-      <StatusBar />
+      <StatusBar
+        onOpenAdmin={() => setShowAdminPanel(true)}
+        onChangeServer={handleChangeServer}
+        serverName={selectedServer?.name}
+      />
 
       {callState === 'incoming' && incomingCallFrom && (
         <IncomingCallModal
@@ -762,8 +776,13 @@ function App() {
         remoteHasCamera={remoteHasCamera}
         localVideoRef={localVideoRef}
         remoteVideoRef={remoteVideoRef}
+        remoteScreenVideoRef={remoteScreenVideoRef}
+        isScreenSharing={isScreenSharing}
+        remoteIsScreenSharing={remoteIsScreenSharing}
         onToggleMic={toggleMic}
         onToggleCamera={toggleCamera}
+        onStartScreenShare={startScreenShare}
+        onStopScreenShare={stopScreenShare}
         onEndCall={endCall}
       />
 
@@ -781,6 +800,18 @@ function App() {
           onCancel={() => setShowContactsModal(false)}
         />
       )} */}
+
+      {showServerConfirm && (
+        <ConfirmModal
+          icon={Globe}
+          title="Changer de serveur"
+          message="Vous allez être déconnecté et redirigé vers le choix de serveur."
+          confirmLabel="Se déconnecter"
+          variant="danger"
+          onConfirm={confirmChangeServer}
+          onCancel={() => setShowServerConfirm(false)}
+        />
+      )}
 
       {showAdminPanel && (
         <AdminPanel onClose={() => setShowAdminPanel(false)} />
