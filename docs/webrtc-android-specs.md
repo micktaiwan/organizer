@@ -4,7 +4,7 @@
 
 L'app Organizer a maintenant les appels WebRTC fonctionnels sur Desktop (Tauri/React). Le serveur est prêt :
 - Signaling WebRTC : `webrtc:offer`, `webrtc:answer`, `webrtc:ice-candidate`, `webrtc:close`
-- Signaling appel : `call:request`, `call:accept`, `call:reject`, `call:end`, `call:toggle-camera`
+- Signaling appel : `call:request`, `call:accept`, `call:reject`, `call:end`, `call:toggle-camera`, `call:screen-share`
 - Autorisation : vérification que les users partagent une room ou sont contacts mutuels
 
 ## Objectif
@@ -26,7 +26,7 @@ Implémenter les appels audio/vidéo WebRTC sur Android (Kotlin) en utilisant la
 | ICE candidates | Trickle ICE (envoi au fur et à mesure, comme Desktop) |
 | Timeout sonnerie | 30 secondes avant abandon automatique |
 | Appel pendant appel | V1: ignoré silencieusement / V2: notification discrète |
-| Switch caméra | Front/back en V2 (nice to have) |
+| Switch caméra | Front/back ✅ |
 | Mode Ne Pas Déranger | Respecté (pas de sonnerie intrusive) |
 | Sonnerie | Sonnerie système par défaut + vibration |
 
@@ -111,10 +111,8 @@ class WebRTCClient(context: Context, signalingClient: SignalingClient) {
     fun addIceCandidate(candidate: IceCandidate)
     fun toggleMute(muted: Boolean)
     fun toggleCamera(enabled: Boolean)
+    fun switchCamera(onDone: ((Boolean) -> Unit)? = null)
     fun close()
-
-    // V2
-    // fun switchCamera()
 }
 ```
 
@@ -141,9 +139,9 @@ class CallViewModel : ViewModel() {
     val isCameraEnabled: StateFlow<Boolean>
     val isRemoteCameraEnabled: StateFlow<Boolean>
     val audioRoute: StateFlow<AudioRoute>  // EARPIECE, SPEAKER (BLUETOOTH en V2)
-
-    // V2
-    // val isFrontCamera: StateFlow<Boolean>
+    val isFrontCamera: StateFlow<Boolean>
+    val isRemoteScreenSharing: StateFlow<Boolean>
+    val remoteScreenTrack: StateFlow<VideoTrack?>
 }
 ```
 
@@ -159,6 +157,8 @@ fun requestCall(to: String, withCamera: Boolean)
 fun acceptCall(to: String, withCamera: Boolean)
 fun rejectCall(to: String)
 fun endCall(to: String)
+fun toggleCamera(to: String, enabled: Boolean)
+fun sendScreenShare(to: String, enabled: Boolean, trackId: String?)
 
 // Réception (dans setupSocketListeners)
 socket.on("webrtc:offer") { /* ... */ }
@@ -169,6 +169,8 @@ socket.on("call:request") { /* ... */ }
 socket.on("call:accept") { /* ... */ }
 socket.on("call:reject") { /* ... */ }
 socket.on("call:end") { /* ... */ }
+socket.on("call:toggle-camera") { /* ... */ }
+socket.on("call:screen-share") { /* ... */ }
 socket.on("call:error") { /* ... */ }
 ```
 
@@ -314,7 +316,7 @@ socket.on("call:error") { /* ... */ }
 
 ## TODO Desktop (parité)
 
-- [ ] Implémenter ICE restart dans `useWebRTCCall.ts` (actuellement non géré)
+- [x] Implémenter ICE restart dans `useWebRTCCall.ts`
 
 ---
 
@@ -432,8 +434,8 @@ Tout ce qu'il faut pour une vraie release.
 Améliorations futures, pas bloquantes pour la release.
 
 **Caméra**
-- [ ] Switch caméra front ↔ back
-- [ ] Miroir vidéo locale (front camera)
+- [x] Switch caméra front ↔ back
+- [x] Miroir vidéo locale (front camera)
 
 **Audio avancé**
 - [ ] Permission BLUETOOTH_CONNECT (Android 12+)
@@ -441,10 +443,18 @@ Améliorations futures, pas bloquantes pour la release.
 - [ ] Sélecteur audio (écouteur / HP / Bluetooth)
 
 **UI avancée**
-- [ ] Vidéo locale draggable (déplacer le petit encart)
+- [x] Vidéo locale draggable (déplacer le petit encart)
+- [x] Keep screen on pendant l'appel
 - [ ] Double-tap pour swap vidéos (locale ↔ distante)
 - [ ] Animation de sonnerie
 - [ ] Picture-in-Picture (continuer l'appel en arrière-plan)
+
+**Partage d'écran**
+- [x] Recevoir un partage d'écran (track vidéo secondaire)
+- [x] Affichage plein écran du partage avec caméra en PiP draggable
+- [x] Mode paysage immersif (fullscreen sans barres système)
+- [x] Pinch-to-zoom et pan sur le partage d'écran
+- [ ] Envoyer un partage d'écran (MediaProjection API)
 
 **Appels multiples**
 - [ ] Notification discrète si appel entrant pendant appel actif
@@ -469,5 +479,7 @@ Améliorations futures, pas bloquantes pour la release.
 
 **Desktop (parité)**
 - [x] Ringback tone sur Desktop (son pendant appel sortant en attente)
-- [ ] ICE restart sur Desktop
+- [x] ICE restart sur Desktop
+- [x] Partage d'écran (envoi + réception)
+- [x] Durée d'appel affichée
 - [ ] Switch caméra sur Desktop (si plusieurs webcams)
