@@ -65,7 +65,7 @@ export interface MessageGroup {
  * Messages with media break the group.
  */
 function hasMedia(msg: Message): boolean {
-  return !!(msg.image || msg.audio || msg.fileUrl);
+  return !!(msg.image || msg.audio || msg.fileUrl || msg.videoUrl);
 }
 
 /**
