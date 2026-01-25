@@ -1,3 +1,8 @@
+/**
+ * [USER_DATA_SYNC] Member populates use user fields.
+ * These fields must stay synchronized with socket events (users:init, user:online).
+ * See docs/specs.md section "Architecture: Sources de données utilisateur".
+ */
 import { Room } from '../models/index.js';
 import { Types } from 'mongoose';
 
@@ -35,7 +40,7 @@ export async function listRooms(options: ListRoomsOptions) {
   }
 
   return Room.find(query)
-    .populate('members.userId', 'username displayName isOnline')
+    .populate('members.userId', 'username displayName isOnline isBot')
     .sort({ lastMessageAt: -1, updatedAt: -1 })
     .limit(limit);
 }

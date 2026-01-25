@@ -4,6 +4,10 @@ import cors from 'cors';
 import { createServer } from 'http';
 import path from 'path';
 import fs from 'fs';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 import { connectDB } from './config/db.js';
 import { setupSocket } from './socket/index.js';
 import { setupLogStreamer } from './utils/logStreamer.js';
@@ -53,6 +57,23 @@ app.use('/agent', agentRoutes);
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Server disk space
+app.get('/disk-space', async (_req, res) => {
+  try {
+    const { stdout } = await execAsync('df -k /');
+    const line = stdout.split('\n')[1];
+    const parts = line.split(/\s+/);
+    const totalKb = parseInt(parts[1], 10);
+    const availableKb = parseInt(parts[3], 10);
+    res.json({
+      free_gb: availableKb / 1048576,
+      total_gb: totalKb / 1048576,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get disk space' });
+  }
 });
 
 // Detailed health check (for diagnostics)

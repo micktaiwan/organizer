@@ -103,13 +103,16 @@ export function setupSocket(httpServer: HttpServer): Server {
       socket.join(`room:${room._id}`);
     }
 
-    // Préparer les données de statut
+    // [USER_DATA_SYNC] Prepare status data for user:online
+    // These fields must stay synchronized with users:init and /rooms API populate
+    // See docs/specs.md section "Architecture: Sources de données utilisateur"
     const userStatusData = {
       userId,
       status: user?.status,
       statusMessage: user?.statusMessage,
       statusExpiresAt: user?.statusExpiresAt,
       isMuted: user?.isMuted,
+      isBot: user?.isBot,
       appVersion: user?.appVersion,
       lastClient: user?.lastClient,
     };
@@ -122,13 +125,15 @@ export function setupSocket(httpServer: HttpServer): Server {
       socket.to(`room:${room._id}`).emit('user:online', { ...userStatusData, roomId: room._id });
     });
 
-    // Envoyer les statuts de tous les utilisateurs dans les mêmes rooms au client qui se connecte
+    // [USER_DATA_SYNC] Send all users' statuses in the same rooms
+    // These fields must stay synchronized with userStatusData and /rooms API populate
+    // See docs/specs.md section "Architecture: Sources de données utilisateur"
     const memberUserIds = userRooms.flatMap(r => r.members.map(m => m.userId));
     const uniqueUserIds = [...new Set(memberUserIds.map(id => id.toString()))];
 
     const usersInSameRooms = await User.find({
       _id: { $in: uniqueUserIds }
-    }).select('_id username displayName status statusMessage statusExpiresAt isMuted isOnline appVersion lastClient');
+    }).select('_id username displayName status statusMessage statusExpiresAt isMuted isOnline isBot appVersion lastClient');
 
     socket.emit('users:init', {
       users: usersInSameRooms.map(u => ({
@@ -140,6 +145,7 @@ export function setupSocket(httpServer: HttpServer): Server {
         statusExpiresAt: u.statusExpiresAt,
         isMuted: u.isMuted,
         isOnline: u.isOnline,
+        isBot: u.isBot,
         appVersion: u.appVersion,
         lastClient: u.lastClient,
       }))
