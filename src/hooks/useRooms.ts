@@ -326,8 +326,13 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     if (!userId) return;
 
     const handleUnreadUpdate = async (data: unknown) => {
-      const { unreadCount } = data as { roomId: string; unreadCount: number };
+      const { roomId, unreadCount } = data as { roomId: string; unreadCount: number };
       console.log('unread:updated', data);
+
+      // Update unreadCount in rooms state
+      setRooms(prev => prev.map(room =>
+        room._id === roomId ? { ...room, unreadCount } : room
+      ));
 
       // Only show badge if window is not focused (Tauri only)
       if (isTauri()) {
@@ -897,6 +902,10 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     messagesRoomIdRef.current = null;
     setMessages([]);
     markedAsReadRef.current.clear();
+    // Reset unread count for this room
+    setRooms(prev => prev.map(room =>
+      room._id === roomId ? { ...room, unreadCount: 0 } : room
+    ));
     // Clear badge when user selects a room (they're actively looking at the app)
     if (hasUnreadRef.current) {
       hasUnreadRef.current = false;
