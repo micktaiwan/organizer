@@ -3,6 +3,15 @@ package com.organizer.chat.ui.screens.gallery
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,16 +25,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Surface
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -46,13 +62,11 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,7 +87,6 @@ import com.organizer.chat.ui.theme.Charcoal
 import com.organizer.chat.ui.theme.CharcoalLight
 import com.organizer.chat.util.FileOpener
 import com.organizer.chat.util.ImageDownloader
-import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +117,15 @@ fun GalleryScreen(
     }
 
     var selectedImageIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+    var selectedVideoFile by remember { mutableStateOf<GalleryFile?>(null) }
+
+    // Grid state for scroll control
+    val gridState = rememberLazyGridState()
+
+    // Scroll to top when filter changes
+    LaunchedEffect(uiState.filter) {
+        gridState.scrollToItem(0)
+    }
 
     // State for delete confirmation dialog
     var pendingDeleteIndex by remember { mutableStateOf<Int?>(null) }
@@ -230,6 +252,19 @@ fun GalleryScreen(
         )
     }
 
+    // Handle video fullscreen dialog
+    selectedVideoFile?.let { file ->
+        val videoUrl = if (file.url.startsWith("/")) {
+            ApiClient.getBaseUrl().trimEnd('/') + file.url
+        } else {
+            file.url
+        }
+        FullscreenVideoDialog(
+            videoUrl = videoUrl,
+            onDismiss = { selectedVideoFile = null }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -281,6 +316,7 @@ fun GalleryScreen(
                     else -> {
                         GalleryGrid(
                             files = uiState.files,
+                            gridState = gridState,
                             hasMorePages = uiState.hasMorePages,
                             onLoadMore = { viewModel.loadMore() },
                             onImageClick = { file ->
@@ -289,6 +325,9 @@ fun GalleryScreen(
                                 if (index >= 0) {
                                     selectedImageIndex = index
                                 }
+                            },
+                            onVideoClick = { file ->
+                                selectedVideoFile = file
                             },
                             onFileClick = { file ->
                                 FileOpener.downloadAndOpenFile(
@@ -326,6 +365,7 @@ private fun FilterChipsRow(
                         when (filter) {
                             GalleryFilter.ALL -> "Tous"
                             GalleryFilter.IMAGES -> "Images"
+                            GalleryFilter.VIDEOS -> "Vidéos"
                             GalleryFilter.FILES -> "Fichiers"
                         }
                     )
@@ -342,31 +382,13 @@ private fun FilterChipsRow(
 @Composable
 private fun GalleryGrid(
     files: List<GalleryFile>,
+    gridState: LazyGridState,
     hasMorePages: Boolean,
     onLoadMore: () -> Unit,
     onImageClick: (GalleryFile) -> Unit,
+    onVideoClick: (GalleryFile) -> Unit,
     onFileClick: (GalleryFile) -> Unit
 ) {
-    val gridState = rememberLazyGridState()
-
-    // Load more when scrolling near the end
-    val shouldLoadMore by remember {
-        derivedStateOf {
-            val lastVisibleItem = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisibleItem >= files.size - 6
-        }
-    }
-
-    LaunchedEffect(shouldLoadMore) {
-        snapshotFlow { shouldLoadMore }
-            .distinctUntilChanged()
-            .collect { should ->
-                if (should && hasMorePages) {
-                    onLoadMore()
-                }
-            }
-    }
-
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         state = gridState,
@@ -379,13 +401,28 @@ private fun GalleryGrid(
             GalleryItem(
                 file = file,
                 onClick = {
-                    if (file.type == "image") {
-                        onImageClick(file)
-                    } else {
-                        onFileClick(file)
+                    when (file.type) {
+                        "image" -> onImageClick(file)
+                        "video" -> onVideoClick(file)
+                        else -> onFileClick(file)
                     }
                 }
             )
+        }
+
+        // "Load more" button
+        if (hasMorePages) {
+            item(span = { GridItemSpan(3) }) {
+                TextButton(
+                    onClick = onLoadMore,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = AccentBlue)
+                ) {
+                    Text("Charger plus")
+                }
+            }
         }
     }
 }
@@ -403,46 +440,130 @@ private fun GalleryItem(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        if (file.type == "image") {
-            val imageUrl = if (file.url.startsWith("/")) {
-                ApiClient.getBaseUrl().trimEnd('/') + file.url
-            } else {
-                file.url
-            }
+        when (file.type) {
+            "image" -> {
+                val imageUrl = if (file.url.startsWith("/")) {
+                    ApiClient.getBaseUrl().trimEnd('/') + file.url
+                } else {
+                    file.url
+                }
 
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = file.caption ?: "Image",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            // File item
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = getFileIcon(file.mimeType),
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                    tint = AccentBlue
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = file.caption ?: "Image",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = file.fileName ?: "Fichier",
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    fontSize = 10.sp
-                )
+            }
+            "video" -> {
+                // Video thumbnail or placeholder
+                val thumbnailUrl = file.thumbnailUrl?.let {
+                    if (it.startsWith("/")) {
+                        ApiClient.getBaseUrl().trimEnd('/') + it
+                    } else {
+                        it
+                    }
+                }
+
+                if (thumbnailUrl != null) {
+                    AsyncImage(
+                        model = thumbnailUrl,
+                        contentDescription = file.caption ?: "Video",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    // Placeholder when no thumbnail
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Videocam,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = Color.Gray
+                        )
+                    }
+                }
+
+                // Play button overlay
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = 0.6f),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Play video",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Duration badge
+                if (file.duration != null && file.duration > 0) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(4.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color.Black.copy(alpha = 0.7f)
+                    ) {
+                        Text(
+                            text = formatVideoDuration(file.duration),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+            else -> {
+                // File item
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = getFileIcon(file.mimeType),
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp),
+                        tint = AccentBlue
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = file.fileName ?: "Fichier",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        fontSize = 10.sp
+                    )
+                }
             }
         }
     }
+}
+
+private fun formatVideoDuration(seconds: Double): String {
+    val totalSeconds = seconds.toInt()
+    val minutes = totalSeconds / 60
+    val secs = totalSeconds % 60
+    return "%d:%02d".format(minutes, secs)
 }
 
 @Composable
@@ -487,13 +608,16 @@ private fun ErrorState(
 @Composable
 private fun EmptyState(filter: GalleryFilter) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),  // Enable pull-to-refresh
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = when (filter) {
                 GalleryFilter.ALL -> "Aucun fichier"
                 GalleryFilter.IMAGES -> "Aucune image"
+                GalleryFilter.VIDEOS -> "Aucune vidéo"
                 GalleryFilter.FILES -> "Aucun fichier"
             },
             style = MaterialTheme.typography.bodyLarge,
@@ -507,5 +631,74 @@ private fun getFileIcon(mimeType: String?): ImageVector {
         mimeType == null -> Icons.Default.InsertDriveFile
         mimeType.contains("pdf") -> Icons.Default.PictureAsPdf
         else -> Icons.Default.InsertDriveFile
+    }
+}
+
+@Composable
+private fun FullscreenVideoDialog(
+    videoUrl: String,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    // Create ExoPlayer instance
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            val mediaItem = MediaItem.fromUri(videoUrl)
+            setMediaItem(mediaItem)
+            prepare()
+            playWhenReady = true
+        }
+    }
+
+    // Release player when dialog closes
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            // ExoPlayer PlayerView
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer
+                        useController = true
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Close button
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color.White
+                )
+            }
+        }
     }
 }

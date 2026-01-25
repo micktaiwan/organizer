@@ -68,22 +68,22 @@ app.get('/reflection/status', async (_req, res) => {
   });
 });
 
-// Trigger manual reflection
+// Trigger manual reflection (bypasses rate limit)
 app.post('/reflection/trigger', async (req, res) => {
   try {
     const { roomId } = req.body;
-    const result = await reflectionService.triggerReflection({ roomId });
+    const result = await reflectionService.triggerReflection({ roomId, bypassRateLimit: true });
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 
-// Trigger dry-run reflection - doesn't post message
+// Trigger dry-run reflection - doesn't post message (bypasses rate limit)
 app.post('/reflection/trigger/dry-run', async (req, res) => {
   try {
     const { roomId } = req.body;
-    const result = await reflectionService.triggerReflection({ roomId, dryRun: true });
+    const result = await reflectionService.triggerReflection({ roomId, dryRun: true, bypassRateLimit: true });
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });

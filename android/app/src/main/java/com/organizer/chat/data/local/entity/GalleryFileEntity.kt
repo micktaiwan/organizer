@@ -19,7 +19,12 @@ data class GalleryFileEntity(
     val senderId: String,
     val senderName: String,
     val createdAt: String,
-    val cachedAt: Long = System.currentTimeMillis()
+    val cachedAt: Long = System.currentTimeMillis(),
+    // Video-specific fields
+    val thumbnailUrl: String? = null,
+    val duration: Double? = null,
+    val width: Int? = null,
+    val height: Int? = null
 ) {
     fun toGalleryFile(): GalleryFile = GalleryFile(
         id = id,
@@ -33,7 +38,11 @@ data class GalleryFileEntity(
         roomName = roomName,
         senderId = senderId,
         senderName = senderName,
-        createdAt = createdAt
+        createdAt = createdAt,
+        thumbnailUrl = thumbnailUrl,
+        duration = duration,
+        width = width,
+        height = height
     )
 
     companion object {
@@ -49,7 +58,11 @@ data class GalleryFileEntity(
             roomName = file.roomName,
             senderId = file.senderId,
             senderName = file.senderName,
-            createdAt = file.createdAt
+            createdAt = file.createdAt,
+            thumbnailUrl = file.thumbnailUrl,
+            duration = file.duration,
+            width = file.width,
+            height = file.height
         )
     }
 }

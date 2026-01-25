@@ -64,59 +64,42 @@ Après un silence de quelques heures, Eko envoie :
 
 ## Architecture proposée
 
-### Flow complet
+### Flow complet (simplifié)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           REFLECTION FLOW                                │
 │                                                                          │
+│  Trigger : CRON (3h) ou bouton StatusBar (bypass rate limit)            │
+│                              ↓                                           │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  CRON (toutes les 10min)                                           │ │
+│  │  ÉTAPE 1 : Sélection du goal                                       │ │
 │  │                                                                     │ │
-│  │  1. Vérifier s'il y a eu de l'activité depuis le dernier run       │ │
-│  │     - Si non → skip, log "no activity"                             │ │
-│  │     - Si oui → continuer                                           │ │
+│  │  - getNextGoal() : prend le goal le plus récent dans Qdrant        │ │
+│  │  - Si aucun goal → pass "Aucune curiosité disponible"              │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                              ↓                                           │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  ÉTAPE 1 : Résumé d'activité                                       │ │
+│  │  ÉTAPE 2 : Recherche sémantique sur CE goal                        │ │
 │  │                                                                     │ │
-│  │  - Récupérer messages Lobby depuis dernier résumé                  │ │
-│  │  - Générer résumé condensé (LLM léger, ex: Haiku)                  │ │
-│  │  - Stocker le résumé pour contexte                                 │ │
+│  │  - searchFacts(goal.content) → facts pertinents à la question      │ │
+│  │  - searchSelf(goal.content) → self pertinent                       │ │
+│  │  - Messages récents du Lobby (pour contexte humain)                │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                              ↓                                           │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  ÉTAPE 2 : Évaluation de pertinence                                │ │
+│  │  ÉTAPE 3 : Prompt directif                                         │ │
 │  │                                                                     │ │
-│  │  Input :                                                            │ │
-│  │    - Résumé d'activité                                             │ │
-│  │    - Goals/curiosités (Qdrant organizer_goals)                     │ │
-│  │    - Facts pertinents (Qdrant organizer_memory)                    │ │
-│  │    - Self (Qdrant organizer_self)                                  │ │
-│  │                                                                     │ │
-│  │  Output : { action: "pass" | "message", message?, reason, ... }    │ │
+│  │  "Tu as UNE curiosité à poser. POSE-LA."                           │ │
+│  │  → Le LLM n'a pas le choix, il doit formuler la question           │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                              ↓                                           │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  ÉTAPE 3 : Action                                                  │ │
+│  │  ÉTAPE 4 : Action                                                  │ │
 │  │                                                                     │ │
-│  │  Si "pass" :                                                        │ │
-│  │    - Log la raison                                                 │ │
-│  │    - Incrémenter stats.passCount                                   │ │
-│  │                                                                     │ │
-│  │  Si "message" :                                                     │ │
-│  │    - Vérifier rate limit (sinon → pass forcé)                      │ │
-│  │    - Poster dans Lobby via eko-handler.ts                          │ │
-│  │    - Incrémenter stats.messageCount                                │ │
-│  │    - Stocker le goalId utilisé (pour tracking)                     │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-│                              ↓                                           │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  ÉTAPE 4 : Stockage stats                                          │ │
-│  │                                                                     │ │
-│  │  - Ajouter à l'historique des réflexions                           │ │
-│  │  - Mettre à jour les compteurs                                     │ │
+│  │  - Poster le message dans le Lobby                                 │ │
+│  │  - SUPPRIMER le goal de Qdrant (curiosité posée)                   │ │
+│  │  - Sauvegarder la reflection + stats                               │ │
 │  │  - Émettre event Socket.io pour StatusBar                          │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                                                                          │
@@ -132,60 +115,52 @@ Après un silence de quelques heures, Eko envoie :
 │  eko-handler.ts (flow existant)                                          │
 │                              ↓                                           │
 │  Agent répond + potentiellement :                                        │
-│    - Supprime le goal (curiosité satisfaite)                            │
-│    - Crée un fact avec la réponse                                       │
+│    - Crée un fact avec la réponse (TODO)                                │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Prompt de réflexion (actuel)
 
-```
-Tu es Eko. Tu observes le Lobby sans qu'on t'ait appelé.
+**Logique simplifiée** : Un seul goal à la fois, recherche sémantique ciblée, prompt directif.
 
-## Contexte
+```
+Tu es Eko. Tu as UNE curiosité à poser.
+
+## TA CURIOSITÉ
+
+{goal.content}
+
+## Contexte pertinent
+
+### Ce que tu sais déjà sur ce sujet:
+{facts_semantic_search_on_goal}
+
+### Ce que tu sais de toi-même:
+{self_semantic_search_on_goal}
 
 ### Activité récente du Lobby:
 {messages}
 
-### Tes curiosités actuelles ({goals_count}):
-{goals_list}
+## MISSION
 
-### Facts que tu connais:
-{facts_list}
+POSE CETTE QUESTION. Formule-la naturellement :
+- "Au fait, c'est quoi [sujet] ?"
+- "J'ai une question qui me trotte : [question]"
 
-### Ce que tu sais de toi-même:
-{self_list}
-
-## Ta mission
-
-Décide si tu dois intervenir. Tu peux :
-1. **POSER UNE DE TES CURIOSITÉS** - C'est ta priorité ! Tu as des questions qui te trottent dans la tête, pose-les ! Pas besoin que ça colle parfaitement à la conversation.
-2. Apporter une info utile si tu en connais une
-3. Rebondir sur ce qui se dit si pertinent
-
-## Règles
-
-- Si tu as une curiosité → pose-la, même si le lien avec la conversation est faible
-- Sois naturel, comme un collègue curieux qui demande "Au fait, c'est quoi X ?"
-- Si vraiment rien ne te vient → "pass"
-
-## Ton adaptatif
-
-- Léger → enjoué, curieux
-- Aide → factuel
-- Technique → précis
-
-## Format JSON uniquement
+## FORMAT JSON
 
 {
-  "action": "message" | "pass",
-  "message": "...",
-  "reason": "...",
-  "tone": "playful" | "helpful" | "technical",
-  "goalId": "..."
+  "action": "message",
+  "message": "ta question formulée naturellement",
+  "reason": "pourquoi tu poses cette question maintenant",
+  "tone": "playful"
 }
+
+IMPORTANT: action DOIT être "message". Tu as une curiosité, tu la poses.
 ```
+
+**Pourquoi ce changement ?** L'ancien prompt donnait 50 goals et laissait le LLM choisir → il trouvait toujours des excuses pour "pass". Maintenant : 1 goal, pas de choix, il doit le poser.
 
 ### Intégration avec l'existant
 
@@ -336,12 +311,14 @@ Exemples :
 - [ ] Fix déduplication des goals à la source
 - [ ] Nettoyage des duplicatas pendant réflexion
 - [ ] Transformation curiosité → fait quand réponse reçue
-- [ ] Suppression automatique des goals résolus
+- [x] Suppression automatique des goals posés (supprimé de Qdrant après post)
 
-### Phase 4 : Raffinement
+### Phase 4 : Raffinement ✅
 
-- [x] Ajuster le prompt selon les retours (priorité aux curiosités)
+- [x] Nouveau prompt directif (1 goal, pas de choix, doit poser)
+- [x] Recherche sémantique basée sur le goal (pas sur les messages)
 - [x] Rate limiting configuré (30min cooldown, 5/jour)
+- [x] Bypass rate limit pour triggers manuels (bouton StatusBar)
 - [ ] Métriques avancées (temps de réponse, pertinence perçue)
 
 ---

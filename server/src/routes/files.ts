@@ -11,7 +11,7 @@ router.use(authMiddleware);
 
 interface FileResult {
   id: string;
-  type: 'image' | 'file';
+  type: 'image' | 'file' | 'video';
   url: string;
   fileName: string | null;
   fileSize: number | null;
@@ -22,6 +22,11 @@ interface FileResult {
   senderId: string;
   senderName: string;
   createdAt: string;
+  // Video-specific fields
+  thumbnailUrl?: string | null;
+  duration?: number | null;
+  width?: number | null;
+  height?: number | null;
 }
 
 // GET /files - Get all files the user has access to
@@ -29,7 +34,7 @@ interface FileResult {
 //   - limit: max files to return (default 100, max 200)
 //   - before: ISO date - only files created before this date (pagination)
 //   - after: ISO date - only files created after this date (incremental sync)
-//   - type: "image" or "file" filter
+//   - type: "image", "file", or "video" filter
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = new Types.ObjectId(req.userId!);
@@ -47,9 +52,14 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const roomNameMap = new Map(userRooms.map(r => [r._id.toString(), r.name]));
 
     // Build query for files (exclude deleted files)
+    const typeQuery = typeFilter === 'image' ? 'image'
+      : typeFilter === 'file' ? 'file'
+      : typeFilter === 'video' ? 'video'
+      : { $in: ['image', 'file', 'video'] };
+
     const query: Record<string, unknown> = {
       roomId: { $in: roomIds },
-      type: typeFilter === 'image' ? 'image' : (typeFilter === 'file' ? 'file' : { $in: ['image', 'file'] }),
+      type: typeQuery,
       fileDeleted: { $ne: true }
     };
 
@@ -73,7 +83,12 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
       caption: 1,
       roomId: 1,
       senderId: 1,
-      createdAt: 1
+      createdAt: 1,
+      // Video-specific fields
+      thumbnailUrl: 1,
+      duration: 1,
+      width: 1,
+      height: 1
     })
       .sort({ createdAt: -1 })
       .limit(limit)
@@ -82,9 +97,9 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
     const files: FileResult[] = messages.map(msg => {
       const sender = msg.senderId as unknown as { _id: Types.ObjectId; displayName: string; username: string };
-      return {
+      const result: FileResult = {
         id: msg._id.toString(),
-        type: msg.type as 'image' | 'file',
+        type: msg.type as 'image' | 'file' | 'video',
         url: msg.content,
         fileName: msg.fileName || null,
         fileSize: msg.fileSize || null,
@@ -96,6 +111,14 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
         senderName: sender.displayName || sender.username,
         createdAt: msg.createdAt.toISOString()
       };
+      // Add video-specific fields if present
+      if (msg.type === 'video') {
+        result.thumbnailUrl = (msg as any).thumbnailUrl || null;
+        result.duration = (msg as any).duration || null;
+        result.width = (msg as any).width || null;
+        result.height = (msg as any).height || null;
+      }
+      return result;
     });
 
     res.json({ files });
@@ -125,8 +148,8 @@ router.delete('/:fileId', async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    // Verify it's a file/image message
-    if (message.type !== 'image' && message.type !== 'file') {
+    // Verify it's a file/image/video message
+    if (message.type !== 'image' && message.type !== 'file' && message.type !== 'video') {
       res.status(400).json({ error: 'This message is not a file' });
       return;
     }

@@ -10,11 +10,11 @@ for (const entry of gemoji) {
   }
 }
 
-// Match :shortcode (single colon, no closing colon)
+// Match :shortcode or :shortcode: (optional closing colon)
 // - preceded by start of string or whitespace
 // - followed by end of string, whitespace, or punctuation
 const SHORTCODE_REGEX = new RegExp(
-  "(?<=^|\\s):([a-z0-9_+-]+)(?=$|\\s|[.,!?;:\\])\"'()])",
+  "(?<=^|\\s):([a-z0-9_+-]+):?(?=$|\\s|[.,!?;\\])\"'()])",
   'g'
 );
 

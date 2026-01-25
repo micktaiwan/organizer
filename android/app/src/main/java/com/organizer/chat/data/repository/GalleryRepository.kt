@@ -47,20 +47,25 @@ class GalleryRepository(context: Context) {
     }
 
     /**
-     * Refresh files from server and update cache (full reload)
+     * Refresh files from server and update cache.
+     * Calls API with the specified type filter and merges into cache (no deleteAll).
+     * Purges files older than 30 days from the cache.
      */
     suspend fun refreshFiles(type: String? = null, limit: Int = 100): Result<List<GalleryFile>> {
         return withContext(Dispatchers.IO) {
             try {
+                // Fetch files with the specified type filter
                 val response = api.getFiles(limit = limit, type = type)
                 val files = response.files
 
-                // Update cache
+                // Merge into cache (INSERT OR REPLACE)
                 val entities = files.map { GalleryFileEntity.fromGalleryFile(it) }
-                dao.deleteAll()
                 dao.insertAll(entities)
 
-                Log.d(TAG, "Refreshed ${files.size} files from server")
+                // Purge old files (> 30 days)
+                purgeOldFiles()
+
+                Log.d(TAG, "Refreshed ${files.size} files of type $type from server")
                 Result.success(files)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to refresh files", e)
@@ -70,8 +75,17 @@ class GalleryRepository(context: Context) {
     }
 
     /**
+     * Purge files older than 30 days from the cache
+     */
+    private suspend fun purgeOldFiles() {
+        val thirtyDaysAgo = System.currentTimeMillis() - 30 * 24 * 60 * 60 * 1000L
+        dao.deleteOlderThan(thirtyDaysAgo)
+    }
+
+    /**
      * Sync new files only (incremental update)
      * Returns the number of new files added
+     * Fetches all types to keep cache complete for tab switching.
      */
     suspend fun syncNewFiles(type: String? = null): Result<Int> {
         return withContext(Dispatchers.IO) {
@@ -84,8 +98,8 @@ class GalleryRepository(context: Context) {
                     return@withContext result.map { it.size }
                 }
 
-                // Fetch only files newer than our latest
-                val response = api.getFiles(after = newestDate, type = type)
+                // Fetch only files newer than our latest (all types for cache coherence)
+                val response = api.getFiles(after = newestDate, type = null)
                 val newFiles = response.files
 
                 if (newFiles.isNotEmpty()) {
@@ -96,7 +110,13 @@ class GalleryRepository(context: Context) {
                     Log.d(TAG, "No new files to sync")
                 }
 
-                Result.success(newFiles.size)
+                // Return count of files matching the requested type filter
+                val matchingCount = if (type != null) {
+                    newFiles.count { it.type == type }
+                } else {
+                    newFiles.size
+                }
+                Result.success(matchingCount)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync new files", e)
                 Result.failure(e)
