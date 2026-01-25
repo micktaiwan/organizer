@@ -214,6 +214,9 @@ export const RoomList: React.FC<RoomListProps> = ({
                   {subtitle}
                 </div>
               </div>
+              {room.unreadCount !== undefined && room.unreadCount > 0 && (
+                <span className="unread-badge">{room.unreadCount}</span>
+              )}
               {canLeaveRoom(room) && (
                 <button
                   className="room-leave-btn"

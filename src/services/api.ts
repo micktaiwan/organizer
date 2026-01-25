@@ -165,6 +165,7 @@ interface Room {
   createdAt: string;
   updatedAt: string;
   lastMessageAt?: string;
+  unreadCount?: number;
 }
 
 class ApiService {
