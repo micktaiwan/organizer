@@ -252,8 +252,18 @@ git tag "v<version>"
 
 > **Skip if no Android changes detected in Step 1.5**
 
+Build the release APK (with R8 minification enabled):
 ```bash
-cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
+cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleRelease
+```
+
+Then sign it with the debug keystore:
+```bash
+~/Library/Android/sdk/build-tools/34.0.0/apksigner sign \
+  --ks ~/.android/debug.keystore \
+  --ks-pass pass:android \
+  --out app/build/outputs/apk/release/app-release-signed.apk \
+  app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
 ### Step 8: Upload APK
@@ -262,7 +272,7 @@ cd android && JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Content
 
 Use the upload script:
 ```bash
-cd server && ./upload-apk.sh ../android/app/build/outputs/apk/debug/app-debug.apk <version> <versionCode> "<release-notes>"
+cd server && ./upload-apk.sh ../android/app/build/outputs/apk/release/app-release-signed.apk <version> <versionCode> "<release-notes>"
 ```
 
 ### Step 9: Send Announcement to Lobby
