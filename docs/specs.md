@@ -78,6 +78,7 @@ Il existe deux sources de données utilisateur qui doivent rester synchronisées
 - Les miniatures sont générées côté serveur (async, non bloquant)
 - Android : onglet "Vidéos" dans la galerie pour filtrer les vidéos
 - Android : lecture plein écran avec ExoPlayer (contrôles natifs)
+- Android : bouton toggle dans le lecteur vidéo pour basculer entre mode Zoom (remplit l'écran) et mode Fit (vidéo entière visible)
 
 ## Messages non lus
 

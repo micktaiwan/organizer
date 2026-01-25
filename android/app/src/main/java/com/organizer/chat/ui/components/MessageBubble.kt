@@ -88,6 +88,8 @@ import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.CircularProgressIndicator
 import com.organizer.chat.util.EmojiUtils
 import com.organizer.chat.util.ImageDownloader
@@ -1029,6 +1031,10 @@ private fun FullscreenVideoDialog(
 ) {
     val context = LocalContext.current
 
+    // Resize mode state: ZOOM by default (fills screen, may crop)
+    var useZoomMode by remember { mutableStateOf(true) }
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
+
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(videoUrl))
@@ -1039,6 +1045,15 @@ private fun FullscreenVideoDialog(
 
     DisposableEffect(Unit) {
         onDispose { exoPlayer.release() }
+    }
+
+    // Update resize mode when toggled
+    LaunchedEffect(useZoomMode) {
+        playerViewRef?.resizeMode = if (useZoomMode) {
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        } else {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
     }
 
     Dialog(
@@ -1064,25 +1079,45 @@ private fun FullscreenVideoDialog(
                         useController = true
                         setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                         setEnableComposeSurfaceSyncWorkaround(true)
-                        // RESIZE_MODE_ZOOM fixes video not scaling in Compose AndroidView
                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        playerViewRef = this
                     }
                 },
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Close button
-            IconButton(
-                onClick = onDismiss,
+            // Top bar with close and resize mode toggle
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(16.dp)
+                    .padding(8.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color.White
-                )
+                // Resize mode toggle
+                IconButton(
+                    onClick = { useZoomMode = !useZoomMode },
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (useZoomMode) Icons.Default.ZoomOut else Icons.Default.ZoomIn,
+                        contentDescription = if (useZoomMode) "Fit" else "Zoom",
+                        tint = Color.White
+                    )
+                }
+
+                // Close button
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White
+                    )
+                }
             }
         }
     }
