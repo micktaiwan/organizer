@@ -447,7 +447,7 @@ Améliorations futures, pas bloquantes pour la release.
 - [x] Keep screen on pendant l'appel
 - [ ] Double-tap pour swap vidéos (locale ↔ distante)
 - [ ] Animation de sonnerie
-- [ ] Picture-in-Picture (continuer l'appel en arrière-plan)
+- [x] Picture-in-Picture (continuer l'appel en arrière-plan)
 
 **Partage d'écran**
 - [x] Recevoir un partage d'écran (track vidéo secondaire)

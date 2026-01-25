@@ -1,15 +1,22 @@
 package com.organizer.chat
 
 import android.Manifest
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
-import android.os.Build
+import android.content.res.Configuration
+import android.graphics.drawable.Icon
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import android.util.Rational
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -67,6 +74,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+        private const val ACTION_PIP_END_CALL = "com.organizer.chat.PIP_END_CALL"
+        private const val PIP_REQUEST_CODE = 1001
     }
 
     private lateinit var tokenManager: com.organizer.chat.util.TokenManager
@@ -104,6 +113,17 @@ class MainActivity : ComponentActivity() {
     private var pendingCallUsername: String? = null
     private var pendingCallIsIncoming: Boolean = false
     private var pendingCallWithCamera: Boolean = false
+
+    // Picture-in-Picture state
+    private var isInPipMode = mutableStateOf(false)
+    private val pipEndCallReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_PIP_END_CALL) {
+                Log.d(TAG, "PiP end call action received")
+                callViewModelState.value?.endCall()
+            }
+        }
+    }
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -194,6 +214,13 @@ class MainActivity : ComponentActivity() {
 
         // Request notification permission on Android 13+
         requestNotificationPermission()
+
+        // Register PiP broadcast receiver
+        registerReceiver(
+            pipEndCallReceiver,
+            IntentFilter(ACTION_PIP_END_CALL),
+            RECEIVER_NOT_EXPORTED
+        )
 
         // Determine start destination
         val isLoggedIn = runBlocking { authRepository.isLoggedIn() }
@@ -348,39 +375,54 @@ class MainActivity : ComponentActivity() {
                     ?: remember { mutableStateOf<CallState>(CallState.Idle) }
                 val isCallMinimized by callViewModel?.isCallMinimized?.collectAsState()
                     ?: remember { mutableStateOf(false) }
+                val isPipMode by isInPipMode
+
+                // Update PiP params when call state changes
+                // Enable auto-enter when in a non-minimized call, disable otherwise
+                LaunchedEffect(currentCallState, isCallMinimized) {
+                    val isInCall = currentCallState is CallState.Connected ||
+                            currentCallState is CallState.Calling ||
+                            currentCallState is CallState.Connecting ||
+                            currentCallState is CallState.Reconnecting
+                    val shouldAutoEnter = isInCall && !isCallMinimized
+                    updatePipParams(shouldAutoEnter)
+                }
 
                 Column(Modifier.fillMaxSize()) {
-                    // Active call banner when minimized
-                    if (isCallMinimized && currentCallState is CallState.Connected) {
+                    // Active call banner when minimized (but not in PiP mode)
+                    if (isCallMinimized && currentCallState is CallState.Connected && !isPipMode) {
                         ActiveCallBanner(
                             remoteUsername = (currentCallState as CallState.Connected).remoteUsername,
                             onTap = { callViewModel?.expandCall() }
                         )
                     }
 
-                    Box(Modifier.weight(1f)) {
-                        NavGraph(
-                            navController = navController,
-                            startDestination = startDestination,
-                            tokenManager = tokenManager,
-                            chatService = chatService,
-                            authRepository = authRepository,
-                            roomRepository = roomRepository,
-                            messageRepository = messageRepository,
-                            noteRepository = noteRepository,
-                            appPreferences = appPreferences,
-                            onLoginSuccess = {
-                                startChatService()
-                                checkForUpdateOnLaunch()
-                                updateManager.checkPendingDownload()
-                            },
-                            onLogout = {
-                                stopChatService()
-                            },
-                            onCallClick = { userId, username, withCamera ->
-                                requestCallPermissionsAndStart(userId, username, withCamera = withCamera, isIncoming = false)
-                            }
-                        )
+                    // Hide NavGraph in PiP mode - only show call screen
+                    if (!isPipMode) {
+                        Box(Modifier.weight(1f)) {
+                            NavGraph(
+                                navController = navController,
+                                startDestination = startDestination,
+                                tokenManager = tokenManager,
+                                chatService = chatService,
+                                authRepository = authRepository,
+                                roomRepository = roomRepository,
+                                messageRepository = messageRepository,
+                                noteRepository = noteRepository,
+                                appPreferences = appPreferences,
+                                onLoginSuccess = {
+                                    startChatService()
+                                    checkForUpdateOnLaunch()
+                                    updateManager.checkPendingDownload()
+                                },
+                                onLogout = {
+                                    stopChatService()
+                                },
+                                onCallClick = { userId, username, withCamera ->
+                                    requestCallPermissionsAndStart(userId, username, withCamera = withCamera, isIncoming = false)
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -414,19 +456,22 @@ class MainActivity : ComponentActivity() {
 
                     when (val state = currentCallState) {
                         is CallState.Incoming -> {
-                            IncomingCallScreen(
-                                callerName = state.fromUsername,
-                                withCamera = state.withCamera,
-                                onAccept = {
-                                    requestCallPermissionsAndStart(
-                                        state.fromUserId,
-                                        state.fromUsername,
-                                        state.withCamera,
-                                        isIncoming = true
-                                    )
-                                },
-                                onReject = { viewModel.rejectCall() }
-                            )
+                            // Don't show incoming call UI in PiP mode
+                            if (!isPipMode) {
+                                IncomingCallScreen(
+                                    callerName = state.fromUsername,
+                                    withCamera = state.withCamera,
+                                    onAccept = {
+                                        requestCallPermissionsAndStart(
+                                            state.fromUserId,
+                                            state.fromUsername,
+                                            state.withCamera,
+                                            isIncoming = true
+                                        )
+                                    },
+                                    onReject = { viewModel.rejectCall() }
+                                )
+                            }
                         }
                         is CallState.Calling,
                         is CallState.Connecting,
@@ -442,6 +487,7 @@ class MainActivity : ComponentActivity() {
                                 isRemoteScreenSharing = isRemoteScreenSharing,
                                 audioRoute = audioRoute,
                                 isFrontCamera = isFrontCamera,
+                                isInPipMode = isPipMode,
                                 onToggleMute = { viewModel.toggleMute() },
                                 onToggleCamera = { viewModel.toggleCamera() },
                                 onSwitchCamera = { viewModel.switchCamera() },
@@ -454,7 +500,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         is CallState.Connected -> {
-                            if (!isCallMinimized) {
+                            if (!isCallMinimized || isPipMode) {
                                 CallScreen(
                                     callState = state,
                                     remoteVideoTrack = remoteVideoTrack,
@@ -466,6 +512,7 @@ class MainActivity : ComponentActivity() {
                                     isRemoteScreenSharing = isRemoteScreenSharing,
                                     audioRoute = audioRoute,
                                     isFrontCamera = isFrontCamera,
+                                    isInPipMode = isPipMode,
                                     onToggleMute = { viewModel.toggleMute() },
                                     onToggleCamera = { viewModel.toggleCamera() },
                                     onSwitchCamera = { viewModel.switchCamera() },
@@ -535,7 +582,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND || intent?.action == Intent.ACTION_SEND_MULTIPLE) {
             Log.d(TAG, "Received share intent: ${intent.action}, type: ${intent.type}")
@@ -550,22 +596,14 @@ class MainActivity : ComponentActivity() {
                 }
                 intent.type?.startsWith("image/") == true -> {
                     if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
-                        val uris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
-                        } else {
-                            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
-                        }
+                        val uris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
                         uris?.let {
                             Log.d(TAG, "Shared ${it.size} images")
                             sharedContent.value = SharedContent.MultipleImages(it)
                             loadRoomsForSharing()
                         }
                     } else {
-                        val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
-                        } else {
-                            intent.getParcelableExtra(Intent.EXTRA_STREAM)
-                        }
+                        val uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
                         uri?.let {
                             Log.d(TAG, "Shared single image: $it")
                             sharedContent.value = SharedContent.SingleImage(it)
@@ -595,14 +633,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -652,11 +688,7 @@ class MainActivity : ComponentActivity() {
 
     private fun startChatService() {
         Intent(this, ChatService::class.java).also { intent ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
+            startForegroundService(intent)
             bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
         }
 
@@ -702,7 +734,103 @@ class MainActivity : ComponentActivity() {
             unbindService(serviceConnection)
             serviceBound = false
         }
+        // Unregister PiP broadcast receiver
+        try {
+            unregisterReceiver(pipEndCallReceiver)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error unregistering PiP receiver", e)
+        }
         // Note: Service continues running in background
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // Enter PiP when user navigates away during an active call
+        val currentState = callViewModelState.value?.callState?.value
+        val isInCall = currentState is CallState.Connected ||
+                currentState is CallState.Calling ||
+                currentState is CallState.Connecting ||
+                currentState is CallState.Reconnecting
+        val isMinimized = callViewModelState.value?.isCallMinimized?.value == true
+
+        Log.d(TAG, "onUserLeaveHint: currentState=$currentState, isInCall=$isInCall, isMinimized=$isMinimized")
+
+        if (isInCall && !isMinimized) {
+            enterPipMode()
+        }
+    }
+
+    /**
+     * Update PiP params when call state changes. Enables auto-enter when in a call.
+     */
+    private fun updatePipParams(enableAutoEnter: Boolean) {
+        try {
+            val endCallIntent = Intent(ACTION_PIP_END_CALL)
+            endCallIntent.setPackage(packageName)
+            val endCallPendingIntent = PendingIntent.getBroadcast(
+                this,
+                PIP_REQUEST_CODE,
+                endCallIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val endCallAction = RemoteAction(
+                Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel),
+                getString(R.string.end_call),
+                getString(R.string.end_call),
+                endCallPendingIntent
+            )
+
+            val pipParams = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(9, 16))
+                .setActions(listOf(endCallAction))
+                .setAutoEnterEnabled(enableAutoEnter)
+                .build()
+
+            setPictureInPictureParams(pipParams)
+            Log.d(TAG, "PiP params updated, autoEnter=$enableAutoEnter")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update PiP params", e)
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        Log.d(TAG, "PiP mode changed: $isInPictureInPictureMode")
+        isInPipMode.value = isInPictureInPictureMode
+    }
+
+    private fun enterPipMode() {
+        try {
+            val endCallIntent = Intent(ACTION_PIP_END_CALL)
+            endCallIntent.setPackage(packageName)
+            val endCallPendingIntent = PendingIntent.getBroadcast(
+                this,
+                PIP_REQUEST_CODE,
+                endCallIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val endCallAction = RemoteAction(
+                Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel),
+                getString(R.string.end_call),
+                getString(R.string.end_call),
+                endCallPendingIntent
+            )
+
+            val pipParams = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(9, 16))
+                .setActions(listOf(endCallAction))
+                .build()
+
+            val success = enterPictureInPictureMode(pipParams)
+            Log.d(TAG, "enterPictureInPictureMode returned: $success")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to enter PiP mode", e)
+        }
     }
 
     private fun checkForUpdateOnLaunch() {
