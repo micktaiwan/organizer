@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { HardDrive, Users, Wifi, WifiOff, Activity } from "lucide-react";
+import { HardDrive, Users, Wifi, WifiOff, Activity, Shield, Globe } from "lucide-react";
 import { useSocketConnection } from "../contexts/SocketConnectionContext";
 import { useUserStatus } from "../contexts/UserStatusContext";
 import { getApiBaseUrl } from "../services/api";
@@ -13,7 +13,13 @@ interface DiskSpace {
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-export function StatusBar() {
+interface StatusBarProps {
+  onOpenAdmin?: () => void;
+  onChangeServer?: () => void;
+  serverName?: string;
+}
+
+export function StatusBar({ onOpenAdmin, onChangeServer, serverName }: StatusBarProps) {
   const [diskSpace, setDiskSpace] = useState<DiskSpace | null>(null);
   const [ping, setPing] = useState<number | null>(null);
   const { isConnected, status } = useSocketConnection();
@@ -92,6 +98,19 @@ export function StatusBar() {
           <HardDrive size={12} />
           {diskSpace.free_gb.toFixed(0)} GB
         </span>
+      )}
+
+      <span className="status-bar-spacer" />
+
+      {onOpenAdmin && (
+        <button className="status-bar-btn" onClick={onOpenAdmin} title="Administration">
+          <Shield size={14} />
+        </button>
+      )}
+      {onChangeServer && (
+        <button className="status-bar-btn" onClick={onChangeServer} title={serverName ? `Serveur: ${serverName}` : 'Changer de serveur'}>
+          <Globe size={14} />
+        </button>
       )}
     </div>
   );

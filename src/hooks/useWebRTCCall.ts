@@ -34,15 +34,30 @@ export const useWebRTCCall = ({
   const [incomingCallWithCamera, setIncomingCallWithCamera] = useState(false);
   const [remoteHasCamera, setRemoteHasCamera] = useState(false);
   const [incomingCallFrom, setIncomingCallFrom] = useState<{ userId: string; username: string } | null>(null);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [remoteIsScreenSharing, setRemoteIsScreenSharing] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteScreenVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const sendersRef = useRef<RTCRtpSender[]>([]);
+  const screenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const screenSenderRef = useRef<RTCRtpSender | null>(null);
+  const remoteScreenTrackIdRef = useRef<string | null>(null);
 
   // Store pending ICE candidates (received before remote description is set)
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+
+  // ICE restart timeout (10s to reconnect before ending call)
+  const iceRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Track if we're the call initiator (only initiator sends ICE restart offers)
+  const isInitiatorRef = useRef(false);
+
+  // Ref to hold latest stopScreenShareInternal (avoids stale closure in onended)
+  const stopScreenShareInternalRef = useRef<() => void>(() => {});
 
   // Create RTCPeerConnection
   const createPeerConnection = useCallback((targetUser: string, username?: string) => {
@@ -61,7 +76,28 @@ export const useWebRTCCall = ({
 
     // Handle remote tracks
     pc.ontrack = (event) => {
-      console.log('[WebRTC][PC] Remote track received:', event.track.kind, 'enabled:', event.track.enabled, 'streams:', event.streams.length);
+      console.log('[WebRTC][PC] Remote track received:', event.track.kind, 'id:', event.track.id, 'enabled:', event.track.enabled, 'streams:', event.streams.length);
+
+      // Check if this is the screen share track
+      if (event.track.kind === 'video' && remoteScreenTrackIdRef.current && event.track.id === remoteScreenTrackIdRef.current) {
+        console.log('[WebRTC][PC] Screen share track identified, attaching to screen video element');
+        const screenStream = event.streams[0] || new MediaStream([event.track]);
+        if (remoteScreenVideoRef.current) {
+          remoteScreenVideoRef.current.srcObject = screenStream;
+        }
+        // Listen for track ended (remote stopped sharing)
+        event.track.onended = () => {
+          console.log('[WebRTC][PC] Remote screen track ended');
+          setRemoteIsScreenSharing(false);
+          remoteScreenTrackIdRef.current = null;
+          if (remoteScreenVideoRef.current) {
+            remoteScreenVideoRef.current.srcObject = null;
+          }
+        };
+        return;
+      }
+
+      // Regular camera/audio track
       if (event.streams[0]) {
         remoteStreamRef.current = event.streams[0];
         if (remoteVideoRef.current) {
@@ -75,15 +111,88 @@ export const useWebRTCCall = ({
     pc.onconnectionstatechange = () => {
       console.log('[WebRTC][PC] connectionState:', pc.connectionState);
       if (pc.connectionState === 'connected') {
+        // Clear ICE restart timeout if reconnected
+        if (iceRestartTimeoutRef.current) {
+          console.log('[WebRTC][ICE-RESTART] Reconnected, clearing timeout');
+          clearTimeout(iceRestartTimeoutRef.current);
+          iceRestartTimeoutRef.current = null;
+        }
         setCallState('connected');
-      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-        console.log('[WebRTC][PC] Connection lost/failed, cleaning up');
+      } else if (pc.connectionState === 'failed') {
+        console.log('[WebRTC][PC] Connection failed, cleaning up');
+        if (iceRestartTimeoutRef.current) {
+          clearTimeout(iceRestartTimeoutRef.current);
+          iceRestartTimeoutRef.current = null;
+        }
         endCallInternal();
       }
+      // 'disconnected' is handled by oniceconnectionstatechange (ICE restart)
     };
 
     pc.oniceconnectionstatechange = () => {
       console.log('[WebRTC][PC] iceConnectionState:', pc.iceConnectionState);
+
+      if (pc.iceConnectionState === 'disconnected') {
+        console.log('[WebRTC][ICE-RESTART] ICE disconnected, isInitiator:', isInitiatorRef.current);
+        setCallState('reconnecting');
+
+        // Only the initiator sends the restart offer (avoids glare conflicts)
+        if (isInitiatorRef.current) {
+          pc.restartIce();
+          pc.createOffer({ iceRestart: true }).then(async (offer) => {
+            await pc.setLocalDescription(offer);
+            socketService.sendOffer(targetUser, offer);
+            console.log('[WebRTC][ICE-RESTART] Restart offer sent to', targetUser);
+          }).catch((err) => {
+            console.error('[WebRTC][ICE-RESTART] Failed to create restart offer:', err);
+            endCallInternal();
+          });
+        }
+
+        // Timeout: if not reconnected within 10s, end call
+        iceRestartTimeoutRef.current = setTimeout(() => {
+          console.log('[WebRTC][ICE-RESTART] Timeout (10s), ending call');
+          iceRestartTimeoutRef.current = null;
+          endCallInternal();
+        }, 10000);
+      } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        if (iceRestartTimeoutRef.current) {
+          console.log('[WebRTC][ICE-RESTART] ICE reconnected, clearing timeout');
+          clearTimeout(iceRestartTimeoutRef.current);
+          iceRestartTimeoutRef.current = null;
+          setCallState('connected');
+        }
+      } else if (pc.iceConnectionState === 'failed') {
+        console.log('[WebRTC][ICE-RESTART] ICE failed, ending call');
+        if (iceRestartTimeoutRef.current) {
+          clearTimeout(iceRestartTimeoutRef.current);
+          iceRestartTimeoutRef.current = null;
+        }
+        endCallInternal();
+      }
+    };
+
+    // Handle renegotiation (triggered when tracks are added/removed mid-call)
+    pc.onnegotiationneeded = async () => {
+      console.log('[WebRTC][PC] negotiationneeded, signalingState:', pc.signalingState, 'connectionState:', pc.connectionState);
+      // Only renegotiate if already connected (skip during initial setup)
+      if (pc.connectionState !== 'connected') {
+        console.log('[WebRTC][PC] Skipping renegotiation - not connected yet');
+        return;
+      }
+      if (pc.signalingState !== 'stable') {
+        console.log('[WebRTC][PC] Skipping renegotiation - not in stable state');
+        return;
+      }
+
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socketService.sendOffer(targetUser, offer);
+        console.log('[WebRTC][PC] Renegotiation offer sent to', targetUser);
+      } catch (err) {
+        console.error('[WebRTC][PC] Renegotiation failed:', err);
+      }
     };
 
     pc.onicegatheringstatechange = () => {
@@ -158,6 +267,23 @@ export const useWebRTCCall = ({
   // End call internally
   const endCallInternal = useCallback(() => {
     console.log('[WebRTC] endCallInternal - cleaning up. PC state:', pcRef.current?.connectionState, 'ICE:', pcRef.current?.iceConnectionState);
+    if (iceRestartTimeoutRef.current) {
+      clearTimeout(iceRestartTimeoutRef.current);
+      iceRestartTimeoutRef.current = null;
+    }
+    // Clean up screen share
+    if (screenTrackRef.current) {
+      screenTrackRef.current.stop();
+      screenTrackRef.current = null;
+    }
+    screenSenderRef.current = null;
+    remoteScreenTrackIdRef.current = null;
+    setIsScreenSharing(false);
+    setRemoteIsScreenSharing(false);
+    if (remoteScreenVideoRef.current) {
+      remoteScreenVideoRef.current.srcObject = null;
+    }
+
     stopRingtone();
     stopRingback();
     stopLocalStream();
@@ -173,6 +299,7 @@ export const useWebRTCCall = ({
     setIncomingCallFrom(null);
     setTargetUserId(null);
     setRemoteUsername(null);
+    isInitiatorRef.current = false;
   }, [stopLocalStream, removeTracksFromPC, closePeerConnection]);
 
   // Process pending ICE candidates
@@ -206,6 +333,7 @@ export const useWebRTCCall = ({
 
     try {
       console.log('[WebRTC][CALLER] Step 1: Creating peer connection for', targetUser);
+      isInitiatorRef.current = true;
       const pc = createPeerConnection(targetUser);
 
       console.log('[WebRTC][CALLER] Step 2: Getting user media...', { withCamera });
@@ -394,6 +522,68 @@ export const useWebRTCCall = ({
     }
   }, [isCameraEnabled, targetUserId]);
 
+  // Stop screen sharing (defined first to avoid stale closure in startScreenShare)
+  const stopScreenShareInternal = useCallback(() => {
+    const pc = pcRef.current;
+
+    if (screenSenderRef.current && pc) {
+      try {
+        pc.removeTrack(screenSenderRef.current);
+      } catch (err) {
+        console.error('[WebRTC][SCREEN] Failed to remove screen track:', err);
+      }
+    }
+    if (screenTrackRef.current) {
+      screenTrackRef.current.stop();
+      screenTrackRef.current = null;
+    }
+    screenSenderRef.current = null;
+    setIsScreenSharing(false);
+
+    if (targetUserId) {
+      socketService.sendScreenShare(targetUserId, false);
+    }
+    console.log('[WebRTC][SCREEN] Screen sharing stopped');
+  }, [targetUserId]);
+
+  // Keep ref updated for use in onended callback
+  useEffect(() => {
+    stopScreenShareInternalRef.current = stopScreenShareInternal;
+  }, [stopScreenShareInternal]);
+
+  // Start screen sharing
+  const startScreenShare = useCallback(async () => {
+    const pc = pcRef.current;
+    if (!pc || !targetUserId) return;
+
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const screenTrack = screenStream.getVideoTracks()[0];
+      screenTrackRef.current = screenTrack;
+
+      // Add screen track to peer connection with its own stream
+      const sender = pc.addTrack(screenTrack, screenStream);
+      screenSenderRef.current = sender;
+
+      setIsScreenSharing(true);
+      socketService.sendScreenShare(targetUserId, true, screenTrack.id);
+      console.log('[WebRTC][SCREEN] Screen sharing started, trackId:', screenTrack.id);
+
+      // Handle native "Stop sharing" button (use ref to avoid stale closure)
+      screenTrack.onended = () => {
+        console.log('[WebRTC][SCREEN] Native stop sharing triggered');
+        stopScreenShareInternalRef.current();
+      };
+    } catch (err) {
+      console.log('[WebRTC][SCREEN] User cancelled screen share or error:', err);
+    }
+  }, [targetUserId]);
+
+  // Public stop screen share
+  const stopScreenShare = useCallback(() => {
+    stopScreenShareInternal();
+  }, [stopScreenShareInternal]);
+
   // Handle Socket.io call events
   useEffect(() => {
     const handleCallRequest = (data: { from: string; fromUsername: string; withCamera: boolean }) => {
@@ -432,6 +622,20 @@ export const useWebRTCCall = ({
 
     const handleToggleCamera = (data: { from: string; enabled: boolean }) => {
       setRemoteHasCamera(data.enabled);
+    };
+
+    const handleScreenShare = (data: { from: string; enabled: boolean; trackId?: string }) => {
+      console.log('[WebRTC][SCREEN] Remote screen share:', data.enabled, 'trackId:', data.trackId);
+      if (data.enabled && data.trackId) {
+        remoteScreenTrackIdRef.current = data.trackId;
+        setRemoteIsScreenSharing(true);
+      } else {
+        remoteScreenTrackIdRef.current = null;
+        setRemoteIsScreenSharing(false);
+        if (remoteScreenVideoRef.current) {
+          remoteScreenVideoRef.current.srcObject = null;
+        }
+      }
     };
 
     const handleCallError = (data: { error: string; message: string }) => {
@@ -478,6 +682,9 @@ export const useWebRTCCall = ({
       handleWebRTCError(data as { error: string; message: string })
     );
     const unsubAnsweredElsewhere = socketService.on('call:answered-elsewhere', handleAnsweredElsewhere);
+    const unsubScreenShare = socketService.on('call:screen-share', (data) =>
+      handleScreenShare(data as { from: string; enabled: boolean; trackId?: string })
+    );
 
     return () => {
       unsubRequest();
@@ -488,6 +695,7 @@ export const useWebRTCCall = ({
       unsubCallError();
       unsubWebRTCError();
       unsubAnsweredElsewhere();
+      unsubScreenShare();
     };
   }, [callState, addSystemMessage, endCallInternal]);
 
@@ -617,12 +825,17 @@ export const useWebRTCCall = ({
     remoteUsername,
     localVideoRef,
     remoteVideoRef,
+    remoteScreenVideoRef,
+    isScreenSharing,
+    remoteIsScreenSharing,
     startCall,
     acceptCall,
     rejectCall,
     endCall,
     toggleMic,
     toggleCamera,
+    startScreenShare,
+    stopScreenShare,
     targetUserId,
   };
 };

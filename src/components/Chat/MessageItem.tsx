@@ -349,7 +349,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                     }}
                     style={{ cursor: 'pointer' }}
                   />
-                  {msg.caption && <span className="image-caption">{msg.caption}</span>}
+                  {msg.caption && <span className="image-caption"><MarkdownText text={msg.caption} /></span>}
                 </div>
               )}
               {msg.audio && (
@@ -371,7 +371,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   </button>
                 </div>
               )}
-              {msg.caption && msg.type === 'file' && <span className="file-caption">{msg.caption}</span>}
+              {msg.caption && msg.type === 'file' && <span className="file-caption"><MarkdownText text={msg.caption} /></span>}
               {msg.text && (
                 <div className="message-text-content">
                   <MarkdownText text={msg.text} />

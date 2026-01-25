@@ -387,11 +387,14 @@ class MainActivity : ComponentActivity() {
                 // Call UI - rendered AFTER so it appears on top
                 callViewModel?.let { viewModel ->
                     val remoteVideoTrack by viewModel.remoteVideoTrack.collectAsState()
+                    val remoteScreenTrack by viewModel.remoteScreenTrack.collectAsState()
                     val localVideoTrack by viewModel.localVideoTrack.collectAsState()
                     val isMuted by viewModel.isMuted.collectAsState()
                     val isCameraEnabled by viewModel.isCameraEnabled.collectAsState()
                     val isRemoteCameraEnabled by viewModel.isRemoteCameraEnabled.collectAsState()
+                    val isRemoteScreenSharing by viewModel.isRemoteScreenSharing.collectAsState()
                     val audioRoute by viewModel.audioRoute.collectAsState()
+                    val isFrontCamera by viewModel.isFrontCamera.collectAsState()
 
                     // Handle call errors
                     LaunchedEffect(Unit) {
@@ -431,16 +434,21 @@ class MainActivity : ComponentActivity() {
                             CallScreen(
                                 callState = state,
                                 remoteVideoTrack = remoteVideoTrack,
+                                remoteScreenTrack = remoteScreenTrack,
                                 localVideoTrack = localVideoTrack,
                                 isMuted = isMuted,
                                 isCameraEnabled = isCameraEnabled,
                                 isRemoteCameraEnabled = isRemoteCameraEnabled,
+                                isRemoteScreenSharing = isRemoteScreenSharing,
                                 audioRoute = audioRoute,
+                                isFrontCamera = isFrontCamera,
                                 onToggleMute = { viewModel.toggleMute() },
                                 onToggleCamera = { viewModel.toggleCamera() },
+                                onSwitchCamera = { viewModel.switchCamera() },
                                 onToggleSpeaker = { viewModel.toggleSpeaker() },
                                 onEndCall = { viewModel.endCall() },
                                 onInitRemoteRenderer = { renderer -> viewModel.initRemoteRenderer(renderer) },
+                                onInitScreenShareRenderer = { renderer -> viewModel.initScreenShareRenderer(renderer) },
                                 onInitLocalRenderer = { renderer -> viewModel.initLocalRenderer(renderer) },
                                 onScreenVisible = { viewModel.startCameraIfPending() }
                             )
@@ -450,16 +458,21 @@ class MainActivity : ComponentActivity() {
                                 CallScreen(
                                     callState = state,
                                     remoteVideoTrack = remoteVideoTrack,
+                                    remoteScreenTrack = remoteScreenTrack,
                                     localVideoTrack = localVideoTrack,
                                     isMuted = isMuted,
                                     isCameraEnabled = isCameraEnabled,
                                     isRemoteCameraEnabled = isRemoteCameraEnabled,
+                                    isRemoteScreenSharing = isRemoteScreenSharing,
                                     audioRoute = audioRoute,
+                                    isFrontCamera = isFrontCamera,
                                     onToggleMute = { viewModel.toggleMute() },
                                     onToggleCamera = { viewModel.toggleCamera() },
+                                    onSwitchCamera = { viewModel.switchCamera() },
                                     onToggleSpeaker = { viewModel.toggleSpeaker() },
                                     onEndCall = { viewModel.endCall() },
                                     onInitRemoteRenderer = { renderer -> viewModel.initRemoteRenderer(renderer) },
+                                    onInitScreenShareRenderer = { renderer -> viewModel.initScreenShareRenderer(renderer) },
                                     onInitLocalRenderer = { renderer -> viewModel.initLocalRenderer(renderer) },
                                     onScreenVisible = { viewModel.startCameraIfPending() },
                                     onMinimize = { viewModel.minimizeCall() }
@@ -769,6 +782,12 @@ class MainActivity : ComponentActivity() {
         callEventJobs += lifecycleScope.launch {
             socketManager.callToggleCamera.collect { event ->
                 callManager.handleRemoteCameraToggle(event.from, event.enabled)
+            }
+        }
+
+        callEventJobs += lifecycleScope.launch {
+            socketManager.callScreenShare.collect { event ->
+                callManager.handleRemoteScreenShare(event.from, event.enabled, event.trackId)
             }
         }
 

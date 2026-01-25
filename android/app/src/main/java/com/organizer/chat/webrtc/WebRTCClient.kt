@@ -31,6 +31,8 @@ class WebRTCClient(
     private var videoCapturer: CameraVideoCapturer? = null
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var eglBase: EglBase? = null
+    private var localRenderer: SurfaceViewRenderer? = null
+    private var isFrontCamera = true
 
     interface PeerConnectionObserver {
         fun onIceCandidate(candidate: IceCandidate)
@@ -41,7 +43,6 @@ class WebRTCClient(
     }
 
     fun initPeerConnectionFactory() {
-        Log.d(TAG, "Initializing PeerConnectionFactory")
 
         val options = PeerConnectionFactory.InitializationOptions.builder(context)
             .setEnableInternalTracer(true)
@@ -63,11 +64,9 @@ class WebRTCClient(
             .setOptions(PeerConnectionFactory.Options())
             .createPeerConnectionFactory()
 
-        Log.d(TAG, "PeerConnectionFactory initialized")
     }
 
     fun createPeerConnection() {
-        Log.d(TAG, "Creating PeerConnection")
 
         val rtcConfig = PeerConnection.RTCConfiguration(ICE_SERVERS).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
@@ -78,67 +77,53 @@ class WebRTCClient(
             rtcConfig,
             object : PeerConnection.Observer {
                 override fun onSignalingChange(state: PeerConnection.SignalingState?) {
-                    Log.d(TAG, "Signaling state: $state")
                 }
 
                 override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
-                    Log.d(TAG, "ICE connection state: $state")
                     state?.let { observer.onIceConnectionChange(it) }
                 }
 
                 override fun onIceConnectionReceivingChange(receiving: Boolean) {
-                    Log.d(TAG, "ICE connection receiving: $receiving")
                 }
 
                 override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {
-                    Log.d(TAG, "ICE gathering state: $state")
                 }
 
                 override fun onIceCandidate(candidate: IceCandidate?) {
-                    Log.d(TAG, "ICE candidate: ${candidate?.sdp}")
                     candidate?.let { observer.onIceCandidate(it) }
                 }
 
                 override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {
-                    Log.d(TAG, "ICE candidates removed")
                 }
 
                 override fun onAddStream(stream: MediaStream?) {
-                    Log.d(TAG, "Stream added: ${stream?.id}")
                 }
 
                 override fun onRemoveStream(stream: MediaStream?) {
-                    Log.d(TAG, "Stream removed: ${stream?.id}")
                 }
 
                 override fun onDataChannel(channel: DataChannel?) {
-                    Log.d(TAG, "Data channel: ${channel?.label()}")
                 }
 
                 override fun onRenegotiationNeeded() {
-                    Log.d(TAG, "Renegotiation needed")
                     observer.onRenegotiationNeeded()
                 }
 
                 override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
-                    Log.d(TAG, "Track added: ${receiver?.track()?.kind()}")
                     receiver?.track()?.let { track ->
                         observer.onAddTrack(track, streams ?: emptyArray())
                     }
                 }
 
                 override fun onRemoveTrack(receiver: RtpReceiver?) {
-                    Log.d(TAG, "Track removed")
                     receiver?.let { observer.onRemoveTrack(it) }
                 }
             }
         )
 
-        Log.d(TAG, "PeerConnection created")
     }
 
     fun startLocalAudio() {
-        Log.d(TAG, "Starting local audio")
 
         val audioConstraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
@@ -147,17 +132,16 @@ class WebRTCClient(
         }
 
         val audioSource = peerConnectionFactory?.createAudioSource(audioConstraints)
+
         localAudioTrack = peerConnectionFactory?.createAudioTrack("audio0", audioSource)
 
         localAudioTrack?.let { track ->
             track.setEnabled(true)
             peerConnection?.addTrack(track, listOf("stream0"))
-            Log.d(TAG, "Local audio track added")
-        }
+        } ?: Log.e(TAG, "Failed to create local audio track!")
     }
 
     fun startLocalVideo(localRenderer: SurfaceViewRenderer?) {
-        Log.d(TAG, "Starting local video")
 
         val enumerator = Camera2Enumerator(context)
         val deviceNames = enumerator.deviceNames
@@ -189,7 +173,6 @@ class WebRTCClient(
                 track.addSink(renderer)
             }
             peerConnection?.addTrack(track, listOf("stream0"))
-            Log.d(TAG, "Local video track added")
         }
     }
 
@@ -200,7 +183,8 @@ class WebRTCClient(
 
     fun initLocalRenderer(renderer: SurfaceViewRenderer) {
         renderer.init(eglBase?.eglBaseContext, null)
-        renderer.setMirror(true)
+        renderer.setMirror(isFrontCamera)
+        localRenderer = renderer
     }
 
     suspend fun createOffer(): String = suspendCancellableCoroutine { continuation ->
@@ -211,7 +195,6 @@ class WebRTCClient(
 
         peerConnection?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(sdp: SessionDescription?) {
-                Log.d(TAG, "Offer created successfully")
                 sdp?.let {
                     peerConnection?.setLocalDescription(object : SdpObserver {
                         override fun onSetSuccess() {
@@ -243,7 +226,6 @@ class WebRTCClient(
 
         peerConnection?.createAnswer(object : SdpObserver {
             override fun onCreateSuccess(sdp: SessionDescription?) {
-                Log.d(TAG, "Answer created successfully")
                 sdp?.let {
                     peerConnection?.setLocalDescription(object : SdpObserver {
                         override fun onSetSuccess() {
@@ -272,7 +254,6 @@ class WebRTCClient(
 
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onSetSuccess() {
-                Log.d(TAG, "Remote description set successfully")
                 continuation.resume(Unit)
             }
 
@@ -288,17 +269,19 @@ class WebRTCClient(
     fun addIceCandidate(candidate: String, sdpMid: String, sdpMLineIndex: Int) {
         val iceCandidate = IceCandidate(sdpMid, sdpMLineIndex, candidate)
         peerConnection?.addIceCandidate(iceCandidate)
-        Log.d(TAG, "ICE candidate added")
     }
 
     fun restartIce() {
-        Log.d(TAG, "Restarting ICE")
         peerConnection?.restartIce()
     }
 
     fun setLocalAudioEnabled(enabled: Boolean) {
-        localAudioTrack?.setEnabled(enabled)
-        Log.d(TAG, "Local audio enabled: $enabled")
+        val track = localAudioTrack
+        if (track != null) {
+            track.setEnabled(enabled)
+        } else {
+            Log.e(TAG, "setLocalAudioEnabled($enabled) called but localAudioTrack is NULL!")
+        }
     }
 
     fun setLocalVideoEnabled(enabled: Boolean) {
@@ -310,13 +293,29 @@ class WebRTCClient(
         // track.setEnabled(false) stops sending frames to the peer connection
         // while keeping the capturer running (minimal CPU impact)
         localVideoTrack?.setEnabled(enabled)
-        Log.d(TAG, "Local video enabled: $enabled")
+    }
+
+    fun switchCamera(onDone: ((Boolean) -> Unit)? = null) {
+        val capturer = videoCapturer
+        if (capturer == null) {
+            Log.e(TAG, "switchCamera: no video capturer")
+            return
+        }
+        capturer.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+            override fun onCameraSwitchDone(isFront: Boolean) {
+                isFrontCamera = isFront
+                localRenderer?.setMirror(isFront)
+                onDone?.invoke(isFront)
+            }
+            override fun onCameraSwitchError(error: String?) {
+                Log.e(TAG, "Camera switch failed: $error")
+            }
+        })
     }
 
     fun getLocalVideoTrack(): VideoTrack? = localVideoTrack
 
     fun close() {
-        Log.d(TAG, "Closing WebRTC client")
 
         try {
             localAudioTrack?.setEnabled(false)
@@ -337,6 +336,8 @@ class WebRTCClient(
             Log.e(TAG, "Error disposing video capturer", e)
         }
         videoCapturer = null
+        localRenderer = null
+        isFrontCamera = true
 
         try {
             localAudioTrack?.dispose()
@@ -381,6 +382,5 @@ class WebRTCClient(
         }
         eglBase = null
 
-        Log.d(TAG, "WebRTC client closed")
     }
 }

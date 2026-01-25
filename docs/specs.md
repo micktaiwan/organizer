@@ -38,6 +38,13 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 ## WebRTC
 
 - Les appels WebRTC doivent marcher
+- Desktop + Android: possibilité de recevoir un partage d'écran pendant un appel
+- Desktop + Android: reconnexion automatique en cas de coupure réseau (ICE restart, timeout 10s)
+- Android: bouton pour basculer entre caméra avant/arrière
+- Android: l'écran reste allumé pendant un appel
+- Android: mode paysage plein écran lors de la réception d'un partage d'écran
+- Desktop: durée de l'appel affichée en temps réel
+- Desktop: modale de confirmation avant de changer de serveur
 
 ## User Switcher
 

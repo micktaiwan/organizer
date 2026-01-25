@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Phone, Video, Users, VolumeX, Clock } from 'lucide-react';
 import { Room } from '../../services/api';
 import { useUserStatus } from '../../contexts/UserStatusContext';
@@ -44,7 +44,19 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
   callState,
 }) => {
   const [showMembers, setShowMembers] = useState(false);
+  const widgetRef = useRef<HTMLDivElement>(null);
   const { getStatus } = useUserStatus();
+
+  useEffect(() => {
+    if (!showMembers) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (widgetRef.current && !widgetRef.current.contains(e.target as Node)) {
+        setShowMembers(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMembers]);
 
   if (!room || callState !== 'idle') {
     return null;
@@ -60,7 +72,7 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
   }
 
   return (
-    <div className="room-members-widget">
+    <div className="room-members-widget" ref={widgetRef}>
       <button
         className="room-members-toggle"
         onClick={() => setShowMembers(!showMembers)}
@@ -80,7 +92,7 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
 
               // Get status from global cache instead of room data
               // Note: populated user has _id from MongoDB, not id
-              const userId = user.id || (user as any)._id?.toString();
+              const userId = user.id || user._id || '';
               const userStatusData = getStatus(userId);
               const status = userStatusData?.status || 'available';
               const statusMessage = userStatusData?.statusMessage;
@@ -88,31 +100,34 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
               const isMuted = userStatusData?.isMuted;
               const expiresIn = formatExpiresIn(statusExpiresAt);
 
+              const isBot = !!user.isBot;
+              const isOnline = userStatusData?.isOnline ?? false;
+
               return (
-                <div key={userId} className="room-member-item">
+                <div key={userId} className={`room-member-item${isBot ? ' bot' : ''}`}>
                   <div className="member-info">
-                    <div className="member-name">
-                      <span className={`status-dot ${status}`} />
-                      {user.displayName}
-                      {isMuted && <VolumeX size={14} style={{ marginLeft: '0.25rem', opacity: 0.6 }} />}
-                    </div>
-                    <div className="member-username">
-                      @{user.username}
+                    <div className="member-line1">
+                      {!isBot && <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />}
+                      <span className="member-name">{user.displayName}</span>
+                      {isMuted && <VolumeX size={14} style={{ opacity: 0.6 }} />}
+                      <span className="member-username">@{user.username}</span>
                       {userStatusData?.appVersion && (
                         <span className="member-version">v{userStatusData.appVersion.versionName}</span>
                       )}
                     </div>
-                    <div className="member-status-info">
-                      <span className={`member-status-label ${status}`}>{STATUS_LABELS[status]}</span>
-                      {expiresIn && (
-                        <span className="member-status-expires">
-                          <Clock size={12} />
-                          {expiresIn}
-                        </span>
-                      )}
-                    </div>
-                    {statusMessage && (
-                      <div className="member-status-message">"{statusMessage}"</div>
+                    {!isBot && isOnline && (
+                      <div className="member-line2">
+                        <span className={`member-status-label ${status}`}>{STATUS_LABELS[status]}</span>
+                        {expiresIn && (
+                          <span className="member-status-expires">
+                            <Clock size={12} />
+                            {expiresIn}
+                          </span>
+                        )}
+                        {statusMessage && (
+                          <span className="member-status-message">"{statusMessage}"</span>
+                        )}
+                      </div>
                     )}
                   </div>
                   <div className="member-actions">
