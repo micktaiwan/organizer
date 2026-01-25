@@ -12,10 +12,10 @@ android {
 
     defaultConfig {
         applicationId = "com.organizer.chat"
-        minSdk = 26
+        minSdk = 34
         targetSdk = 34
-        versionCode = 57
-        versionName = "1.9.12"
+        versionCode = 58
+        versionName = "1.9.13"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

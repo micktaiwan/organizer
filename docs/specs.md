@@ -45,6 +45,7 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 - Android: mode paysage plein écran lors de la réception d'un partage d'écran
 - Desktop: durée de l'appel affichée en temps réel
 - Desktop: modale de confirmation avant de changer de serveur
+- Android: mode Picture-in-Picture pendant les appels (la vidéo continue dans une fenêtre flottante quand on quitte l'app)
 
 ## User Switcher
 

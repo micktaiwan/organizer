@@ -1,9 +1,8 @@
 package com.organizer.chat.ui.screens.call
 
 import android.app.Activity
-import android.os.Build
+import android.content.Context
 import android.util.Log
-import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
@@ -37,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -73,6 +73,7 @@ fun CallScreen(
     isRemoteScreenSharing: Boolean = false,
     audioRoute: CallAudioManager.AudioRoute = CallAudioManager.AudioRoute.EARPIECE,
     isFrontCamera: Boolean = true,
+    isInPipMode: Boolean = false,
     onToggleMute: () -> Unit,
     onToggleCamera: () -> Unit,
     onSwitchCamera: () -> Unit = {},
@@ -280,35 +281,19 @@ fun CallScreen(
     val hasScreenShare = remoteScreenTrack != null && isConnected && isRemoteScreenSharing
     val hasLocalVideo = localVideoTrack != null && withCamera && isCameraEnabled
 
-    // Hide all overlays in landscape mode during screen share (fullscreen mode)
-    val hideOverlays = isLandscape && hasScreenShare
+    // Hide all overlays in landscape mode during screen share (fullscreen mode) or in PiP mode
+    val hideOverlays = (isLandscape && hasScreenShare) || isInPipMode
 
     // Enable immersive fullscreen mode when hideOverlays is true
     DisposableEffect(hideOverlays) {
         if (hideOverlays && activity != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                activity.window.insetsController?.let { controller ->
-                    controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                    controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                }
-            } else {
-                @Suppress("DEPRECATION")
-                activity.window.decorView.systemUiVisibility = (
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    or View.SYSTEM_UI_FLAG_FULLSCREEN
-                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                )
+            activity.window.insetsController?.let { controller ->
+                controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         }
         onDispose {
-            if (activity != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    activity.window.insetsController?.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                } else {
-                    @Suppress("DEPRECATION")
-                    activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-                }
-            }
+            activity?.window?.insetsController?.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
         }
     }
 
@@ -689,11 +674,20 @@ fun CallScreen(
             }
         }
 
-        // Local video PiP (bottom right, draggable) - hidden during screen share
-        if (hasLocalVideo && !hasScreenShare) {
-            var pipOffsetX by remember { mutableFloatStateOf(0f) }
-            var pipOffsetY by remember { mutableFloatStateOf(0f) }
+        // Local video PiP (bottom right, draggable) - hidden during screen share and PiP mode
+        if (hasLocalVideo && !hasScreenShare && !isInPipMode) {
+            val context = LocalContext.current
+            val prefs = remember { context.getSharedPreferences("call_pip_prefs", Context.MODE_PRIVATE) }
+
+            var pipOffsetX by remember { mutableFloatStateOf(prefs.getFloat("pip_offset_x", 0f)) }
+            var pipOffsetY by remember { mutableFloatStateOf(prefs.getFloat("pip_offset_y", 0f)) }
             var isDragging by remember { mutableStateOf(false) }
+
+            val shadowElevation by animateDpAsState(
+                targetValue = if (isDragging) 16.dp else 0.dp,
+                animationSpec = tween(durationMillis = 150),
+                label = "pipShadow"
+            )
 
             Box(
                 modifier = Modifier
@@ -703,7 +697,11 @@ fun CallScreen(
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragStart = { isDragging = true },
-                            onDragEnd = { isDragging = false },
+                            onDragEnd = {
+                                isDragging = false
+                                // Save position when drag ends
+                                prefs.edit().putFloat("pip_offset_x", pipOffsetX).putFloat("pip_offset_y", pipOffsetY).apply()
+                            },
                             onDragCancel = { isDragging = false },
                             onDrag = { change, dragAmount ->
                                 change.consume()
@@ -713,12 +711,11 @@ fun CallScreen(
                         )
                     }
                     .size(width = 100.dp, height = 140.dp)
-                    .border(
-                        width = if (isDragging) 3.dp else 0.dp,
-                        color = Color(0xFFFFA726),
-                        shape = RoundedCornerShape(12.dp)
+                    .shadow(
+                        elevation = shadowElevation,
+                        shape = RoundedCornerShape(8.dp)
                     )
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(Color.Black)
             ) {
                 AndroidView(
