@@ -136,7 +136,7 @@ interface Message {
   _id: string;
   roomId: string;
   senderId: string | User;
-  type: 'text' | 'image' | 'audio' | 'system' | 'file';
+  type: 'text' | 'image' | 'audio' | 'system' | 'file' | 'video';
   content: string;
   caption?: string;
   fileName?: string;
@@ -396,6 +396,69 @@ class ApiService {
     }
 
     return this.uploadRequest<{ message: Message }>('/upload/file', formData);
+  }
+
+  async uploadVideo(roomId: string, videoBlob: Blob, caption?: string): Promise<{ message: Message }> {
+    // Determine correct extension based on actual MIME type
+    // Safari/WebKit records as MP4, Chrome/Firefox as WebM
+    const ext = videoBlob.type.includes('mp4') || videoBlob.type.includes('quicktime') ? 'mp4' : 'webm';
+
+    const formData = new FormData();
+    formData.append('roomId', roomId);
+    formData.append('video', videoBlob, `recording-${Date.now()}.${ext}`);
+    formData.append('clientSource', 'desktop');
+    if (caption) {
+      formData.append('caption', caption);
+    }
+
+    return this.uploadRequest<{ message: Message }>('/upload/video', formData);
+  }
+
+  uploadVideoWithProgress(
+    roomId: string,
+    videoBlob: Blob,
+    caption: string | undefined,
+    onProgress: (progress: number) => void
+  ): Promise<{ message: Message }> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const ext = videoBlob.type.includes('mp4') || videoBlob.type.includes('quicktime') ? 'mp4' : 'webm';
+
+      const formData = new FormData();
+      formData.append('roomId', roomId);
+      formData.append('video', videoBlob, `recording-${Date.now()}.${ext}`);
+      formData.append('clientSource', 'desktop');
+      if (caption) {
+        formData.append('caption', caption);
+      }
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          try {
+            const errorData = JSON.parse(xhr.responseText);
+            reject(new Error(errorData.error || `Upload failed: ${xhr.status}`));
+          } catch {
+            reject(new Error(`Upload failed: ${xhr.status}`));
+          }
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('Network error'));
+
+      xhr.open('POST', `${apiBaseUrl}/upload/video`);
+      if (this.token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
+      }
+      xhr.send(formData);
+    });
   }
 
   async markMessageAsRead(id: string): Promise<{ message: Message }> {

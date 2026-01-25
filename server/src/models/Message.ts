@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
-export type MessageType = 'text' | 'image' | 'audio' | 'system' | 'file';
+export type MessageType = 'text' | 'image' | 'audio' | 'system' | 'file' | 'video';
 export type MessageStatus = 'sent' | 'delivered' | 'read';
 export type ClientSource = 'desktop' | 'android' | 'api' | 'mcp' | 'mcp-bot';
 export type ReactionEmoji = '👍' | '❤️' | '😂' | '😮' | '😢' | '😡' | '✅' | '⚠️' | '🙏' | '🎉' | '👋' | '😘';
@@ -23,6 +23,11 @@ export interface IMessage extends Document {
   fileSize?: number;
   mimeType?: string;
   fileDeleted?: boolean;
+  // Video-specific fields
+  thumbnailUrl?: string;
+  duration?: number;
+  width?: number;
+  height?: number;
   status: MessageStatus;
   readBy: Types.ObjectId[];
   reactions: IReaction[];
@@ -46,7 +51,7 @@ const MessageSchema = new Schema<IMessage>(
     },
     type: {
       type: String,
-      enum: ['text', 'image', 'audio', 'system', 'file'],
+      enum: ['text', 'image', 'audio', 'system', 'file', 'video'],
       default: 'text',
     },
     content: {
@@ -72,6 +77,23 @@ const MessageSchema = new Schema<IMessage>(
     fileDeleted: {
       type: Boolean,
       default: false,
+    },
+    // Video-specific fields
+    thumbnailUrl: {
+      type: String,
+      required: false,
+    },
+    duration: {
+      type: Number,
+      required: false,
+    },
+    width: {
+      type: Number,
+      required: false,
+    },
+    height: {
+      type: Number,
+      required: false,
     },
     status: {
       type: String,

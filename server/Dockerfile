@@ -22,8 +22,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install su-exec for entrypoint user switching
-RUN apk add --no-cache su-exec
+# Install su-exec for entrypoint user switching and ffmpeg for video thumbnails
+RUN apk add --no-cache su-exec ffmpeg
 
 # Install Claude Code CLI (required by claude-agent-sdk)
 RUN npm install -g @anthropic-ai/claude-code
@@ -38,8 +38,8 @@ RUN npm ci --omit=dev --legacy-peer-deps
 # Copier seulement le build
 COPY --from=builder /app/dist ./dist
 
-# Create upload directories and set ownership
-RUN mkdir -p /app/public/uploads /app/public/apk && \
+# Create upload directories, logs directory, and set ownership
+RUN mkdir -p /app/public/uploads/images /app/public/uploads/files /app/public/uploads/videos /app/public/apk /app/logs && \
     chown -R appuser:appgroup /app
 
 # Copy entrypoint script

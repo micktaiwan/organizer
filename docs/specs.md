@@ -69,3 +69,11 @@ Il existe deux sources de données utilisateur qui doivent rester synchronisées
 
 **Règle**: tout champ utilisateur ajouté à l'une des sources doit être ajouté à l'autre si nécessaire. Les commentaires `[USER_DATA_SYNC]` marquent les endroits concernés.
 
+## Vidéos
+
+- Desktop + Android : enregistrement de vidéos (écran ou webcam) avec preview avant envoi
+- Desktop : choix de la qualité (Haute 1080p, Moyenne 720p, Basse 480p)
+- Les vidéos s'affichent avec une miniature et badge de durée
+- Un clic sur la miniature ouvre le lecteur plein écran
+- Les miniatures sont générées côté serveur (async, non bloquant)
+

@@ -75,6 +75,15 @@ interface ApiService {
         @Part("clientSource") clientSource: RequestBody
     ): MessageResponse
 
+    @Multipart
+    @POST("upload/video")
+    suspend fun uploadVideoMessage(
+        @Part video: MultipartBody.Part,
+        @Part("roomId") roomId: RequestBody,
+        @Part("caption") caption: RequestBody?,
+        @Part("clientSource") clientSource: RequestBody
+    ): MessageResponse
+
     @PATCH("messages/{messageId}/read")
     suspend fun markAsRead(@Path("messageId") messageId: String): MessageResponse
 

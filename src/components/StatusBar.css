@@ -9,6 +9,13 @@
   color: #888;
   flex-shrink: 0;
   user-select: none;
+  -webkit-user-select: none;
+}
+
+.status-bar,
+.status-bar * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }
 
 .status-bar-item {
@@ -41,6 +48,343 @@
 
 .status-bar-item.users {
   color: #888;
+}
+
+button.status-bar-item.eko {
+  background: none;
+  border: none;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  transition: color 0.3s ease, background 0.15s ease;
+}
+
+button.status-bar-item.eko:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+button.status-bar-item.eko:disabled {
+  cursor: default;
+}
+
+.status-bar-item.eko.idle {
+  color: #999;
+}
+
+.status-bar-item.eko.observing {
+  color: #2196F3;
+}
+
+.status-bar-item.eko.thinking {
+  color: #9C27B0;
+  animation: eko-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes eko-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.eko-container {
+  position: relative;
+}
+
+.eko-panel {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 8px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08);
+  width: 700px;
+  font-size: 0.75rem;
+  z-index: 1000;
+  animation: eko-panel-appear 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
+}
+
+.eko-panel,
+.eko-panel * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+@keyframes eko-panel-appear {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.eko-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: #555;
+  text-transform: uppercase;
+}
+
+.eko-panel-header button {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  line-height: 1;
+}
+
+.eko-panel-header button:hover {
+  color: #333;
+}
+
+.eko-panel-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background: linear-gradient(to bottom, #fafafa, #fff);
+}
+
+.eko-panel-stats .stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.eko-panel-stats .stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+}
+
+.eko-panel-stats .stat-label {
+  font-size: 0.55rem;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.eko-panel-rate-limits {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background: linear-gradient(to bottom, #f5f5f5, #fafafa);
+}
+
+.rate-limit-header {
+  font-weight: 600;
+  font-size: 0.6rem;
+  margin-bottom: 6px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rate-limit-items {
+  display: flex;
+  gap: 12px;
+}
+
+.rate-limit-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  border: none;
+  font-family: inherit;
+}
+
+button.rate-limit-item {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+button.rate-limit-item:hover:not(.ready) {
+  opacity: 0.7;
+}
+
+button.rate-limit-item.ready {
+  cursor: default;
+}
+
+.rate-limit-item.ready {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4CAF50;
+}
+
+.rate-limit-item.cooldown {
+  background: rgba(255, 152, 0, 0.15);
+  color: #FF9800;
+}
+
+.rate-limit-item.maxed {
+  background: rgba(244, 67, 54, 0.15);
+  color: #f44336;
+}
+
+.rate-limit-item.today {
+  background: rgba(33, 150, 243, 0.1);
+  color: #2196F3;
+}
+
+.rate-limit-label {
+  white-space: nowrap;
+}
+
+.eko-panel-history {
+  padding: 8px 12px 10px;
+  max-height: 450px;
+  overflow-y: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.eko-panel-history-title {
+  font-weight: 600;
+  font-size: 0.6rem;
+  margin-bottom: 6px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.eko-history-entry {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 0;
+  width: 100%;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.eko-history-entry + .eko-history-entry {
+  border-top: 1px solid rgba(128,128,128,0.1);
+}
+
+.eko-history-action {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.eko-history-entry.action-message .eko-history-action {
+  background: #1a3550;
+  color: #64B5F6;
+}
+
+.eko-history-entry.pass .eko-history-action {
+  background: #353535;
+  color: #888;
+}
+
+.eko-history-entry.rate-limited .eko-history-action {
+  background: #3d2020;
+  color: #f44336;
+}
+
+.eko-history-entry.rate-limited .eko-history-text {
+  color: #f44336;
+  opacity: 0.7;
+}
+
+.eko-history-text {
+  flex: 1 1 0%;
+  min-width: 0;
+  color: #bbb;
+  line-height: 1.4;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.eko-history-entry.action-message .eko-history-text {
+  color: #64B5F6;
+}
+
+.eko-history-meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: fit-content;
+  white-space: nowrap;
+  margin-left: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.eko-history-date {
+  color: #999;
+  font-size: 0.6rem;
+}
+
+.eko-history-duration {
+  color: #666;
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.eko-history-tokens {
+  color: #9C27B0;
+  font-size: 0.55rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reflection live display */
+.status-bar-item.reflection-live {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(156, 39, 176, 0.1);
+  font-size: 0.65rem;
+  color: #9C27B0;
+  transition: opacity 0.5s ease-out;
+}
+
+.status-bar-item.reflection-live.pass {
+  background: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+}
+
+.status-bar-item.reflection-live.fading {
+  animation: reflection-fade-out 5s ease-out forwards;
+}
+
+@keyframes reflection-fade-out {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 .status-bar-spacer {
@@ -100,6 +444,92 @@
     color: #666;
   }
 
+  .status-bar-item.eko.idle {
+    color: #666;
+  }
+
+  .status-bar-item.eko.observing {
+    color: #42A5F5;
+  }
+
+  .status-bar-item.eko.thinking {
+    color: #BA68C8;
+  }
+
+  button.status-bar-item.eko:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .eko-panel {
+    background: #252525;
+    border-color: #3a3a3a;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  .eko-panel-header {
+    border-color: #3a3a3a;
+    color: #999;
+  }
+
+  .eko-panel-header button {
+    color: #666;
+  }
+
+  .eko-panel-header button:hover {
+    color: #ccc;
+  }
+
+  .eko-panel-stats {
+    border-color: #3a3a3a;
+    background: linear-gradient(to bottom, #2a2a2a, #252525);
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .eko-panel-rate-limits {
+    border-color: #3a3a3a;
+    background: linear-gradient(to bottom, #2a2a2a, #252525);
+  }
+
+  .rate-limit-header {
+    color: #777;
+  }
+
+  .rate-limit-item.ready {
+    background: rgba(76, 175, 80, 0.2);
+    color: #66BB6A;
+  }
+
+  .rate-limit-item.cooldown {
+    background: rgba(255, 152, 0, 0.2);
+    color: #FFA726;
+  }
+
+  .rate-limit-item.maxed {
+    background: rgba(244, 67, 54, 0.2);
+    color: #EF5350;
+  }
+
+  .rate-limit-item.today {
+    background: rgba(33, 150, 243, 0.15);
+    color: #42A5F5;
+  }
+
+  .eko-panel-stats .stat-value {
+    color: #eee;
+  }
+
+  .eko-panel-stats .stat-label {
+    color: #777;
+  }
+
+  .eko-panel-history-title {
+    color: #777;
+  }
+
+  .eko-history-entry + .eko-history-entry {
+    border-color: rgba(255,255,255,0.08);
+  }
+
   .status-bar-btn {
     color: #666;
   }
@@ -107,5 +537,15 @@
   .status-bar-btn:hover {
     background: rgba(255, 255, 255, 0.08);
     color: #ccc;
+  }
+
+  .status-bar-item.reflection-live {
+    background: rgba(156, 39, 176, 0.15);
+    color: #BA68C8;
+  }
+
+  .status-bar-item.reflection-live.pass {
+    background: rgba(244, 67, 54, 0.15);
+    color: #EF5350;
   }
 }

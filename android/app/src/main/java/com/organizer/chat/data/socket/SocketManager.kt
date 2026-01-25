@@ -130,6 +130,10 @@ class SocketManager(private val tokenManager: TokenManager) {
     private val _callAnsweredElsewhere = MutableSharedFlow<CallAnsweredElsewhereEvent>(extraBufferCapacity = 5)
     val callAnsweredElsewhere: SharedFlow<CallAnsweredElsewhereEvent> = _callAnsweredElsewhere.asSharedFlow()
 
+    // Video thumbnail ready event
+    private val _videoThumbnailReady = MutableSharedFlow<VideoThumbnailReadyEvent>(extraBufferCapacity = 10)
+    val videoThumbnailReady: SharedFlow<VideoThumbnailReadyEvent> = _videoThumbnailReady.asSharedFlow()
+
     fun connect(versionName: String? = null, versionCode: Int? = null) {
         // Guard against multiple connections (BUG-003 fix)
         if (socket?.connected() == true) {
@@ -714,6 +718,24 @@ class SocketManager(private val tokenManager: TokenManager) {
                     Log.e(TAG, "Error parsing call:answered-elsewhere", e)
                 }
             }
+
+            // Video thumbnail ready
+            on("video:thumbnail-ready") { args ->
+                try {
+                    val data = args[0] as JSONObject
+                    val event = VideoThumbnailReadyEvent(
+                        messageId = data.getString("messageId"),
+                        thumbnailUrl = data.getString("thumbnailUrl"),
+                        duration = data.optDouble("duration").takeIf { !it.isNaN() },
+                        width = data.optInt("width").takeIf { it > 0 },
+                        height = data.optInt("height").takeIf { it > 0 }
+                    )
+                    Log.d(TAG, "Video thumbnail ready: ${event.messageId}")
+                    _videoThumbnailReady.tryEmit(event)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing video:thumbnail-ready", e)
+                }
+            }
         }
     }
 
@@ -1055,4 +1077,13 @@ data class CallScreenShareEvent(
 data class CallAnsweredElsewhereEvent(
     val answeredBy: String,
     val caller: String
+)
+
+// Video thumbnail event
+data class VideoThumbnailReadyEvent(
+    val messageId: String,
+    val thumbnailUrl: String,
+    val duration: Double?,
+    val width: Int?,
+    val height: Int?
 )

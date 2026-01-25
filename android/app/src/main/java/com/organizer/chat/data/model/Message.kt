@@ -7,13 +7,18 @@ data class Message(
     val id: String,
     val roomId: String,
     val senderId: MessageSender,
-    val type: String = "text",  // "text", "image", "audio", "system", "file"
+    val type: String = "text",  // "text", "image", "audio", "system", "file", "video"
     val content: String,
-    val caption: String? = null,  // Optional caption for image/file messages
+    val caption: String? = null,  // Optional caption for image/file/video messages
     val fileName: String? = null,  // Original filename for file messages
     val fileSize: Long? = null,  // File size in bytes
-    val mimeType: String? = null,  // MIME type (application/pdf, etc.)
+    val mimeType: String? = null,  // MIME type (application/pdf, video/mp4, etc.)
     val fileDeleted: Boolean = false,  // True if the file was soft-deleted
+    // Video-specific fields
+    val thumbnailUrl: String? = null,  // Thumbnail URL for video messages
+    val duration: Double? = null,  // Video duration in seconds
+    val width: Int? = null,  // Video width in pixels
+    val height: Int? = null,  // Video height in pixels
     val status: String = "sent",  // "sent", "delivered", "read"
     val readBy: List<String> = emptyList(),
     val reactions: List<Reaction> = emptyList(),

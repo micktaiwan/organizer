@@ -102,6 +102,21 @@ class MessageRepository {
         }
     }
 
+    suspend fun uploadAndSendVideo(roomId: String, videoFile: File, caption: String? = null): Result<Message> {
+        return try {
+            val requestBody = videoFile.asRequestBody("video/mp4".toMediaTypeOrNull())
+            val videoPart = MultipartBody.Part.createFormData("video", videoFile.name, requestBody)
+            val roomIdPart = roomId.toRequestBody("text/plain".toMediaTypeOrNull())
+            val captionPart = caption?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val clientSourcePart = "android".toRequestBody("text/plain".toMediaTypeOrNull())
+
+            val response = api.uploadVideoMessage(videoPart, roomIdPart, captionPart, clientSourcePart)
+            Result.success(response.message)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun deleteMessage(messageId: String): Result<Boolean> {
         return try {
             api.deleteMessage(messageId)

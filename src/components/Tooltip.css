@@ -1,7 +1,6 @@
 .tooltip-container {
   position: relative;
   display: inline-flex;
-  cursor: default;
 }
 
 .tooltip {

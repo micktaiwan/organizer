@@ -1,15 +1,23 @@
 package com.organizer.chat.ui.screens.chat
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -31,13 +39,16 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.automirrored.filled.ScreenShare
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import android.net.Uri
 import coil.compose.AsyncImage
@@ -64,12 +75,14 @@ import com.organizer.chat.service.ChatService
 import com.organizer.chat.ui.components.ConnectionStatusIcon
 import com.organizer.chat.ui.components.MessageBubble
 import com.organizer.chat.ui.components.OfflineBanner
+import com.organizer.chat.ui.components.VideoPreviewDialog
 import com.organizer.chat.util.DocumentInfo
 import com.organizer.chat.util.DocumentPicker
 import com.organizer.chat.util.TokenManager
 import com.organizer.chat.util.rememberImagePickerLaunchers
 import com.organizer.chat.util.SharedContentManager
 import com.organizer.chat.data.model.SharedContent
+import com.organizer.chat.ui.screens.camera.CameraRecordScreen
 import android.util.Log
 import kotlinx.coroutines.launch
 
@@ -156,6 +169,21 @@ fun ChatScreen(
         }
     }
 
+    // Screen capture launcher for video recording
+    val screenCaptureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            viewModel.onScreenCaptureGranted(result.resultCode, result.data!!)
+        }
+    }
+
+    // Function to request screen capture permission
+    val requestScreenCapture: () -> Unit = {
+        val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
+    }
+
     // Notify service that we're in this room
     DisposableEffect(roomId, roomName, chatService) {
         chatService?.setCurrentRoom(roomId, roomName)
@@ -203,6 +231,53 @@ fun ChatScreen(
             // Small delay to let LazyColumn layout the new items
             delay(50)
             listState.animateScrollToItem(uiState.messages.size - 1)
+        }
+    }
+
+    // Video preview dialog (screen recording)
+    if (uiState.videoRecordingState == VideoRecordingState.PREVIEW ||
+        uiState.videoRecordingState == VideoRecordingState.UPLOADING) {
+        uiState.recordedVideoFile?.let { videoFile ->
+            VideoPreviewDialog(
+                videoFile = videoFile,
+                isUploading = uiState.videoRecordingState == VideoRecordingState.UPLOADING,
+                onSend = viewModel::sendRecordedVideo,
+                onDiscard = viewModel::discardRecordedVideo,
+                onRetry = {
+                    viewModel.retryVideoRecording()
+                    requestScreenCapture()
+                },
+                onDismiss = viewModel::discardRecordedVideo
+            )
+        }
+    }
+
+    // Camera recording screen
+    if (uiState.cameraRecordingState == CameraRecordingState.RECORDING) {
+        CameraRecordScreen(
+            onRecordingComplete = { file ->
+                viewModel.onCameraRecordingComplete(file)
+            },
+            onDismiss = viewModel::onCameraRecordingDismissed,
+            onError = { error ->
+                viewModel.onCameraRecordingDismissed()
+                Log.e("ChatScreen", "Camera recording error: $error")
+            }
+        )
+    }
+
+    // Camera video preview dialog
+    if (uiState.cameraRecordingState == CameraRecordingState.PREVIEW ||
+        uiState.cameraRecordingState == CameraRecordingState.UPLOADING) {
+        uiState.cameraRecordedFile?.let { videoFile ->
+            VideoPreviewDialog(
+                videoFile = videoFile,
+                isUploading = uiState.cameraRecordingState == CameraRecordingState.UPLOADING,
+                onSend = viewModel::sendCameraRecordedVideo,
+                onDiscard = viewModel::discardCameraRecordedVideo,
+                onRetry = viewModel::retryCameraRecording,
+                onDismiss = viewModel::discardCameraRecordedVideo
+            )
         }
     }
 
@@ -314,7 +389,20 @@ fun ChatScreen(
                 onClearImage = viewModel::clearSelectedImage,
                 selectedFileInfo = uiState.selectedFileInfo,
                 isUploadingFile = uiState.isUploadingFile,
-                onClearFile = viewModel::clearSelectedFile
+                onClearFile = viewModel::clearSelectedFile,
+                // Video recording (screen)
+                isVideoRecording = uiState.videoRecordingState == VideoRecordingState.RECORDING,
+                videoRecordingDuration = uiState.videoRecordingDuration,
+                onStartVideoRecording = requestScreenCapture,
+                onStopVideoRecording = viewModel::stopVideoRecording,
+                // Camera video recording
+                onStartCameraRecording = {
+                    if (hasCameraPermission) {
+                        viewModel.startCameraRecording()
+                    } else {
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                }
             )
         }
     ) { paddingValues ->
@@ -484,20 +572,35 @@ private fun ChatInputBar(
     onClearImage: () -> Unit,
     selectedFileInfo: DocumentInfo?,
     isUploadingFile: Boolean,
-    onClearFile: () -> Unit
+    onClearFile: () -> Unit,
+    // Video recording (screen)
+    isVideoRecording: Boolean = false,
+    videoRecordingDuration: Int = 0,
+    onStartVideoRecording: () -> Unit = {},
+    onStopVideoRecording: () -> Unit = {},
+    // Camera video recording
+    onStartCameraRecording: () -> Unit = {}
 ) {
     val currentOnStartRecording by rememberUpdatedState(onStartRecording)
     val currentOnStopRecording by rememberUpdatedState(onStopRecording)
     val currentHasPermission by rememberUpdatedState(hasAudioPermission)
     val currentIsSending by rememberUpdatedState(isSending)
 
+    // Attachment menu state
+    var isAttachmentMenuOpen by remember { mutableStateOf(false) }
+
     val micColor by animateColorAsState(
         targetValue = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
         label = "micColor"
     )
 
+    val videoRecordColor by animateColorAsState(
+        targetValue = if (isVideoRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        label = "videoRecordColor"
+    )
+
     // Can send if has text OR has image selected OR has file selected
-    val canSend = (textFieldState.text.isNotBlank() || selectedImageUri != null || selectedFileInfo != null) && !isSending && !isRecording
+    val canSend = (textFieldState.text.isNotBlank() || selectedImageUri != null || selectedFileInfo != null) && !isSending && !isRecording && !isVideoRecording
 
     Surface(
         modifier = Modifier
@@ -524,6 +627,38 @@ private fun ChatInputBar(
                 )
             }
 
+            // Attachment menu (collapsible)
+            AnimatedVisibility(
+                visible = isAttachmentMenuOpen && !isRecording && !isVideoRecording,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                AttachmentMenu(
+                    onCameraClick = {
+                        isAttachmentMenuOpen = false
+                        onCameraClick()
+                    },
+                    onGalleryClick = {
+                        isAttachmentMenuOpen = false
+                        onGalleryClick()
+                    },
+                    onFileClick = {
+                        isAttachmentMenuOpen = false
+                        onFileClick()
+                    },
+                    onCameraVideoClick = {
+                        isAttachmentMenuOpen = false
+                        onStartCameraRecording()
+                    },
+                    onScreenRecordClick = {
+                        isAttachmentMenuOpen = false
+                        onStartVideoRecording()
+                    },
+                    isSending = isSending,
+                    hasFileSelected = selectedFileInfo != null
+                )
+            }
+
             // Input row
             Row(
                 modifier = Modifier
@@ -531,50 +666,22 @@ private fun ChatInputBar(
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Camera button
-                if (!isRecording) {
+                // Toggle attachment menu button (hidden during recording)
+                if (!isRecording && !isVideoRecording) {
                     IconButton(
-                        onClick = onCameraClick,
+                        onClick = { isAttachmentMenuOpen = !isAttachmentMenuOpen },
                         enabled = !isSending
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = "Camera",
-                            tint = if (!isSending) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // Gallery button
-                if (!isRecording) {
-                    IconButton(
-                        onClick = onGalleryClick,
-                        enabled = !isSending
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Image,
-                            contentDescription = "Gallery",
-                            tint = if (!isSending) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // File attachment button
-                if (!isRecording) {
-                    IconButton(
-                        onClick = onFileClick,
-                        enabled = !isSending && selectedFileInfo == null
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AttachFile,
-                            contentDescription = "Attach file",
-                            tint = if (!isSending && selectedFileInfo == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                            imageVector = if (isAttachmentMenuOpen) Icons.Default.Close else Icons.Default.Add,
+                            contentDescription = if (isAttachmentMenuOpen) "Fermer le menu" else "Ouvrir le menu",
+                            tint = if (!isSending) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
                 if (isRecording) {
-                    // Recording info instead of text field
+                    // Audio recording info instead of text field
                     Row(
                         modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically
@@ -589,6 +696,40 @@ private fun ChatInputBar(
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.error
                         )
+                    }
+                } else if (isVideoRecording) {
+                    // Video recording info instead of text field
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Enreg. écran...",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = formatDuration(videoRecordingDuration),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // Stop button for screen recording
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(videoRecordColor.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            IconButton(onClick = onStopVideoRecording) {
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = "Arrêter l'enregistrement",
+                                    tint = videoRecordColor
+                                )
+                            }
+                        }
                     }
                 } else {
                     OutlinedTextField(
@@ -611,46 +752,48 @@ private fun ChatInputBar(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Mic button - ALWAYS present, same pointerInput
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(micColor.copy(alpha = 0.2f))
-                        .pointerInput(Unit) {
-                            awaitEachGesture {
-                                awaitFirstDown()
+                // Mic button - ALWAYS present (except during video recording), same pointerInput
+                if (!isVideoRecording) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(micColor.copy(alpha = 0.2f))
+                            .pointerInput(Unit) {
+                                awaitEachGesture {
+                                    awaitFirstDown()
 
-                                if (!currentHasPermission) {
+                                    if (!currentHasPermission) {
+                                        waitForUpOrCancellation()
+                                        onRequestAudioPermission()
+                                        return@awaitEachGesture
+                                    }
+
+                                    if (currentIsSending) {
+                                        return@awaitEachGesture
+                                    }
+
+                                    // Start recording on press
+                                    currentOnStartRecording()
+
+                                    // Wait for release
                                     waitForUpOrCancellation()
-                                    onRequestAudioPermission()
-                                    return@awaitEachGesture
+
+                                    // Stop and send on release
+                                    currentOnStopRecording()
                                 }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = if (isRecording) "Relacher pour envoyer" else "Maintenir pour enregistrer",
+                            tint = micColor
+                        )
+                    }
 
-                                if (currentIsSending) {
-                                    return@awaitEachGesture
-                                }
-
-                                // Start recording on press
-                                currentOnStartRecording()
-
-                                // Wait for release
-                                waitForUpOrCancellation()
-
-                                // Stop and send on release
-                                currentOnStopRecording()
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Mic,
-                        contentDescription = if (isRecording) "Relacher pour envoyer" else "Maintenir pour enregistrer",
-                        tint = micColor
-                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
-
-                Spacer(modifier = Modifier.width(4.dp))
 
                 // Send button
                 IconButton(
@@ -676,6 +819,99 @@ private fun ChatInputBar(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AttachmentMenu(
+    onCameraClick: () -> Unit,
+    onGalleryClick: () -> Unit,
+    onFileClick: () -> Unit,
+    onCameraVideoClick: () -> Unit,
+    onScreenRecordClick: () -> Unit,
+    isSending: Boolean,
+    hasFileSelected: Boolean
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(CharcoalLight)
+            .padding(vertical = 12.dp, horizontal = 16.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Camera photo
+        AttachmentMenuItem(
+            icon = Icons.Default.CameraAlt,
+            label = "Photo",
+            onClick = onCameraClick,
+            enabled = !isSending
+        )
+
+        // Gallery
+        AttachmentMenuItem(
+            icon = Icons.Default.Image,
+            label = "Galerie",
+            onClick = onGalleryClick,
+            enabled = !isSending
+        )
+
+        // File
+        AttachmentMenuItem(
+            icon = Icons.Default.AttachFile,
+            label = "Fichier",
+            onClick = onFileClick,
+            enabled = !isSending && !hasFileSelected
+        )
+
+        // Camera video
+        AttachmentMenuItem(
+            icon = Icons.Default.Videocam,
+            label = "Vidéo",
+            onClick = onCameraVideoClick,
+            enabled = !isSending
+        )
+
+        // Screen recording
+        AttachmentMenuItem(
+            icon = Icons.AutoMirrored.Filled.ScreenShare,
+            label = "Écran",
+            onClick = onScreenRecordClick,
+            enabled = !isSending
+        )
+    }
+}
+
+@Composable
+private fun AttachmentMenuItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        IconButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(AccentBlue.copy(alpha = if (enabled) 0.2f else 0.1f))
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (enabled) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (enabled) Color.White else Color.White.copy(alpha = 0.5f)
+        )
     }
 }
 

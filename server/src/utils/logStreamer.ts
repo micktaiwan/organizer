@@ -2,6 +2,7 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/index.js';
 import { JwtPayload } from '../middleware/auth.js';
+import { logger } from './logger.js';
 
 let io: Server | null = null;
 const originalConsoleLog = console.log;
@@ -60,18 +61,30 @@ export function setupLogStreamer(socketServer: Server) {
   // Override console methods
   console.log = (...args: unknown[]) => {
     originalConsoleLog.apply(console, args);
+    const message = formatMessage(args);
+    logger.info(message);
     emitLog('log', args);
   };
 
   console.error = (...args: unknown[]) => {
     originalConsoleError.apply(console, args);
+    const message = formatMessage(args);
+    logger.error(message);
     emitLog('error', args);
   };
 
   console.warn = (...args: unknown[]) => {
     originalConsoleWarn.apply(console, args);
+    const message = formatMessage(args);
+    logger.warn(message);
     emitLog('warn', args);
   };
+}
+
+function formatMessage(args: unknown[]): string {
+  return args
+    .map((arg) => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg)))
+    .join(' ');
 }
 
 function emitLog(level: string, args: unknown[]) {

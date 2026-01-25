@@ -295,8 +295,8 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
       return;
     }
 
-    // Delete associated file if it's an image or audio (not a Base64 data URL)
-    if ((message.type === 'image' || message.type === 'audio') && message.content) {
+    // Delete associated file if it's an image, audio, video or file (not a Base64 data URL)
+    if (['image', 'audio', 'video', 'file'].includes(message.type) && message.content) {
       const content = message.content;
 
       // Only delete if it's a file path (starts with /uploads/), not a Base64 data URL
@@ -311,6 +311,19 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
         } catch (fileError) {
           console.error('Failed to delete file:', fileError);
           // Continue with message deletion even if file deletion fails
+        }
+
+        // Also delete thumbnail for video messages
+        if (message.type === 'video' && message.thumbnailUrl) {
+          const thumbPath = path.join(process.cwd(), 'public', message.thumbnailUrl);
+          try {
+            if (fs.existsSync(thumbPath)) {
+              fs.unlinkSync(thumbPath);
+              console.log(`✓ Deleted thumbnail: ${thumbPath}`);
+            }
+          } catch (thumbError) {
+            console.error('Failed to delete thumbnail:', thumbError);
+          }
         }
       }
     }

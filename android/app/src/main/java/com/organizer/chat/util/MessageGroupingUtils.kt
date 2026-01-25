@@ -77,11 +77,11 @@ object MessageGroupingUtils {
     }
 
     /**
-     * Check if a message contains media (image, audio, file).
+     * Check if a message contains media (image, audio, file, video).
      * Messages with media break the group.
      */
     private fun hasMedia(msg: Message): Boolean {
-        return msg.type == "image" || msg.type == "audio" || msg.type == "file"
+        return msg.type == "image" || msg.type == "audio" || msg.type == "file" || msg.type == "video"
     }
 
     /**

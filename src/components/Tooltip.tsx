@@ -8,9 +8,10 @@ interface TooltipProps {
   children: ReactNode;
   position?: TooltipPosition;
   delay?: number;
+  disabled?: boolean;
 }
 
-export function Tooltip({ content, children, position = "top", delay = 150 }: TooltipProps) {
+export function Tooltip({ content, children, position = "top", delay = 150, disabled = false }: TooltipProps) {
   const [visible, setVisible] = useState(false);
   const [ready, setReady] = useState(false);
   const [offset, setOffset] = useState(0);
@@ -19,6 +20,7 @@ export function Tooltip({ content, children, position = "top", delay = 150 }: To
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   const showTooltip = () => {
+    if (disabled) return;
     timeoutRef.current = setTimeout(() => setVisible(true), delay);
   };
 
@@ -31,6 +33,10 @@ export function Tooltip({ content, children, position = "top", delay = 150 }: To
     setReady(false);
     setOffset(0);
   };
+
+  useEffect(() => {
+    if (disabled) hideTooltip();
+  }, [disabled]);
 
   useEffect(() => {
     return () => {

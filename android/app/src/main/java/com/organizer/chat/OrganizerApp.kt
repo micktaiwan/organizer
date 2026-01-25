@@ -8,6 +8,7 @@ import com.organizer.chat.data.api.ApiClient
 import com.organizer.chat.service.CallService
 import com.organizer.chat.service.ChatService
 import com.organizer.chat.service.TrackingService
+import com.organizer.chat.service.VideoRecorderService
 import com.organizer.chat.service.TrackSyncManager
 import com.organizer.chat.util.TokenManager
 
@@ -78,8 +79,18 @@ class OrganizerApp : Application() {
                 setShowBadge(true)
             }
 
+            // Recording channel (low priority, silent)
+            val recordingChannel = NotificationChannel(
+                VideoRecorderService.CHANNEL_RECORDING,
+                "Enregistrement",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Notification affichée pendant l'enregistrement d'écran"
+                setShowBadge(false)
+            }
+
             notificationManager.createNotificationChannels(
-                listOf(serviceChannel, messagesChannel, trackingChannel, callsChannel)
+                listOf(serviceChannel, messagesChannel, trackingChannel, callsChannel, recordingChannel)
             )
         }
     }

@@ -14,7 +14,7 @@ export interface Message {
   serverMessageId?: string; // MongoDB _id for server-synced messages
   text?: string;
   content?: string; // Alternative content field from server
-  type?: "text" | "image" | "audio" | "system" | "file"; // Message type from server
+  type?: "text" | "image" | "audio" | "system" | "file" | "video"; // Message type from server
   image?: string; // base64 data URL
   caption?: string; // Optional caption for image/file messages
   audio?: string; // base64 audio data URL for voice messages
@@ -22,6 +22,12 @@ export interface Message {
   fileName?: string; // Original filename for file messages
   fileSize?: number; // File size in bytes
   mimeType?: string; // MIME type for file messages
+  // Video-specific fields
+  videoUrl?: string; // URL for video messages
+  thumbnailUrl?: string | null; // URL for video thumbnail (null until generated)
+  duration?: number; // Video duration in seconds
+  width?: number; // Video width in pixels
+  height?: number; // Video height in pixels
   sender: "me" | "them";
   senderName?: string; // For multi-user rooms
   senderId?: string; // For identifying sender in rooms
@@ -111,4 +117,39 @@ export interface Note {
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// Eko Reflection types
+export interface EkoRateLimits {
+  lastMessageAt: string | null;
+  cooldownMinutes: number;
+  maxPerDay: number;
+  todayCount: number;
+  canIntervene: boolean;
+  cooldownRemaining?: number;
+}
+
+export interface EkoReflectionEntry {
+  id: string;
+  timestamp: string;
+  action: 'pass' | 'message';
+  reason: string;
+  message?: string;
+  roomName?: string;
+  durationMs: number;
+  rateLimited?: boolean;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+export interface EkoStats {
+  totalReflections: number;
+  passCount: number;
+  messageCount: number;
+  rateLimitedCount: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  lastMessageAt: string | null;
+  history: EkoReflectionEntry[];
+  rateLimits: EkoRateLimits;
 }
