@@ -17,3 +17,7 @@
 # Socket.io
 -keep class io.socket.** { *; }
 -keep class org.json.** { *; }
+
+# WebRTC
+-keep class org.webrtc.** { *; }
+-keep class io.getstream.webrtc.** { *; }
