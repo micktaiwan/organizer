@@ -213,6 +213,12 @@ function App() {
     returnToLatest,
     messageMode,
     targetMessageId,
+    firstUnreadId,
+    hasOlderUnread,
+    skippedUnreadCount,
+    hasMoreMessages,
+    isLoadingMore,
+    loadOlderMessages,
   } = useRooms({ userId: user?.id, username });
 
   const addCallSystemMessage = (type: "missed-call" | "rejected-call" | "ended-call") => {
@@ -753,6 +759,12 @@ function App() {
             targetMessageId={targetMessageId}
             messageMode={messageMode}
             onReturnToLatest={returnToLatest}
+            firstUnreadId={firstUnreadId}
+            hasOlderUnread={hasOlderUnread}
+            skippedUnreadCount={skippedUnreadCount}
+            hasMoreMessages={hasMoreMessages}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={loadOlderMessages}
             // Video recording
             videoRecorderState={videoRecorderState}
             videoSource={videoSource}

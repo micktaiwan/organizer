@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -96,6 +97,10 @@ import com.organizer.chat.ui.theme.CharcoalLight
 import com.organizer.chat.ui.theme.OfflineGray
 import com.organizer.chat.ui.theme.OnlineGreen
 import com.organizer.chat.ui.screens.users.getStatusColor
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 
 // Fixed colors for message bubbles (readable on both light/dark backgrounds)
 private val MessageTextColor = androidx.compose.ui.graphics.Color(0xFF1A1A1A)
@@ -1024,21 +1029,16 @@ private fun FullscreenVideoDialog(
 ) {
     val context = LocalContext.current
 
-    // Create ExoPlayer instance
     val exoPlayer = remember {
-        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
-            val mediaItem = androidx.media3.common.MediaItem.fromUri(videoUrl)
-            setMediaItem(mediaItem)
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(videoUrl))
             prepare()
             playWhenReady = true
         }
     }
 
-    // Release player when dialog closes
     DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer.release()
-        }
+        onDispose { exoPlayer.release() }
     }
 
     Dialog(
@@ -1053,13 +1053,19 @@ private fun FullscreenVideoDialog(
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            // ExoPlayer PlayerView
             AndroidView(
                 factory = { ctx ->
-                    androidx.media3.ui.PlayerView(ctx).apply {
+                    PlayerView(ctx).apply {
+                        layoutParams = android.widget.FrameLayout.LayoutParams(
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                        )
                         player = exoPlayer
                         useController = true
-                        setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        setEnableComposeSurfaceSyncWorkaround(true)
+                        // RESIZE_MODE_ZOOM fixes video not scaling in Compose AndroidView
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     }
                 },
                 modifier = Modifier.fillMaxSize()
@@ -1071,10 +1077,6 @@ private fun FullscreenVideoDialog(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(16.dp)
-                    .background(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        shape = CircleShape
-                    )
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,

@@ -514,6 +514,118 @@ router.get('/:roomId/search', async (req: AuthRequest, res: Response): Promise<v
   }
 });
 
+// GET /rooms/:roomId/messages/unread - Get messages with unread separator info
+router.get('/:roomId/messages/unread', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const room = await Room.findById(req.params.roomId);
+
+    if (!room) {
+      res.status(404).json({ error: 'Salon non trouvé' });
+      return;
+    }
+
+    // Check access
+    const isMember = room.members.some(m => m.userId.toString() === req.userId);
+    const isPublic = room.type === 'public' || room.type === 'lobby';
+
+    if (!isMember && !isPublic) {
+      res.status(403).json({ error: 'Accès non autorisé' });
+      return;
+    }
+
+    // Get lastReadAt for this member
+    const member = room.members.find(m => m.userId.toString() === req.userId);
+    const lastReadAt = member?.lastReadAt;
+
+    const { Message } = await import('../models/index.js');
+    const roomObjectId = new Types.ObjectId(req.params.roomId);
+
+    // If no lastReadAt, return latest messages (user has never been in this room)
+    if (!lastReadAt) {
+      const messages = await Message.find({ roomId: roomObjectId })
+        .sort({ createdAt: -1 })
+        .limit(30)
+        .populate('senderId', 'username displayName isOnline status statusMessage');
+
+      res.json({
+        messages: messages.reverse(),
+        firstUnreadId: null,
+        hasOlderUnread: false,
+        totalUnread: 0,
+        skippedUnread: 0,
+      });
+      return;
+    }
+
+    // Count total unread messages (messages after lastReadAt, not from current user)
+    const totalUnread = await Message.countDocuments({
+      roomId: roomObjectId,
+      createdAt: { $gt: lastReadAt },
+      senderId: { $ne: new Types.ObjectId(req.userId) },
+    });
+
+    // If no unread messages, return latest messages
+    if (totalUnread === 0) {
+      const messages = await Message.find({ roomId: roomObjectId })
+        .sort({ createdAt: -1 })
+        .limit(30)
+        .populate('senderId', 'username displayName isOnline status statusMessage');
+
+      res.json({
+        messages: messages.reverse(),
+        firstUnreadId: null,
+        hasOlderUnread: false,
+        totalUnread: 0,
+        skippedUnread: 0,
+      });
+      return;
+    }
+
+    // Get ~10 messages BEFORE lastReadAt (context)
+    const contextMessages = await Message.find({
+      roomId: roomObjectId,
+      createdAt: { $lte: lastReadAt },
+    })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .populate('senderId', 'username displayName isOnline status statusMessage');
+
+    // Get max 50 unread messages AFTER lastReadAt
+    const maxUnread = 50;
+    const unreadMessages = await Message.find({
+      roomId: roomObjectId,
+      createdAt: { $gt: lastReadAt },
+    })
+      .sort({ createdAt: 1 })
+      .limit(maxUnread)
+      .populate('senderId', 'username displayName isOnline status statusMessage');
+
+    // Combine messages: context (reversed to chronological) + unread
+    const messages = [...contextMessages.reverse(), ...unreadMessages];
+
+    // First unread message ID (first message after lastReadAt from other users)
+    const firstUnreadMessage = unreadMessages.find(
+      m => m.senderId._id?.toString() !== req.userId
+    );
+    const firstUnreadId = firstUnreadMessage?._id.toString() || null;
+
+    // Calculate how many unread messages were skipped (if > 100)
+    const skippedUnread = Math.max(0, totalUnread - maxUnread);
+    const hasOlderUnread = skippedUnread > 0;
+
+    res.json({
+      messages,
+      firstUnreadId,
+      hasOlderUnread,
+      totalUnread,
+      skippedUnread,
+    });
+  } catch (error) {
+    console.error('Get unread messages error:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // GET /rooms/:roomId/messages/around - Get messages around a timestamp
 router.get('/:roomId/messages/around', async (req: AuthRequest, res: Response): Promise<void> => {
   try {

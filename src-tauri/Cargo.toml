@@ -1,6 +1,6 @@
 [package]
 name = "organizer"
-version = "1.10.1"
+version = "1.10.2"
 description = "Cross-platform chat application"
 authors = ["Mickael FM"]
 edition = "2021"

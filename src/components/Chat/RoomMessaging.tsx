@@ -39,6 +39,14 @@ interface RoomMessagingProps {
   targetMessageId?: string | null;
   messageMode?: 'latest' | 'around';
   onReturnToLatest?: () => void;
+  // Unread separator props
+  firstUnreadId?: string | null;
+  hasOlderUnread?: boolean;
+  skippedUnreadCount?: number;
+  // Pagination props
+  hasMoreMessages?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
   // Video recording props
   videoRecorderState: VideoRecorderState;
   videoSource: VideoSource | null;
@@ -78,6 +86,12 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   targetMessageId,
   messageMode,
   onReturnToLatest,
+  firstUnreadId,
+  hasOlderUnread,
+  skippedUnreadCount,
+  hasMoreMessages,
+  isLoadingMore,
+  onLoadMore,
   // Video
   videoRecorderState,
   videoSource,
@@ -171,6 +185,12 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
         targetMessageId={targetMessageId}
         messageMode={messageMode}
         onReturnToLatest={onReturnToLatest}
+        firstUnreadId={firstUnreadId}
+        hasOlderUnread={hasOlderUnread}
+        skippedUnreadCount={skippedUnreadCount}
+        hasMoreMessages={hasMoreMessages}
+        isLoadingMore={isLoadingMore}
+        onLoadMore={onLoadMore}
       />
 
       <MessageInput

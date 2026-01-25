@@ -38,6 +38,11 @@ interface ApiService {
         @Query("before") before: String? = null
     ): MessagesResponse
 
+    @GET("rooms/{roomId}/messages/unread")
+    suspend fun getUnreadMessages(
+        @Path("roomId") roomId: String
+    ): UnreadMessagesResponse
+
     @POST("rooms/{roomId}/join")
     suspend fun joinRoom(@Path("roomId") roomId: String): RoomResponse
 

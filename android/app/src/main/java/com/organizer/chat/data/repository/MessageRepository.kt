@@ -3,6 +3,7 @@ package com.organizer.chat.data.repository
 import com.organizer.chat.data.api.ApiClient
 import com.organizer.chat.data.api.MarkMessagesReadRequest
 import com.organizer.chat.data.model.Message
+import com.organizer.chat.data.model.UnreadMessagesResponse
 import com.organizer.chat.data.model.ReactRequest
 import com.organizer.chat.data.model.ReactResponse
 import com.organizer.chat.data.model.SendMessageRequest
@@ -19,6 +20,15 @@ class MessageRepository {
         return try {
             val response = api.getMessages(roomId, limit, before)
             Result.success(response.messages)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getUnreadMessages(roomId: String): Result<UnreadMessagesResponse> {
+        return try {
+            val response = api.getUnreadMessages(roomId)
+            Result.success(response)
         } catch (e: Exception) {
             Result.failure(e)
         }
