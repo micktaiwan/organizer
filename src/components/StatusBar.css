@@ -130,6 +130,32 @@ button.status-bar-item.memory:hover {
   color: #f44336;
 }
 
+.memory-separator {
+  color: #888;
+  margin: 0 2px;
+}
+
+.memory-available {
+  color: #2196F3;
+  font-weight: 500;
+  display: inline-block;
+  min-width: 3.5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-available.warning {
+  color: #FF9800;
+}
+
+.memory-available.critical {
+  color: #f44336;
+}
+
+.memory-total {
+  color: #999;
+}
+
 button.status-bar-item.memory.warning {
   color: #FF9800;
 }
@@ -1028,6 +1054,26 @@ button.rate-limit-item.ready {
 
   .memory-free.critical {
     color: #EF5350;
+  }
+
+  .memory-separator {
+    color: #666;
+  }
+
+  .memory-available {
+    color: #64B5F6;
+  }
+
+  .memory-available.warning {
+    color: #FFA726;
+  }
+
+  .memory-available.critical {
+    color: #EF5350;
+  }
+
+  .memory-total {
+    color: #888;
   }
 
   button.status-bar-item.memory.warning {
