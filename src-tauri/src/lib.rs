@@ -649,6 +649,63 @@ struct DiskSpaceDetailed {
     used_gb: f64,
 }
 
+// Server status types (for remote server monitoring via SSH)
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ServerDiskInfo {
+    total_gb: f64,
+    used_gb: f64,
+    free_gb: f64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ServerMemoryInfo {
+    total_gb: f64,
+    used_gb: f64,
+    free_gb: f64,
+    available_gb: f64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ServerContainer {
+    name: String,
+    cpu: String,
+    memory: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ServerDirInfo {
+    path: String,
+    size_gb: f64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ServerStatus {
+    disk: ServerDiskInfo,
+    memory: ServerMemoryInfo,
+    containers: Vec<ServerContainer>,
+    top_dirs: Vec<ServerDirInfo>,
+}
+
+#[tauri::command]
+async fn get_server_status() -> Result<ServerStatus, String> {
+    // Run SSH in a blocking thread to avoid freezing the UI
+    tauri::async_runtime::spawn_blocking(|| {
+        let output = std::process::Command::new("ssh")
+            .args(["-o", "ConnectTimeout=5", "ubuntu@51.210.150.25", "/home/ubuntu/server-status.sh"])
+            .output()
+            .map_err(|e| format!("SSH failed: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!("SSH error: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        serde_json::from_str(&stdout).map_err(|e| format!("JSON parse error: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
+}
+
 // macOS: use df to get accurate free space (sysinfo includes purgeable space)
 #[cfg(target_os = "macos")]
 #[tauri::command]
@@ -1060,7 +1117,7 @@ pub fn run() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![greet, set_tray_badge, get_disk_space, get_disk_space_detailed, get_memory_info, get_top_processes, get_process_details])
+        .invoke_handler(tauri::generate_handler![greet, set_tray_badge, get_disk_space, get_disk_space_detailed, get_memory_info, get_top_processes, get_process_details, get_server_status])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 

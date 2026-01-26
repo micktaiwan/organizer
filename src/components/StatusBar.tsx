@@ -46,6 +46,13 @@ interface ProcessMemory {
   virtual_mb: number;
 }
 
+interface ServerStatus {
+  disk: { total_gb: number; used_gb: number; free_gb: number };
+  memory: { total_gb: number; used_gb: number; free_gb: number; available_gb: number };
+  containers: { name: string; cpu: string; memory: string }[];
+  top_dirs: { path: string; size_gb: number }[];
+}
+
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 interface StatusBarProps {
@@ -69,6 +76,9 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
   const [showEkoPanel, setShowEkoPanel] = useState(false);
   const [showDiskPanel, setShowDiskPanel] = useState(false);
   const [diskSpaceDetailed, setDiskSpaceDetailed] = useState<DiskSpaceDetailed | null>(null);
+  const [showServerDiskPanel, setShowServerDiskPanel] = useState(false);
+  const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
+  const [serverStatusLoading, setServerStatusLoading] = useState(false);
   const [selectedProcessPid, setSelectedProcessPid] = useState<number | null>(null);
   const [reflectionText, setReflectionText] = useState<string | null>(null);
   const [reflectionFading, setReflectionFading] = useState(false);
@@ -79,6 +89,7 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
   const ekoPanelRef = useRef<HTMLDivElement>(null);
   const diskPanelRef = useRef<HTMLDivElement>(null);
   const memoryPanelRef = useRef<HTMLDivElement>(null);
+  const serverDiskPanelRef = useRef<HTMLDivElement>(null);
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onlineCount = Array.from(statuses.values()).filter(u => u.isOnline && !u.isBot).length;
@@ -126,6 +137,32 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showDiskPanel]);
+
+  // Close server disk panel on click outside
+  useEffect(() => {
+    if (!showServerDiskPanel) return;
+    const handleClick = (e: MouseEvent) => {
+      if (serverDiskPanelRef.current && !serverDiskPanelRef.current.contains(e.target as Node)) {
+        setShowServerDiskPanel(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showServerDiskPanel]);
+
+  // Fetch server status via SSH
+  const fetchServerStatus = async () => {
+    if (!isTauri()) return;
+    setServerStatusLoading(true);
+    try {
+      const status = await invoke<ServerStatus>("get_server_status");
+      setServerStatus(status);
+    } catch (err) {
+      console.error("[StatusBar] server status error:", err);
+    } finally {
+      setServerStatusLoading(false);
+    }
+  };
 
   // Close process details when memory panel closes
   useEffect(() => {
@@ -673,12 +710,118 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
       )}
 
       {serverDiskSpace && (
-        <Tooltip content="Espace disque serveur" position="top">
-          <span className="status-bar-item disk server">
-            <Cloud size={12} />
-            {serverDiskSpace.free_gb.toFixed(serverDiskSpace.free_gb < 10 ? 1 : 0)} GB
-          </span>
-        </Tooltip>
+        <div className="server-disk-container" ref={serverDiskPanelRef}>
+          <Tooltip content="Espace disque serveur (clic pour détails)" position="top" disabled={showServerDiskPanel}>
+            <button
+              className="status-bar-item disk server"
+              onClick={() => {
+                fetchServerStatus();
+                setShowServerDiskPanel(!showServerDiskPanel);
+              }}
+            >
+              <Cloud size={12} />
+              {serverDiskSpace.free_gb.toFixed(serverDiskSpace.free_gb < 10 ? 1 : 0)} GB
+            </button>
+          </Tooltip>
+
+          {showServerDiskPanel && (
+            <div className="server-disk-panel">
+              <div className="disk-panel-header">
+                <span>Server Status</span>
+                <button onClick={() => setShowServerDiskPanel(false)}>&times;</button>
+              </div>
+              {serverStatusLoading ? (
+                <div className="server-status-loading">
+                  <div className="spinner" />
+                  <span>Connecting via SSH...</span>
+                </div>
+              ) : serverStatus ? (
+                <div className="server-status-content">
+                  <div className="server-section">
+                    <div className="server-section-title">Disk</div>
+                    <div className="server-stat-row">
+                      <span>Total</span>
+                      <span>{serverStatus.disk.total_gb} GB</span>
+                    </div>
+                    <div className="server-stat-row">
+                      <span>Used</span>
+                      <span>{serverStatus.disk.used_gb} GB</span>
+                    </div>
+                    <div className="server-stat-row highlight-green">
+                      <span>Free</span>
+                      <span>{serverStatus.disk.free_gb} GB</span>
+                    </div>
+                    <div className="disk-bar-container">
+                      <div className="disk-bar">
+                        <div
+                          className="disk-bar-used"
+                          style={{ width: `${(serverStatus.disk.used_gb / serverStatus.disk.total_gb) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="server-section">
+                    <div className="server-section-title">Memory</div>
+                    <div className="server-stat-row">
+                      <span>Total</span>
+                      <span>{serverStatus.memory.total_gb} GB</span>
+                    </div>
+                    <div className="server-stat-row">
+                      <span>Used</span>
+                      <span>{serverStatus.memory.used_gb} GB</span>
+                    </div>
+                    <div className="server-stat-row highlight-green">
+                      <span>Available</span>
+                      <span>{serverStatus.memory.available_gb} GB</span>
+                    </div>
+                  </div>
+
+                  {serverStatus.containers.length > 0 && (
+                    <div className="server-section">
+                      <div className="server-section-title">Containers ({serverStatus.containers.length})</div>
+                      <div className="server-containers">
+                        {[...serverStatus.containers].sort((a, b) => {
+                          // Parse memory like "104.8MiB / 1.894GiB" -> extract first number in MiB
+                          const parseMemory = (mem: string) => {
+                            const match = mem.match(/^([\d.]+)(\w+)/);
+                            if (!match) return 0;
+                            const value = parseFloat(match[1]);
+                            const unit = match[2].toLowerCase();
+                            if (unit.includes('gib')) return value * 1024;
+                            return value; // MiB
+                          };
+                          return parseMemory(b.memory) - parseMemory(a.memory);
+                        }).map((c) => (
+                          <div key={c.name} className="server-container-row">
+                            <span className="container-name">{c.name}</span>
+                            <span className="container-stats">{c.memory.split(' / ')[0]} | {c.cpu}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {serverStatus.top_dirs.length > 0 && (
+                    <div className="server-section">
+                      <div className="server-section-title">Top Directories</div>
+                      {[...serverStatus.top_dirs]
+                        .sort((a, b) => b.size_gb - a.size_gb)
+                        .map((d) => (
+                        <div key={d.path} className="server-stat-row">
+                          <span className="dir-path">{d.path}</span>
+                          <span>{d.size_gb.toFixed(2)} GB</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="server-status-error">Failed to fetch server status</div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {diskSpace && (
