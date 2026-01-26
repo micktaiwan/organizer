@@ -1,6 +1,6 @@
 [package]
 name = "organizer"
-version = "1.10.2"
+version = "1.10.4"
 description = "Cross-platform chat application"
 authors = ["Mickael FM"]
 edition = "2021"
@@ -29,5 +29,4 @@ tauri-plugin-store = "2.2.0"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-shell = "2"
-sysinfo = { version = "0.32", default-features = false, features = ["disk"] }
-
+sysinfo = { version = "0.32", default-features = false, features = ["disk", "system"] }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { HardDrive, Users, Wifi, WifiOff, Activity, Shield, Globe, Cloud, Bot, Eye, Brain, MessageCircle, Pause, Clock, Ban, Check } from "lucide-react";
+import { HardDrive, Users, Wifi, WifiOff, Activity, Shield, Globe, Cloud, Bot, Eye, Brain, MessageCircle, Pause, Clock, Ban, Check, MemoryStick } from "lucide-react";
 import { useSocketConnection } from "../contexts/SocketConnectionContext";
 import { useUserStatus } from "../contexts/UserStatusContext";
 import { getApiBaseUrl } from "../services/api";
@@ -16,6 +16,34 @@ interface DiskSpace {
   total_gb: number;
 }
 
+interface DiskSpaceDetailed {
+  total_gb: number;
+  available_gb: number;
+  available_with_purgeable_gb: number;
+  purgeable_gb: number;
+  used_gb: number;
+}
+
+interface MemoryInfo {
+  total_gb: number;
+  used_gb: number;
+  available_gb: number;
+  free_gb: number;
+  app_gb: number;
+  wired_gb: number;
+  compressed_gb: number;
+  cached_gb: number;
+  swap_total_gb: number;
+  swap_used_gb: number;
+}
+
+interface ProcessMemory {
+  pid: number;
+  name: string;
+  memory_mb: number;
+  virtual_mb: number;
+}
+
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 interface StatusBarProps {
@@ -28,10 +56,17 @@ interface StatusBarProps {
 export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoomId }: StatusBarProps) {
   const [diskSpace, setDiskSpace] = useState<DiskSpace | null>(null);
   const [serverDiskSpace, setServerDiskSpace] = useState<DiskSpace | null>(null);
+  const [memoryInfo, setMemoryInfo] = useState<MemoryInfo | null>(null);
+  const [topProcesses, setTopProcesses] = useState<ProcessMemory[]>([]);
+  const [processRankChanges, setProcessRankChanges] = useState<Map<number, number>>(new Map());
+  const prevProcessRanksRef = useRef<Map<number, number>>(new Map());
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [ping, setPing] = useState<number | null>(null);
   const [ekoStatus, setEkoStatus] = useState<EkoStatus>('idle');
   const [ekoStats, setEkoStats] = useState<EkoStats | null>(null);
   const [showEkoPanel, setShowEkoPanel] = useState(false);
+  const [showDiskPanel, setShowDiskPanel] = useState(false);
+  const [diskSpaceDetailed, setDiskSpaceDetailed] = useState<DiskSpaceDetailed | null>(null);
   const [reflectionText, setReflectionText] = useState<string | null>(null);
   const [reflectionFading, setReflectionFading] = useState(false);
   const [reflectionIsPass, setReflectionIsPass] = useState(false);
@@ -39,6 +74,8 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
   const { statuses } = useUserStatus();
   const pingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const ekoPanelRef = useRef<HTMLDivElement>(null);
+  const diskPanelRef = useRef<HTMLDivElement>(null);
+  const memoryPanelRef = useRef<HTMLDivElement>(null);
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onlineCount = Array.from(statuses.values()).filter(u => u.isOnline && !u.isBot).length;
@@ -63,7 +100,7 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
     }
   }, [isConnected, ekoStatus]);
 
-  // Close panel on click outside
+  // Close eko panel on click outside
   useEffect(() => {
     if (!showEkoPanel) return;
     const handleClick = (e: MouseEvent) => {
@@ -74,6 +111,41 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showEkoPanel]);
+
+  // Close disk panel on click outside
+  useEffect(() => {
+    if (!showDiskPanel) return;
+    const handleClick = (e: MouseEvent) => {
+      if (diskPanelRef.current && !diskPanelRef.current.contains(e.target as Node)) {
+        setShowDiskPanel(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showDiskPanel]);
+
+  // Close memory panel on click outside
+  useEffect(() => {
+    if (!showMemoryPanel) return;
+    const handleClick = (e: MouseEvent) => {
+      if (memoryPanelRef.current && !memoryPanelRef.current.contains(e.target as Node)) {
+        setShowMemoryPanel(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showMemoryPanel]);
+
+  // Fetch detailed disk space
+  const fetchDiskSpaceDetailed = async () => {
+    if (!isTauri()) return;
+    try {
+      const detailed = await invoke<DiskSpaceDetailed>("get_disk_space_detailed");
+      setDiskSpaceDetailed(detailed);
+    } catch (err) {
+      console.error("[StatusBar] disk space detailed error:", err);
+    }
+  };
 
   // Eko status via Socket.io
   useEffect(() => {
@@ -179,6 +251,55 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
     const interval = setInterval(fetchDiskSpace, 60_000);
     return () => clearInterval(interval);
   }, []);
+
+  // Memory info (Tauri only) - refresh faster when panel is open
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    const fetchMemoryInfo = () => {
+      invoke<MemoryInfo>("get_memory_info")
+        .then(setMemoryInfo)
+        .catch((err) => console.error("[StatusBar] memory info error:", err));
+    };
+
+    fetchMemoryInfo();
+    const interval = setInterval(fetchMemoryInfo, showMemoryPanel ? 1_000 : 10_000);
+    return () => clearInterval(interval);
+  }, [showMemoryPanel]);
+
+  // Top processes (separate interval, slower refresh)
+  useEffect(() => {
+    if (!isTauri() || !showMemoryPanel) {
+      setTopProcesses([]);
+      setProcessRankChanges(new Map());
+      prevProcessRanksRef.current = new Map();
+      return;
+    }
+
+    const fetchTopProcesses = () => {
+      invoke<ProcessMemory[]>("get_top_processes", { limit: 10 })
+        .then((processes) => {
+          // Compute rank changes by comparing with previous ranks
+          const changes = new Map<number, number>();
+          processes.forEach((proc, newIndex) => {
+            const prevIndex = prevProcessRanksRef.current.get(proc.pid);
+            if (prevIndex !== undefined && prevIndex !== newIndex) {
+              changes.set(proc.pid, prevIndex - newIndex);
+            }
+          });
+          setProcessRankChanges(changes);
+
+          // Save current ranks for next comparison
+          prevProcessRanksRef.current = new Map(processes.map((p, i) => [p.pid, i]));
+          setTopProcesses(processes);
+        })
+        .catch((err) => console.error("[StatusBar] top processes error:", err));
+    };
+
+    fetchTopProcesses();
+    const interval = setInterval(fetchTopProcesses, 3_000);
+    return () => clearInterval(interval);
+  }, [showMemoryPanel]);
 
   // Server disk space (fetch from API)
   useEffect(() => {
@@ -389,6 +510,142 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
         )}
       </div>
 
+      {memoryInfo && (
+        <div className="memory-container" ref={memoryPanelRef}>
+          <Tooltip content="Mémoire RAM (clic pour détails)" position="top" disabled={showMemoryPanel}>
+            <button
+              className="status-bar-item memory"
+              onClick={() => setShowMemoryPanel(!showMemoryPanel)}
+            >
+              <MemoryStick size={12} />
+              <span className={`memory-free ${memoryInfo.available_gb < 2 ? 'critical' : memoryInfo.available_gb < 5 ? 'warning' : ''}`}>{memoryInfo.available_gb.toFixed(1)}</span> / {memoryInfo.total_gb.toFixed(0)} GB
+            </button>
+          </Tooltip>
+
+          {showMemoryPanel && (
+            <div className="memory-panel">
+              <div className="memory-panel-header">
+                <span>Memory</span>
+                <button onClick={() => setShowMemoryPanel(false)}>&times;</button>
+              </div>
+              <div className="memory-panel-content">
+                <div className="memory-stat-row">
+                  <span className="memory-stat-label">Total</span>
+                  <span className="memory-stat-value">{memoryInfo.total_gb.toFixed(1)} GB</span>
+                </div>
+                <div className={`memory-stat-row ${memoryInfo.used_gb / memoryInfo.total_gb > 0.8 ? 'highlight-red' : ''}`}>
+                  <span className="memory-stat-label">Used</span>
+                  <span className="memory-stat-value">{memoryInfo.used_gb.toFixed(1)} GB</span>
+                </div>
+                <div className="memory-stat-row highlight-green">
+                  <span className="memory-stat-label">Available</span>
+                  <span className="memory-stat-value">{memoryInfo.available_gb.toFixed(1)} GB</span>
+                </div>
+
+                {/* Detailed breakdown (macOS only, values > 0) */}
+                {(memoryInfo.app_gb > 0 || memoryInfo.wired_gb > 0) && (
+                  <>
+                    <div className="memory-section-title">Breakdown</div>
+                    {memoryInfo.app_gb > 0 && (
+                      <div className="memory-stat-row highlight-blue">
+                        <span className="memory-stat-label">App</span>
+                        <span className="memory-stat-value">{memoryInfo.app_gb.toFixed(1)} GB</span>
+                      </div>
+                    )}
+                    {memoryInfo.wired_gb > 0 && (
+                      <div className="memory-stat-row highlight-yellow">
+                        <span className="memory-stat-label">Wired</span>
+                        <span className="memory-stat-value">{memoryInfo.wired_gb.toFixed(1)} GB</span>
+                      </div>
+                    )}
+                    {memoryInfo.compressed_gb > 0.1 && (
+                      <div className="memory-stat-row highlight-orange">
+                        <span className="memory-stat-label">Compressed</span>
+                        <span className="memory-stat-value">{memoryInfo.compressed_gb.toFixed(1)} GB</span>
+                      </div>
+                    )}
+                    {memoryInfo.cached_gb > 0.1 && (
+                      <div className="memory-stat-row">
+                        <span className="memory-stat-label">Cached</span>
+                        <span className="memory-stat-value">{memoryInfo.cached_gb.toFixed(1)} GB</span>
+                      </div>
+                    )}
+                    {memoryInfo.free_gb > 0 && (
+                      <div className="memory-stat-row highlight-green">
+                        <span className="memory-stat-label">Free</span>
+                        <span className="memory-stat-value">{memoryInfo.free_gb.toFixed(1)} GB</span>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="memory-bar-container">
+                  <div className="memory-bar memory-bar-stacked">
+                    {memoryInfo.app_gb > 0 ? (
+                      <>
+                        <div className="memory-bar-app" style={{ width: `${(memoryInfo.app_gb / memoryInfo.total_gb) * 100}%` }} />
+                        <div className="memory-bar-wired" style={{ width: `${(memoryInfo.wired_gb / memoryInfo.total_gb) * 100}%` }} />
+                        <div className="memory-bar-compressed" style={{ width: `${(memoryInfo.compressed_gb / memoryInfo.total_gb) * 100}%` }} />
+                      </>
+                    ) : (
+                      <div
+                        className={`memory-bar-used ${memoryInfo.used_gb / memoryInfo.total_gb > 0.9 ? 'critical' : memoryInfo.used_gb / memoryInfo.total_gb > 0.8 ? 'warning' : ''}`}
+                        style={{ width: `${(memoryInfo.used_gb / memoryInfo.total_gb) * 100}%` }}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {memoryInfo.swap_total_gb > 0 && (
+                  <>
+                    <div className="memory-section-title">Swap</div>
+                    <div className="memory-stat-row">
+                      <span className="memory-stat-label">Total</span>
+                      <span className="memory-stat-value">{memoryInfo.swap_total_gb.toFixed(1)} GB</span>
+                    </div>
+                    <div className={`memory-stat-row ${memoryInfo.swap_used_gb > 0.1 ? 'highlight-orange' : ''}`}>
+                      <span className="memory-stat-label">Used</span>
+                      <span className="memory-stat-value">{memoryInfo.swap_used_gb.toFixed(1)} GB</span>
+                    </div>
+                    {memoryInfo.swap_used_gb > 0.1 && (
+                      <div className="memory-bar-container">
+                        <div className="memory-bar">
+                          <div
+                            className="memory-bar-swap"
+                            style={{ width: `${(memoryInfo.swap_used_gb / memoryInfo.swap_total_gb) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {topProcesses.length > 0 && (
+                  <>
+                    <div className="memory-section-title">Top Processes</div>
+                    <div className="memory-processes">
+                      {topProcesses.map((proc) => {
+                        const rankChange = processRankChanges.get(proc.pid) || 0;
+                        return (
+                          <div key={proc.pid} className="memory-process-row">
+                            <span className="memory-process-rank">
+                              {rankChange > 0 && <span className="rank-up">▲</span>}
+                              {rankChange < 0 && <span className="rank-down">▼</span>}
+                            </span>
+                            <span className="memory-process-name" title={proc.name}>{proc.name}</span>
+                            <span className="memory-process-value">{proc.memory_mb >= 1024 ? `${(proc.memory_mb / 1024).toFixed(1)} GB` : `${proc.memory_mb.toFixed(0)} MB`}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {serverDiskSpace && (
         <Tooltip content="Espace disque serveur" position="top">
           <span className="status-bar-item disk server">
@@ -399,12 +656,69 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
       )}
 
       {diskSpace && (
-        <Tooltip content="Espace disque local" position="top">
-          <span className="status-bar-item disk local">
-            <HardDrive size={12} />
-            {diskSpace.free_gb.toFixed(diskSpace.free_gb < 10 ? 1 : 0)} GB
-          </span>
-        </Tooltip>
+        <div className="disk-container" ref={diskPanelRef}>
+          <Tooltip content="Espace disque local (clic pour détails)" position="top" disabled={showDiskPanel}>
+            <button
+              className="status-bar-item disk local"
+              onClick={() => {
+                fetchDiskSpaceDetailed();
+                setShowDiskPanel(!showDiskPanel);
+              }}
+            >
+              <HardDrive size={12} />
+              {diskSpace.free_gb.toFixed(diskSpace.free_gb < 10 ? 1 : 0)} GB
+            </button>
+          </Tooltip>
+
+          {showDiskPanel && diskSpaceDetailed && (
+            <div className="disk-panel">
+              <div className="disk-panel-header">
+                <span>Local Disk Space</span>
+                <button onClick={() => setShowDiskPanel(false)}>&times;</button>
+              </div>
+              <div className="disk-panel-content">
+                <div className="disk-stat-row">
+                  <span className="disk-stat-label">Total</span>
+                  <span className="disk-stat-value">{diskSpaceDetailed.total_gb.toFixed(0)} GB</span>
+                </div>
+                <div className="disk-stat-row">
+                  <span className="disk-stat-label">Used</span>
+                  <span className="disk-stat-value">{diskSpaceDetailed.used_gb.toFixed(0)} GB</span>
+                </div>
+                <div className="disk-stat-row highlight-green">
+                  <span className="disk-stat-label">Free (real)</span>
+                  <span className="disk-stat-value">{diskSpaceDetailed.available_gb.toFixed(1)} GB</span>
+                </div>
+                {diskSpaceDetailed.purgeable_gb > 0.1 && (
+                  <div className="disk-stat-row highlight-orange">
+                    <span className="disk-stat-label">Purgeable</span>
+                    <span className="disk-stat-value">+{diskSpaceDetailed.purgeable_gb.toFixed(1)} GB</span>
+                  </div>
+                )}
+                {diskSpaceDetailed.purgeable_gb > 0.1 && (
+                  <div className="disk-stat-row">
+                    <span className="disk-stat-label">Free + Purg</span>
+                    <span className="disk-stat-value">{diskSpaceDetailed.available_with_purgeable_gb.toFixed(1)} GB</span>
+                  </div>
+                )}
+                <div className="disk-bar-container">
+                  <div className="disk-bar">
+                    <div
+                      className="disk-bar-used"
+                      style={{ width: `${(diskSpaceDetailed.used_gb / diskSpaceDetailed.total_gb) * 100}%` }}
+                    />
+                    {diskSpaceDetailed.purgeable_gb > 0.1 && (
+                      <div
+                        className="disk-bar-purgeable"
+                        style={{ width: `${(diskSpaceDetailed.purgeable_gb / diskSpaceDetailed.total_gb) * 100}%` }}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {reflectionText && (

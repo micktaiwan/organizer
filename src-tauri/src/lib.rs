@@ -45,6 +45,321 @@ struct DiskSpace {
     total_gb: f64,
 }
 
+#[derive(serde::Serialize)]
+struct ProcessMemory {
+    pid: u32,
+    name: String,
+    memory_mb: f64,      // Resident memory (in RAM)
+    virtual_mb: f64,     // Virtual memory (includes swap)
+}
+
+#[derive(serde::Serialize)]
+struct MemoryInfo {
+    total_gb: f64,
+    used_gb: f64,
+    available_gb: f64,
+    free_gb: f64,
+    app_gb: f64,
+    wired_gb: f64,
+    compressed_gb: f64,
+    cached_gb: f64,
+    swap_total_gb: f64,
+    swap_used_gb: f64,
+}
+
+// macOS: use host_statistics64 for accurate memory info like Activity Monitor
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn get_memory_info() -> MemoryInfo {
+    use std::mem;
+
+    // Match exact macOS struct layout: natural_t = u32, some fields are u64
+    #[repr(C)]
+    struct VmStatistics64 {
+        free_count: u32,              // natural_t
+        active_count: u32,            // natural_t
+        inactive_count: u32,          // natural_t
+        wire_count: u32,              // natural_t
+        zero_fill_count: u64,
+        reactivations: u64,
+        pageins: u64,
+        pageouts: u64,
+        faults: u64,
+        cow_faults: u64,
+        lookups: u64,
+        hits: u64,
+        purges: u64,
+        purgeable_count: u32,         // natural_t
+        speculative_count: u32,       // natural_t
+        decompressions: u64,
+        compressions: u64,
+        swapins: u64,
+        swapouts: u64,
+        compressor_page_count: u32,   // natural_t
+        throttled_count: u32,         // natural_t
+        external_page_count: u32,     // natural_t
+        internal_page_count: u32,     // natural_t
+        total_uncompressed_pages_in_compressor: u64,
+    }
+
+    extern "C" {
+        fn mach_host_self() -> u32;
+        fn host_statistics64(
+            host: u32,
+            flavor: i32,
+            info: *mut VmStatistics64,
+            count: *mut u32,
+        ) -> i32;
+        fn host_page_size(host: u32, page_size: *mut u32) -> i32;
+    }
+
+    const HOST_VM_INFO64: i32 = 4;
+
+    let mut vm_stat: VmStatistics64 = unsafe { mem::zeroed() };
+    let mut count = (mem::size_of::<VmStatistics64>() / mem::size_of::<u32>()) as u32;
+    let mut page_size: u32 = 4096;
+
+    let host = unsafe { mach_host_self() };
+    unsafe { host_page_size(host, &mut page_size) };
+    let result = unsafe { host_statistics64(host, HOST_VM_INFO64, &mut vm_stat, &mut count) };
+
+    if result != 0 {
+        // Fallback to sysinfo if mach call fails
+        return get_memory_info_fallback();
+    }
+
+    let page_to_gb = |pages: u64| (pages as f64 * page_size as f64) / 1_073_741_824.0;
+
+    // Get total memory via sysctl
+    let total_bytes = {
+        use std::process::Command;
+        Command::new("sysctl")
+            .args(["-n", "hw.memsize"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u64>().ok())
+            .unwrap_or(0)
+    };
+    let total_gb = total_bytes as f64 / 1_073_741_824.0;
+
+    // Calculate memory categories like Activity Monitor (cast u32 to u64)
+    let free_pages = (vm_stat.free_count as u64).saturating_sub(vm_stat.speculative_count as u64);
+    let app_pages = (vm_stat.internal_page_count as u64).saturating_sub(vm_stat.purgeable_count as u64);
+    let cached_pages = vm_stat.purgeable_count as u64 + vm_stat.external_page_count as u64;
+
+    let free_gb = page_to_gb(free_pages);
+    let app_gb = page_to_gb(app_pages);
+    let wired_gb = page_to_gb(vm_stat.wire_count as u64);
+    let compressed_gb = page_to_gb(vm_stat.compressor_page_count as u64);
+    let cached_gb = page_to_gb(cached_pages);
+
+    // Used = App + Wired + Compressed
+    let used_gb = app_gb + wired_gb + compressed_gb;
+    // Available = Free + Inactive (pages that can be reclaimed)
+    let available_gb = page_to_gb(free_pages + vm_stat.inactive_count as u64);
+
+    // Swap via sysinfo
+    let (swap_total_gb, swap_used_gb) = {
+        use sysinfo::System;
+        let mut sys = System::new();
+        sys.refresh_memory();
+        let to_gb = |b: u64| b as f64 / 1_073_741_824.0;
+        (to_gb(sys.total_swap()), to_gb(sys.used_swap()))
+    };
+
+    MemoryInfo {
+        total_gb,
+        used_gb,
+        available_gb,
+        free_gb,
+        app_gb,
+        wired_gb,
+        compressed_gb,
+        cached_gb,
+        swap_total_gb,
+        swap_used_gb,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn get_memory_info_fallback() -> MemoryInfo {
+    use sysinfo::System;
+    let mut sys = System::new();
+    sys.refresh_memory();
+    let to_gb = |b: u64| b as f64 / 1_073_741_824.0;
+    let total = sys.total_memory();
+    let used = sys.used_memory();
+    MemoryInfo {
+        total_gb: to_gb(total),
+        used_gb: to_gb(used),
+        available_gb: to_gb(total.saturating_sub(used)),
+        free_gb: to_gb(sys.free_memory()),
+        app_gb: 0.0,
+        wired_gb: 0.0,
+        compressed_gb: 0.0,
+        cached_gb: 0.0,
+        swap_total_gb: to_gb(sys.total_swap()),
+        swap_used_gb: to_gb(sys.used_swap()),
+    }
+}
+
+// Windows/Linux: use sysinfo
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn get_memory_info() -> MemoryInfo {
+    use sysinfo::System;
+    let mut sys = System::new();
+    sys.refresh_memory();
+
+    let to_gb = |b: u64| b as f64 / 1_073_741_824.0;
+
+    let total = sys.total_memory();
+    let used = sys.used_memory();
+    let available = sys.available_memory();
+
+    MemoryInfo {
+        total_gb: to_gb(total),
+        used_gb: to_gb(used),
+        available_gb: if available > 0 { to_gb(available) } else { to_gb(total.saturating_sub(used)) },
+        free_gb: to_gb(sys.free_memory()),
+        app_gb: 0.0,  // Not available on Windows/Linux via sysinfo
+        wired_gb: 0.0,
+        compressed_gb: 0.0,
+        cached_gb: 0.0,
+        swap_total_gb: to_gb(sys.total_swap()),
+        swap_used_gb: to_gb(sys.used_swap()),
+    }
+}
+
+// macOS: use proc_pid_rusage for accurate memory footprint like Activity Monitor
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn get_top_processes(limit: usize) -> Vec<ProcessMemory> {
+    use sysinfo::System;
+    use std::mem;
+
+    #[repr(C)]
+    struct RUsageInfoV4 {
+        ri_uuid: [u8; 16],
+        ri_user_time: u64,
+        ri_system_time: u64,
+        ri_pkg_idle_wkups: u64,
+        ri_interrupt_wkups: u64,
+        ri_pageins: u64,
+        ri_wired_size: u64,
+        ri_resident_size: u64,
+        ri_phys_footprint: u64,
+        ri_proc_start_abstime: u64,
+        ri_proc_exit_abstime: u64,
+        ri_child_user_time: u64,
+        ri_child_system_time: u64,
+        ri_child_pkg_idle_wkups: u64,
+        ri_child_interrupt_wkups: u64,
+        ri_child_pageins: u64,
+        ri_child_elapsed_abstime: u64,
+        ri_diskio_bytesread: u64,
+        ri_diskio_byteswritten: u64,
+        ri_cpu_time_qos_default: u64,
+        ri_cpu_time_qos_maintenance: u64,
+        ri_cpu_time_qos_background: u64,
+        ri_cpu_time_qos_utility: u64,
+        ri_cpu_time_qos_legacy: u64,
+        ri_cpu_time_qos_user_initiated: u64,
+        ri_cpu_time_qos_user_interactive: u64,
+        ri_billed_system_time: u64,
+        ri_serviced_system_time: u64,
+        ri_logical_writes: u64,
+        ri_lifetime_max_phys_footprint: u64,
+        ri_instructions: u64,
+        ri_cycles: u64,
+        ri_billed_energy: u64,
+        ri_serviced_energy: u64,
+        ri_interval_max_phys_footprint: u64,
+        ri_runnable_time: u64,
+    }
+
+    extern "C" {
+        fn proc_pid_rusage(pid: i32, flavor: i32, buffer: *mut RUsageInfoV4) -> i32;
+    }
+
+    const RUSAGE_INFO_V4: i32 = 4;
+
+    let mut sys = System::new();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+    let to_mb = |b: u64| b as f64 / 1_048_576.0;
+
+    let mut processes: Vec<ProcessMemory> = sys
+        .processes()
+        .iter()
+        .map(|(pid, process)| {
+            let pid_u32 = pid.as_u32();
+
+            // Try to get phys_footprint via proc_pid_rusage
+            let mut rusage: RUsageInfoV4 = unsafe { mem::zeroed() };
+            let footprint = if unsafe { proc_pid_rusage(pid_u32 as i32, RUSAGE_INFO_V4, &mut rusage) } == 0 {
+                rusage.ri_phys_footprint
+            } else {
+                // Fallback to sysinfo memory
+                process.memory()
+            };
+
+            ProcessMemory {
+                pid: pid_u32,
+                name: process.name().to_string_lossy().to_string(),
+                memory_mb: to_mb(footprint),
+                virtual_mb: to_mb(process.virtual_memory()),
+            }
+        })
+        .collect();
+
+    // Sort by memory descending
+    processes.sort_by(|a, b| b.memory_mb.partial_cmp(&a.memory_mb).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Return top N
+    processes.truncate(limit);
+    processes
+}
+
+// Windows/Linux: use sysinfo RSS
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn get_top_processes(limit: usize) -> Vec<ProcessMemory> {
+    use sysinfo::System;
+
+    let mut sys = System::new();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+    let to_mb = |b: u64| b as f64 / 1_048_576.0;
+
+    let mut processes: Vec<ProcessMemory> = sys
+        .processes()
+        .iter()
+        .map(|(pid, process)| ProcessMemory {
+            pid: pid.as_u32(),
+            name: process.name().to_string_lossy().to_string(),
+            memory_mb: to_mb(process.memory()),
+            virtual_mb: to_mb(process.virtual_memory()),
+        })
+        .collect();
+
+    // Sort by resident memory descending
+    processes.sort_by(|a, b| b.memory_mb.partial_cmp(&a.memory_mb).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Return top N
+    processes.truncate(limit);
+    processes
+}
+
+#[derive(serde::Serialize)]
+struct DiskSpaceDetailed {
+    total_gb: f64,
+    available_gb: f64,              // Real available space (without purgeable on macOS)
+    available_with_purgeable_gb: f64, // Available space including purgeable
+    purgeable_gb: f64,              // macOS only, 0 on Windows
+    used_gb: f64,
+}
+
 // macOS: use df to get accurate free space (sysinfo includes purgeable space)
 #[cfg(target_os = "macos")]
 #[tauri::command]
@@ -64,6 +379,53 @@ fn get_disk_space() -> Result<DiskSpace, String> {
     Ok(DiskSpace {
         free_gb: available_kb / 1_048_576.0,
         total_gb: total_kb / 1_048_576.0,
+    })
+}
+
+// macOS: use Swift to get detailed disk space including purgeable via Foundation API
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn get_disk_space_detailed() -> Result<DiskSpaceDetailed, String> {
+    // Swift one-liner to get volume capacities via Foundation API
+    // Returns: total|available|availableForImportantUsage
+    let swift_code = r#"
+import Foundation
+let url = URL(fileURLWithPath: "/")
+let values = try! url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityKey, .volumeAvailableCapacityForImportantUsageKey])
+print("\(values.volumeTotalCapacity ?? 0)|\(values.volumeAvailableCapacity ?? 0)|\(values.volumeAvailableCapacityForImportantUsage ?? 0)")
+"#;
+
+    let output = std::process::Command::new("swift")
+        .args(["-e", swift_code])
+        .output()
+        .map_err(|e| format!("Failed to run swift: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!("Swift failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parts: Vec<&str> = stdout.trim().split('|').collect();
+
+    if parts.len() != 3 {
+        return Err(format!("Invalid swift output: {}", stdout));
+    }
+
+    let total_bytes: u64 = parts[0].parse().map_err(|_| "Failed to parse total")?;
+    let available_bytes: u64 = parts[1].parse().map_err(|_| "Failed to parse available")?;
+    let available_with_purgeable_bytes: u64 = parts[2].parse().map_err(|_| "Failed to parse available for important")?;
+
+    let purgeable_bytes = available_with_purgeable_bytes.saturating_sub(available_bytes);
+    let used_bytes = total_bytes.saturating_sub(available_with_purgeable_bytes);
+
+    let bytes_to_gb = |b: u64| b as f64 / 1_073_741_824.0;
+
+    Ok(DiskSpaceDetailed {
+        total_gb: bytes_to_gb(total_bytes),
+        available_gb: bytes_to_gb(available_bytes),
+        available_with_purgeable_gb: bytes_to_gb(available_with_purgeable_bytes),
+        purgeable_gb: bytes_to_gb(purgeable_bytes),
+        used_gb: bytes_to_gb(used_bytes),
     })
 }
 
@@ -88,6 +450,36 @@ fn get_disk_space() -> Result<DiskSpace, String> {
     Ok(DiskSpace {
         free_gb: available_bytes / 1_073_741_824.0,
         total_gb: total_bytes / 1_073_741_824.0,
+    })
+}
+
+// Windows/Linux: use sysinfo (no purgeable concept)
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn get_disk_space_detailed() -> Result<DiskSpaceDetailed, String> {
+    let disks = Disks::new_with_refreshed_list();
+
+    let disk = disks
+        .iter()
+        .find(|d| {
+            let mount = d.mount_point().to_string_lossy();
+            mount == "/" || mount == "C:\\"
+        })
+        .or_else(|| disks.iter().next())
+        .ok_or("No disk found")?;
+
+    let total_bytes = disk.total_space();
+    let available_bytes = disk.available_space();
+    let used_bytes = total_bytes.saturating_sub(available_bytes);
+
+    let bytes_to_gb = |b: u64| b as f64 / 1_073_741_824.0;
+
+    Ok(DiskSpaceDetailed {
+        total_gb: bytes_to_gb(total_bytes),
+        available_gb: bytes_to_gb(available_bytes),
+        available_with_purgeable_gb: bytes_to_gb(available_bytes), // Same as available on Windows
+        purgeable_gb: 0.0, // No purgeable concept on Windows
+        used_gb: bytes_to_gb(used_bytes),
     })
 }
 
@@ -379,7 +771,7 @@ pub fn run() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![greet, set_tray_badge, get_disk_space])
+        .invoke_handler(tauri::generate_handler![greet, set_tray_badge, get_disk_space, get_disk_space_detailed, get_memory_info, get_top_processes])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
