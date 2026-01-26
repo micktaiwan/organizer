@@ -7,37 +7,44 @@ interface AppTabsNavigationProps {
   onTabChange: (tab: AppTab) => void;
 }
 
+const tabs: { id: AppTab; label: string; icon: typeof MessageCircle }[] = [
+  { id: 'chat', label: 'Chat', icon: MessageCircle },
+  { id: 'notes', label: 'Notes', icon: StickyNote },
+  { id: 'pet', label: 'Eko', icon: Bug },
+  { id: 'settings', label: 'Settings', icon: Settings },
+];
+
 export function AppTabsNavigation({ activeTab, onTabChange }: AppTabsNavigationProps) {
+  const activeIndex = tabs.findIndex(t => t.id === activeTab);
+
   return (
     <div className="app-tabs">
-      <button
-        className={`app-tab ${activeTab === 'chat' ? 'active' : ''}`}
-        onClick={() => onTabChange('chat')}
-      >
-        <MessageCircle size={18} />
-        <span>Chat</span>
-      </button>
-      <button
-        className={`app-tab ${activeTab === 'notes' ? 'active' : ''}`}
-        onClick={() => onTabChange('notes')}
-      >
-        <StickyNote size={18} />
-        <span>Notes</span>
-      </button>
-      <button
-        className={`app-tab ${activeTab === 'pet' ? 'active' : ''}`}
-        onClick={() => onTabChange('pet')}
-      >
-        <Bug size={18} />
-        <span>Eko</span>
-      </button>
-      <button
-        className={`app-tab ${activeTab === 'settings' ? 'active' : ''}`}
-        onClick={() => onTabChange('settings')}
-      >
-        <Settings size={18} />
-        <span>Settings</span>
-      </button>
+      <div className="app-tabs-track">
+        {/* Sliding pill indicator */}
+        <div
+          className="app-tabs-indicator"
+          style={{
+            transform: `translateX(${activeIndex * 100}%)`,
+            width: `${100 / tabs.length}%`
+          }}
+        />
+
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+
+          return (
+            <button
+              key={tab.id}
+              className={`app-tab ${isActive ? 'active' : ''}`}
+              onClick={() => onTabChange(tab.id)}
+            >
+              <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
