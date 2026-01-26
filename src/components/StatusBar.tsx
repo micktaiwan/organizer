@@ -527,13 +527,17 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
 
       {memoryInfo && (
         <div className="memory-container" ref={memoryPanelRef}>
-          <Tooltip content="Mémoire RAM (clic pour détails)" position="top" disabled={showMemoryPanel}>
+          <Tooltip content={`RAM: ${memoryInfo.free_gb.toFixed(1)} GB free / ${memoryInfo.available_gb.toFixed(1)} GB available / ${memoryInfo.total_gb.toFixed(0)} GB total`} position="top" disabled={showMemoryPanel}>
             <button
               className="status-bar-item memory"
               onClick={() => setShowMemoryPanel(!showMemoryPanel)}
             >
               <MemoryStick size={12} />
-              <span className={`memory-free ${memoryInfo.available_gb < 2 ? 'critical' : memoryInfo.available_gb < 5 ? 'warning' : ''}`}>{memoryInfo.available_gb.toFixed(1)}</span> / {memoryInfo.total_gb.toFixed(0)} GB
+              <span className={`memory-free ${memoryInfo.free_gb < 1 ? 'critical' : memoryInfo.free_gb < 2 ? 'warning' : ''}`}>{memoryInfo.free_gb.toFixed(1)}</span>
+              <span className="memory-separator">/</span>
+              <span className={`memory-available ${memoryInfo.available_gb < 2 ? 'critical' : memoryInfo.available_gb < 5 ? 'warning' : ''}`}>{memoryInfo.available_gb.toFixed(1)}</span>
+              <span className="memory-separator">/</span>
+              <span className="memory-total">{memoryInfo.total_gb.toFixed(0)} GB</span>
             </button>
           </Tooltip>
 
