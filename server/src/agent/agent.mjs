@@ -1,11 +1,24 @@
 // Main agent query logic
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { log } from './logger.mjs';
 import { PET_SYSTEM_PROMPT } from './prompt.mjs';
 import { userSessions } from './session.mjs';
 import { searchLiveContext, formatLiveContext } from './memory/live.mjs';
-import { petServer } from './tools/index.mjs';
-import { setRequestContext } from './tools/respond-tool.mjs';
+import { respondTool, setRequestContext } from './tools/respond-tool.mjs';
+
+// Local MCP server with only the respond tool (needs access to worker state)
+const localServer = createSdkMcpServer({
+  name: 'local',
+  version: '1.0.0',
+  tools: [respondTool]
+});
+
+// MCP HTTP config for Organizer
+const MCP_URL = process.env.MCP_URL || 'http://localhost:3001/mcp';
+const EKO_MCP_TOKEN = process.env.EKO_MCP_TOKEN;
+
+// Debug: log MCP config at startup
+log('info', `[Agent] MCP config: URL=${MCP_URL}, token=${EKO_MCP_TOKEN ? 'SET (' + EKO_MCP_TOKEN.substring(0, 12) + '...)' : 'NOT SET'}`);
 
 // Current request context (set per request)
 let currentRequest = {
@@ -36,13 +49,19 @@ function extractUserId(prompt) {
   }
 }
 
-// Extract message text from prompt JSON
+// Extract user message from prompt
 function extractMessage(prompt) {
+  // Try JSON format first
   try {
     const parsed = JSON.parse(prompt);
     return parsed.message || '';
   } catch {
-    return prompt;
+    // Extract from "Dernier message de X (depuis Y): <message>"
+    const match = prompt.match(/Dernier message de .+?: (.+?)(?:\n\nIMPORTANT|$)/s);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+    return '';  // Don't return full prompt for embedding search
   }
 }
 
@@ -93,32 +112,55 @@ async function runQuery(params) {
   const userSession = userSessions.get(userId) || { sessionId: null, lastActivity: Date.now() };
 
   try {
+    // Build MCP servers config
+    const mcpServers = {
+      local: localServer  // Local server for respond tool
+    };
+
+    // Add HTTP MCP if token is configured
+    if (EKO_MCP_TOKEN) {
+      mcpServers.organizer = {
+        type: 'http',
+        url: MCP_URL,
+        headers: {
+          'Authorization': `Bearer ${EKO_MCP_TOKEN}`
+        }
+      };
+    } else {
+      log('warn', '[Agent] EKO_MCP_TOKEN not set, Eko will have limited tools');
+    }
+
     const options = {
       model: process.env.AGENT_MODEL || 'claude-sonnet-4-5',
       systemPrompt: systemPromptWithContext,
       maxTurns: 10,
-      mcpServers: {
-        pet: petServer
-      },
+      mcpServers,
       allowedTools: [
-        // Memory tools
-        'mcp__pet__search_memories',
-        'mcp__pet__get_recent_memories',
-        'mcp__pet__store_memory',
-        'mcp__pet__delete_memory',
+        // Response (local)
+        'mcp__local__respond',
+        // Memory tools (HTTP MCP)
+        'mcp__organizer__search_memories',
+        'mcp__organizer__get_recent_memories',
+        'mcp__organizer__store_memory',
+        'mcp__organizer__delete_memory',
         // Self tools
-        'mcp__pet__search_self',
-        'mcp__pet__store_self',
-        'mcp__pet__delete_self',
+        'mcp__organizer__search_self',
+        'mcp__organizer__store_self',
+        'mcp__organizer__delete_self',
         // Goals tools
-        'mcp__pet__search_goals',
-        'mcp__pet__store_goal',
-        'mcp__pet__delete_goal',
+        'mcp__organizer__search_goals',
+        'mcp__organizer__store_goal',
+        'mcp__organizer__delete_goal',
         // Notes tools
-        'mcp__pet__search_notes',
-        'mcp__pet__get_note',
-        // Response
-        'mcp__pet__respond'
+        'mcp__organizer__list_notes',
+        'mcp__organizer__search_notes',
+        'mcp__organizer__get_note',
+        'mcp__organizer__create_note',
+        'mcp__organizer__update_note',
+        // Messages tools
+        'mcp__organizer__list_rooms',
+        'mcp__organizer__list_messages',
+        'mcp__organizer__send_message',
       ],
       permissionMode: 'bypassPermissions',
     };

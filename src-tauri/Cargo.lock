@@ -2253,6 +2253,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ntapi"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c70f219e21142367c70c0b30c6a9e3a14d55b4d12a204d897fbec83a0363f081"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2537,7 +2546,7 @@ dependencies = [
 
 [[package]]
 name = "organizer"
-version = "1.10.2"
+version = "1.10.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -3806,6 +3815,8 @@ checksum = "4c33cd241af0f2e9e3b5c32163b873b29956890b5342e6745b917ce9d490f4af"
 dependencies = [
  "core-foundation-sys",
  "libc",
+ "memchr",
+ "ntapi",
  "windows 0.57.0",
 ]
 

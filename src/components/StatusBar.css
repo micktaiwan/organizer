@@ -90,6 +90,381 @@ button.status-bar-item.eko:disabled {
   position: relative;
 }
 
+.disk-container {
+  position: relative;
+}
+
+.memory-container {
+  position: relative;
+}
+
+button.status-bar-item.memory {
+  background: none;
+  border: none;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  color: #888;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+button.status-bar-item.memory:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.memory-free {
+  color: #4CAF50;
+  font-weight: 600;
+  display: inline-block;
+  min-width: 2.5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-free.warning {
+  color: #FF9800;
+}
+
+.memory-free.critical {
+  color: #f44336;
+}
+
+button.status-bar-item.memory.warning {
+  color: #FF9800;
+}
+
+button.status-bar-item.memory.critical {
+  color: #f44336;
+}
+
+.memory-panel {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08);
+  width: 240px;
+  font-size: 0.75rem;
+  z-index: 1000;
+  animation: eko-panel-appear 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
+}
+
+.memory-panel,
+.memory-panel * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.memory-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: #555;
+}
+
+.memory-panel-header button {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  line-height: 1;
+}
+
+.memory-panel-header button:hover {
+  color: #333;
+}
+
+.memory-panel-content {
+  padding: 10px 12px;
+}
+
+.memory-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.memory-stat-label {
+  color: #666;
+}
+
+.memory-stat-value {
+  font-weight: 600;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-stat-row.highlight-green .memory-stat-label,
+.memory-stat-row.highlight-green .memory-stat-value {
+  color: #4CAF50;
+}
+
+.memory-stat-row.highlight-orange .memory-stat-label,
+.memory-stat-row.highlight-orange .memory-stat-value {
+  color: #FF9800;
+}
+
+.memory-stat-row.highlight-red .memory-stat-label,
+.memory-stat-row.highlight-red .memory-stat-value {
+  color: #f44336;
+}
+
+.memory-stat-row.highlight-blue .memory-stat-label,
+.memory-stat-row.highlight-blue .memory-stat-value {
+  color: #2196F3;
+}
+
+.memory-stat-row.highlight-yellow .memory-stat-label,
+.memory-stat-row.highlight-yellow .memory-stat-value {
+  color: #FFC107;
+}
+
+.memory-section-title {
+  font-weight: 600;
+  font-size: 0.65rem;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.memory-bar-container {
+  margin-top: 8px;
+}
+
+.memory-bar {
+  display: flex;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.memory-bar-used {
+  background: #666;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.memory-bar-used.warning {
+  background: #FF9800;
+}
+
+.memory-bar-used.critical {
+  background: #f44336;
+}
+
+.memory-bar-swap {
+  background: #FF9800;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* Stacked bar for macOS breakdown */
+.memory-bar-app {
+  background: #2196F3;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.memory-bar-wired {
+  background: #FFC107;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.memory-bar-compressed {
+  background: #FF9800;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* Process list */
+.memory-processes {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.memory-process-row {
+  display: flex;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 0.7rem;
+  gap: 4px;
+}
+
+.memory-process-row + .memory-process-row {
+  border-top: 1px solid rgba(128, 128, 128, 0.1);
+}
+
+.memory-process-name {
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.memory-process-value {
+  font-weight: 600;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  text-align: right;
+  min-width: 55px;
+}
+
+.memory-process-rank {
+  width: 10px;
+  flex-shrink: 0;
+  font-size: 0.55rem;
+  text-align: center;
+}
+
+.rank-up {
+  color: #f44336;
+  font-weight: bold;
+}
+
+.rank-down {
+  color: #4CAF50;
+  font-weight: bold;
+}
+
+button.status-bar-item.disk {
+  background: none;
+  border: none;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  color: #888;
+  transition: background 0.15s ease;
+}
+
+button.status-bar-item.disk:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.disk-panel {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08);
+  width: 220px;
+  font-size: 0.75rem;
+  z-index: 1000;
+  animation: eko-panel-appear 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
+}
+
+.disk-panel,
+.disk-panel * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.disk-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: #555;
+}
+
+.disk-panel-header button {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  line-height: 1;
+}
+
+.disk-panel-header button:hover {
+  color: #333;
+}
+
+.disk-panel-content {
+  padding: 10px 12px;
+}
+
+.disk-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.disk-stat-label {
+  color: #666;
+}
+
+.disk-stat-value {
+  font-weight: 600;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+}
+
+.disk-stat-row.highlight-green .disk-stat-label,
+.disk-stat-row.highlight-green .disk-stat-value {
+  color: #4CAF50;
+}
+
+.disk-stat-row.highlight-orange .disk-stat-label,
+.disk-stat-row.highlight-orange .disk-stat-value {
+  color: #FF9800;
+}
+
+.disk-bar-container {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.disk-bar {
+  display: flex;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.disk-bar-used {
+  background: #666;
+  height: 100%;
+}
+
+.disk-bar-purgeable {
+  background: #FF9800;
+  height: 100%;
+}
+
 .eko-panel {
   position: absolute;
   bottom: 100%;
@@ -422,6 +797,63 @@ button.rate-limit-item.ready {
     color: #666;
   }
 
+  button.status-bar-item.disk {
+    color: #666;
+  }
+
+  button.status-bar-item.disk:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .disk-panel {
+    background: #252525;
+    border-color: #3a3a3a;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  .disk-panel-header {
+    border-color: #3a3a3a;
+    color: #999;
+  }
+
+  .disk-panel-header button {
+    color: #666;
+  }
+
+  .disk-panel-header button:hover {
+    color: #ccc;
+  }
+
+  .disk-stat-label {
+    color: #888;
+  }
+
+  .disk-stat-value {
+    color: #eee;
+  }
+
+  .disk-stat-row.highlight-green .disk-stat-label,
+  .disk-stat-row.highlight-green .disk-stat-value {
+    color: #66BB6A;
+  }
+
+  .disk-stat-row.highlight-orange .disk-stat-label,
+  .disk-stat-row.highlight-orange .disk-stat-value {
+    color: #FFA726;
+  }
+
+  .disk-bar-container {
+    border-color: #3a3a3a;
+  }
+
+  .disk-bar {
+    background: #3a3a3a;
+  }
+
+  .disk-bar-used {
+    background: #888;
+  }
+
   .status-bar-item.version {
     color: #777;
   }
@@ -547,5 +979,142 @@ button.rate-limit-item.ready {
   .status-bar-item.reflection-live.pass {
     background: rgba(244, 67, 54, 0.15);
     color: #EF5350;
+  }
+
+  button.status-bar-item.memory {
+    color: #666;
+  }
+
+  button.status-bar-item.memory:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .memory-free {
+    color: #66BB6A;
+  }
+
+  .memory-free.warning {
+    color: #FFA726;
+  }
+
+  .memory-free.critical {
+    color: #EF5350;
+  }
+
+  button.status-bar-item.memory.warning {
+    color: #FFA726;
+  }
+
+  button.status-bar-item.memory.critical {
+    color: #EF5350;
+  }
+
+  .memory-panel {
+    background: #252525;
+    border-color: #3a3a3a;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  .memory-panel-header {
+    border-color: #3a3a3a;
+    color: #999;
+  }
+
+  .memory-panel-header button {
+    color: #666;
+  }
+
+  .memory-panel-header button:hover {
+    color: #ccc;
+  }
+
+  .memory-stat-label {
+    color: #888;
+  }
+
+  .memory-stat-value {
+    color: #eee;
+  }
+
+  .memory-stat-row.highlight-green .memory-stat-label,
+  .memory-stat-row.highlight-green .memory-stat-value {
+    color: #66BB6A;
+  }
+
+  .memory-stat-row.highlight-orange .memory-stat-label,
+  .memory-stat-row.highlight-orange .memory-stat-value {
+    color: #FFA726;
+  }
+
+  .memory-stat-row.highlight-red .memory-stat-label,
+  .memory-stat-row.highlight-red .memory-stat-value {
+    color: #EF5350;
+  }
+
+  .memory-stat-row.highlight-blue .memory-stat-label,
+  .memory-stat-row.highlight-blue .memory-stat-value {
+    color: #42A5F5;
+  }
+
+  .memory-stat-row.highlight-yellow .memory-stat-label,
+  .memory-stat-row.highlight-yellow .memory-stat-value {
+    color: #FFCA28;
+  }
+
+  .memory-section-title {
+    color: #777;
+    border-color: #3a3a3a;
+  }
+
+  .memory-bar {
+    background: #3a3a3a;
+  }
+
+  .memory-bar-used {
+    background: #888;
+  }
+
+  .memory-bar-used.warning {
+    background: #FFA726;
+  }
+
+  .memory-bar-used.critical {
+    background: #EF5350;
+  }
+
+  .memory-bar-swap {
+    background: #FFA726;
+  }
+
+  .memory-bar-app {
+    background: #42A5F5;
+  }
+
+  .memory-bar-wired {
+    background: #FFCA28;
+  }
+
+  .memory-bar-compressed {
+    background: #FFA726;
+  }
+
+  .memory-process-row + .memory-process-row {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .memory-process-name {
+    color: #999;
+  }
+
+  .memory-process-value {
+    color: #eee;
+  }
+
+  .rank-up {
+    color: #EF5350;
+  }
+
+  .rank-down {
+    color: #66BB6A;
   }
 }

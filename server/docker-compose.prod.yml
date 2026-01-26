@@ -13,6 +13,8 @@ services:
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
       - QDRANT_URL=http://qdrant:6333
       - LOG_DIR=/app/logs
+      - MCP_URL=http://localhost:3001/mcp
+      - EKO_MCP_TOKEN=${EKO_MCP_TOKEN}
     volumes:
       - uploads_data:/app/public/uploads
       - apk_data:/app/public/apk

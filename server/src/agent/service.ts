@@ -80,6 +80,8 @@ export class AgentService {
           OPENAI_API_KEY: getOpenAIApiKey(),
           AGENT_MODEL: getAgentModel(),
           QDRANT_URL: process.env.QDRANT_URL || 'http://qdrant:6333',
+          MCP_URL: process.env.MCP_URL || 'http://localhost:3001/mcp',
+          EKO_MCP_TOKEN: process.env.EKO_MCP_TOKEN || '',
         },
       });
 
