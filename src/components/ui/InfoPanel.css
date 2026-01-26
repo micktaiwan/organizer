@@ -1,0 +1,223 @@
+.info-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 14px;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 80vh;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+}
+
+.info-panel,
+.info-panel * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+.info-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #333;
+  flex-shrink: 0;
+}
+
+.info-panel-header button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  padding: 4px;
+  line-height: 1;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-panel-header button:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #333;
+}
+
+.info-panel-header-content {
+  padding: 8px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 0.75rem;
+  color: #666;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.info-panel-content {
+  padding: 12px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.info-panel-loading,
+.info-panel-error {
+  padding: 24px;
+  text-align: center;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.info-panel-error {
+  color: #f44336;
+}
+
+.info-panel-section {
+  margin-bottom: 16px;
+}
+
+.info-panel-section:last-child {
+  margin-bottom: 0;
+}
+
+.info-panel-section-title {
+  font-weight: 600;
+  font-size: 0.7rem;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.info-panel-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 4px 0;
+  font-size: 0.8rem;
+  gap: 12px;
+}
+
+.info-panel-label {
+  color: #666;
+  flex-shrink: 0;
+}
+
+.info-panel-value {
+  color: #333;
+  font-weight: 500;
+  text-align: right;
+  word-break: break-all;
+  min-width: 0;
+}
+
+.info-panel-value.mono {
+  font-family: ui-monospace, "SF Mono", Monaco, "Andale Mono", monospace;
+  font-size: 0.75rem;
+}
+
+/* Highlights */
+.info-panel-row.highlight-green .info-panel-label,
+.info-panel-row.highlight-green .info-panel-value {
+  color: #4CAF50;
+}
+
+.info-panel-row.highlight-orange .info-panel-label,
+.info-panel-row.highlight-orange .info-panel-value {
+  color: #FF9800;
+}
+
+.info-panel-row.highlight-red .info-panel-label,
+.info-panel-row.highlight-red .info-panel-value {
+  color: #f44336;
+}
+
+.info-panel-row.highlight-blue .info-panel-label,
+.info-panel-row.highlight-blue .info-panel-value {
+  color: #2196F3;
+}
+
+.info-panel-row.highlight-yellow .info-panel-label,
+.info-panel-row.highlight-yellow .info-panel-value {
+  color: #FFC107;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .info-panel {
+    background: #2a2a2a;
+  }
+
+  .info-panel-header {
+    border-color: #3a3a3a;
+    color: #f0f0f0;
+  }
+
+  .info-panel-header button {
+    color: #888;
+  }
+
+  .info-panel-header button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ccc;
+  }
+
+  .info-panel-header-content {
+    background: #222;
+    border-color: #3a3a3a;
+    color: #888;
+  }
+
+  .info-panel-loading {
+    color: #888;
+  }
+
+  .info-panel-error {
+    color: #EF5350;
+  }
+
+  .info-panel-section-title {
+    color: #777;
+    border-color: #3a3a3a;
+  }
+
+  .info-panel-label {
+    color: #888;
+  }
+
+  .info-panel-value {
+    color: #eee;
+  }
+
+  .info-panel-row.highlight-green .info-panel-label,
+  .info-panel-row.highlight-green .info-panel-value {
+    color: #66BB6A;
+  }
+
+  .info-panel-row.highlight-orange .info-panel-label,
+  .info-panel-row.highlight-orange .info-panel-value {
+    color: #FFA726;
+  }
+
+  .info-panel-row.highlight-red .info-panel-label,
+  .info-panel-row.highlight-red .info-panel-value {
+    color: #EF5350;
+  }
+
+  .info-panel-row.highlight-blue .info-panel-label,
+  .info-panel-row.highlight-blue .info-panel-value {
+    color: #42A5F5;
+  }
+
+  .info-panel-row.highlight-yellow .info-panel-label,
+  .info-panel-row.highlight-yellow .info-panel-value {
+    color: #FFCA28;
+  }
+}

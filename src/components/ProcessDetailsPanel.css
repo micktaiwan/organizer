@@ -1,0 +1,95 @@
+.process-gone-banner {
+  background: #f44336;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.process-ancestor-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.4;
+}
+
+.process-ancestor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.process-ancestor-link {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  color: #2196F3;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.process-ancestor-link:hover {
+  background: rgba(33, 150, 243, 0.1);
+  text-decoration: underline;
+}
+
+.process-ancestor-arrow {
+  color: #999;
+  font-size: 0.7rem;
+}
+
+.process-ancestor.current {
+  font-size: 0.8rem;
+  color: #333;
+}
+
+.process-ancestor.current strong {
+  font-weight: 600;
+}
+
+.process-ancestor-pid {
+  color: #666;
+  font-size: 0.7rem;
+  margin-left: 2px;
+}
+
+/* CPU Sparkline */
+.cpu-sparkline {
+  width: 100%;
+  height: 80px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.05);
+  margin: 8px 0;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .cpu-sparkline {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .process-ancestor-link {
+    color: #64B5F6;
+  }
+
+  .process-ancestor-link:hover {
+    background: rgba(100, 181, 246, 0.15);
+  }
+
+  .process-ancestor-arrow {
+    color: #666;
+  }
+
+  .process-ancestor.current {
+    color: #eee;
+  }
+
+  .process-ancestor-pid {
+    color: #888;
+  }
+}

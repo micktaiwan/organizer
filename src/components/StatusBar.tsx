@@ -6,6 +6,7 @@ import { useUserStatus } from "../contexts/UserStatusContext";
 import { getApiBaseUrl } from "../services/api";
 import { socketService } from "../services/socket";
 import { Tooltip } from "./Tooltip";
+import { ProcessDetailsPanel } from "./ProcessDetailsPanel";
 import type { EkoStats, EkoRateLimits } from "../types";
 import "./StatusBar.css";
 
@@ -40,6 +41,7 @@ interface MemoryInfo {
 interface ProcessMemory {
   pid: number;
   name: string;
+  cwd: string | null; // Current working directory (last segment only)
   memory_mb: number;
   virtual_mb: number;
 }
@@ -67,6 +69,7 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
   const [showEkoPanel, setShowEkoPanel] = useState(false);
   const [showDiskPanel, setShowDiskPanel] = useState(false);
   const [diskSpaceDetailed, setDiskSpaceDetailed] = useState<DiskSpaceDetailed | null>(null);
+  const [selectedProcessPid, setSelectedProcessPid] = useState<number | null>(null);
   const [reflectionText, setReflectionText] = useState<string | null>(null);
   const [reflectionFading, setReflectionFading] = useState(false);
   const [reflectionIsPass, setReflectionIsPass] = useState(false);
@@ -124,12 +127,24 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showDiskPanel]);
 
-  // Close memory panel on click outside
+  // Close process details when memory panel closes
+  useEffect(() => {
+    if (!showMemoryPanel) {
+      setSelectedProcessPid(null);
+    }
+  }, [showMemoryPanel]);
+
+  // Close memory panel and process details on click outside both
   useEffect(() => {
     if (!showMemoryPanel) return;
     const handleClick = (e: MouseEvent) => {
-      if (memoryPanelRef.current && !memoryPanelRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const inMemoryPanel = memoryPanelRef.current?.contains(target);
+      const inProcessDetails = document.querySelector('.process-details-panel')?.contains(target);
+
+      if (!inMemoryPanel && !inProcessDetails) {
         setShowMemoryPanel(false);
+        setSelectedProcessPid(null);
       }
     };
     document.addEventListener('mousedown', handleClick);
@@ -627,12 +642,19 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
                       {topProcesses.map((proc) => {
                         const rankChange = processRankChanges.get(proc.pid) || 0;
                         return (
-                          <div key={proc.pid} className="memory-process-row">
+                          <div
+                            key={proc.pid}
+                            className="memory-process-row clickable"
+                            onClick={() => setSelectedProcessPid(proc.pid)}
+                          >
                             <span className="memory-process-rank">
                               {rankChange > 0 && <span className="rank-up">▲</span>}
                               {rankChange < 0 && <span className="rank-down">▼</span>}
                             </span>
-                            <span className="memory-process-name" title={proc.name}>{proc.name}</span>
+                            <span className="memory-process-name" title={proc.cwd ? `${proc.name} [${proc.cwd}]` : proc.name}>
+                              {proc.name}
+                              {proc.cwd && <span className="memory-process-cwd">{proc.cwd}</span>}
+                            </span>
                             <span className="memory-process-value">{proc.memory_mb >= 1024 ? `${(proc.memory_mb / 1024).toFixed(1)} GB` : `${proc.memory_mb.toFixed(0)} MB`}</span>
                           </div>
                         );
@@ -743,6 +765,13 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
             <Globe size={14} />
           </button>
         </Tooltip>
+      )}
+
+      {selectedProcessPid !== null && (
+        <ProcessDetailsPanel
+          pid={selectedProcessPid}
+          onClose={() => setSelectedProcessPid(null)}
+        />
       )}
     </div>
   );
