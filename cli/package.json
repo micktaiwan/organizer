@@ -1,0 +1,30 @@
+{
+  "name": "organizer-cli",
+  "version": "1.0.0",
+  "description": "CLI chat client for Organizer",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "organizer-cli": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.tsx",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "ink": "^5.0.1",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.3.1",
+    "socket.io-client": "^4.7.5",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.3",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  }
+}
