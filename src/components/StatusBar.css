@@ -117,7 +117,7 @@ button.status-bar-item.memory:hover {
   color: #4CAF50;
   font-weight: 600;
   display: inline-block;
-  min-width: 2.5ch;
+  min-width: 3.5ch;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -188,6 +188,7 @@ button.status-bar-item.memory.critical {
 
 .memory-panel-content {
   padding: 10px 12px;
+  overflow-x: hidden;
 }
 
 .memory-stat-row {
@@ -298,6 +299,7 @@ button.status-bar-item.memory.critical {
 .memory-processes {
   max-height: 200px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .memory-process-row {
@@ -306,6 +308,18 @@ button.status-bar-item.memory.critical {
   padding: 3px 0;
   font-size: 0.7rem;
   gap: 4px;
+}
+
+.memory-process-row.clickable {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 3px 4px;
+  margin: 0 -4px;
+  transition: background 0.15s ease;
+}
+
+.memory-process-row.clickable:hover {
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .memory-process-row + .memory-process-row {
@@ -319,6 +333,21 @@ button.status-bar-item.memory.critical {
   white-space: nowrap;
   flex: 1;
   min-width: 0;
+}
+
+.memory-process-cwd {
+  color: #888;
+  font-size: 9px;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+.memory-process-cwd::before {
+  content: "[";
+}
+
+.memory-process-cwd::after {
+  content: "]";
 }
 
 .memory-process-value {
@@ -1102,8 +1131,16 @@ button.rate-limit-item.ready {
     border-color: rgba(255, 255, 255, 0.08);
   }
 
+  .memory-process-row.clickable:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
   .memory-process-name {
     color: #999;
+  }
+
+  .memory-process-cwd {
+    color: #777;
   }
 
   .memory-process-value {

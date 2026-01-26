@@ -49,8 +49,27 @@ struct DiskSpace {
 struct ProcessMemory {
     pid: u32,
     name: String,
+    cwd: Option<String>, // Current working directory (last segment only)
     memory_mb: f64,      // Resident memory (in RAM)
     virtual_mb: f64,     // Virtual memory (includes swap)
+}
+
+#[derive(serde::Serialize)]
+struct ProcessDetails {
+    pid: u32,
+    name: String,
+    status: String,              // Running, Sleeping, Zombie...
+    user: Option<String>,        // Username (via ps command)
+    parent_pid: Option<u32>,
+    exe_path: Option<String>,    // Full path to executable
+    cwd: Option<String>,         // Full working directory
+    cmd_args: Vec<String>,       // Command line arguments
+    start_time: Option<u64>,     // Unix timestamp
+    cpu_usage: f32,              // Percentage
+    memory_mb: f64,              // Physical memory
+    virtual_mb: f64,             // Virtual memory
+    disk_read_bytes: u64,
+    disk_write_bytes: u64,
 }
 
 #[derive(serde::Serialize)]
@@ -307,6 +326,7 @@ fn get_top_processes(limit: usize) -> Vec<ProcessMemory> {
             ProcessMemory {
                 pid: pid_u32,
                 name: process.name().to_string_lossy().to_string(),
+                cwd: None, // Will be filled later via lsof
                 memory_mb: to_mb(footprint),
                 virtual_mb: to_mb(process.virtual_memory()),
             }
@@ -318,6 +338,35 @@ fn get_top_processes(limit: usize) -> Vec<ProcessMemory> {
 
     // Return top N
     processes.truncate(limit);
+
+    // Get cwd for top processes via lsof (more reliable on macOS)
+    if !processes.is_empty() {
+        let pids: Vec<String> = processes.iter().map(|p| p.pid.to_string()).collect();
+        if let Ok(output) = std::process::Command::new("lsof")
+            .args(["-d", "cwd", "-a", "-p", &pids.join(","), "-Fn"])
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let mut current_pid: Option<u32> = None;
+                for line in stdout.lines() {
+                    if let Some(pid_str) = line.strip_prefix('p') {
+                        current_pid = pid_str.parse().ok();
+                    } else if let Some(name) = line.strip_prefix('n') {
+                        if let Some(pid) = current_pid {
+                            // Extract last segment of path
+                            if let Some(proc) = processes.iter_mut().find(|p| p.pid == pid) {
+                                proc.cwd = std::path::Path::new(name)
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     processes
 }
 
@@ -335,11 +384,17 @@ fn get_top_processes(limit: usize) -> Vec<ProcessMemory> {
     let mut processes: Vec<ProcessMemory> = sys
         .processes()
         .iter()
-        .map(|(pid, process)| ProcessMemory {
-            pid: pid.as_u32(),
-            name: process.name().to_string_lossy().to_string(),
-            memory_mb: to_mb(process.memory()),
-            virtual_mb: to_mb(process.virtual_memory()),
+        .map(|(pid, process)| {
+            let cwd = process.cwd().and_then(|p| {
+                p.file_name().map(|n| n.to_string_lossy().to_string())
+            });
+            ProcessMemory {
+                pid: pid.as_u32(),
+                name: process.name().to_string_lossy().to_string(),
+                cwd,
+                memory_mb: to_mb(process.memory()),
+                virtual_mb: to_mb(process.virtual_memory()),
+            }
         })
         .collect();
 
@@ -349,6 +404,240 @@ fn get_top_processes(limit: usize) -> Vec<ProcessMemory> {
     // Return top N
     processes.truncate(limit);
     processes
+}
+
+// macOS: get detailed process info via sysinfo + ps + lsof
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn get_process_details(pid: u32) -> Result<ProcessDetails, String> {
+    use sysinfo::{System, Pid, ProcessesToUpdate, ProcessRefreshKind, UpdateKind};
+    use std::mem;
+
+    #[repr(C)]
+    struct RUsageInfoV4 {
+        ri_uuid: [u8; 16],
+        ri_user_time: u64,
+        ri_system_time: u64,
+        ri_pkg_idle_wkups: u64,
+        ri_interrupt_wkups: u64,
+        ri_pageins: u64,
+        ri_wired_size: u64,
+        ri_resident_size: u64,
+        ri_phys_footprint: u64,
+        ri_proc_start_abstime: u64,
+        ri_proc_exit_abstime: u64,
+        ri_child_user_time: u64,
+        ri_child_system_time: u64,
+        ri_child_pkg_idle_wkups: u64,
+        ri_child_interrupt_wkups: u64,
+        ri_child_pageins: u64,
+        ri_child_elapsed_abstime: u64,
+        ri_diskio_bytesread: u64,
+        ri_diskio_byteswritten: u64,
+        ri_cpu_time_qos_default: u64,
+        ri_cpu_time_qos_maintenance: u64,
+        ri_cpu_time_qos_background: u64,
+        ri_cpu_time_qos_utility: u64,
+        ri_cpu_time_qos_legacy: u64,
+        ri_cpu_time_qos_user_initiated: u64,
+        ri_cpu_time_qos_user_interactive: u64,
+        ri_billed_system_time: u64,
+        ri_serviced_system_time: u64,
+        ri_logical_writes: u64,
+        ri_lifetime_max_phys_footprint: u64,
+        ri_instructions: u64,
+        ri_cycles: u64,
+        ri_billed_energy: u64,
+        ri_serviced_energy: u64,
+        ri_interval_max_phys_footprint: u64,
+        ri_runnable_time: u64,
+    }
+
+    extern "C" {
+        fn proc_pid_rusage(pid: i32, flavor: i32, buffer: *mut RUsageInfoV4) -> i32;
+    }
+
+    const RUSAGE_INFO_V4: i32 = 4;
+
+    let sysinfo_pid = Pid::from_u32(pid);
+
+    // Refresh process info (CPU is fetched separately via ps)
+    let mut sys = System::new();
+    let refresh_kind = ProcessRefreshKind::new()
+        .with_memory()
+        .with_exe(UpdateKind::OnlyIfNotSet)
+        .with_cwd(UpdateKind::OnlyIfNotSet)
+        .with_cmd(UpdateKind::OnlyIfNotSet);
+
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[sysinfo_pid]),
+        true,
+        refresh_kind,
+    );
+
+    let process = sys.process(sysinfo_pid)
+        .ok_or_else(|| format!("Process {} not found", pid))?;
+
+    let to_mb = |b: u64| b as f64 / 1_048_576.0;
+
+    // Get phys_footprint and disk I/O via proc_pid_rusage
+    let mut rusage: RUsageInfoV4 = unsafe { mem::zeroed() };
+    let (memory_mb, disk_read, disk_write) = if unsafe { proc_pid_rusage(pid as i32, RUSAGE_INFO_V4, &mut rusage) } == 0 {
+        (to_mb(rusage.ri_phys_footprint), rusage.ri_diskio_bytesread, rusage.ri_diskio_byteswritten)
+    } else {
+        (to_mb(process.memory()), 0, 0)
+    };
+
+    // Get user via ps (more reliable on macOS)
+    let user = std::process::Command::new("ps")
+        .args(["-o", "user=", "-p", &pid.to_string()])
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                if s.is_empty() { None } else { Some(s) }
+            } else {
+                None
+            }
+        });
+
+    // Get full cwd via lsof (more reliable than sysinfo on macOS)
+    let cwd = std::process::Command::new("lsof")
+        .args(["-d", "cwd", "-a", "-p", &pid.to_string(), "-Fn"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                for line in stdout.lines() {
+                    if let Some(path) = line.strip_prefix('n') {
+                        return Some(path.to_string());
+                    }
+                }
+            }
+            None
+        })
+        .or_else(|| process.cwd().map(|p| p.to_string_lossy().to_string()));
+
+    // Status mapping
+    let status = match process.status() {
+        sysinfo::ProcessStatus::Run => "Running",
+        sysinfo::ProcessStatus::Sleep => "Sleeping",
+        sysinfo::ProcessStatus::Stop => "Stopped",
+        sysinfo::ProcessStatus::Zombie => "Zombie",
+        sysinfo::ProcessStatus::Idle => "Idle",
+        _ => "Unknown",
+    }.to_string();
+
+    // Get cmd args
+    let cmd_args: Vec<String> = process.cmd().iter().map(|s| s.to_string_lossy().to_string()).collect();
+
+    Ok(ProcessDetails {
+        pid,
+        name: process.name().to_string_lossy().to_string(),
+        status,
+        user,
+        parent_pid: process.parent().map(|p| p.as_u32()),
+        exe_path: process.exe().map(|p| p.to_string_lossy().to_string()),
+        cwd,
+        cmd_args,
+        start_time: Some(process.start_time()),
+        cpu_usage: get_cpu_via_ps(pid),
+        memory_mb,
+        virtual_mb: to_mb(process.virtual_memory()),
+        disk_read_bytes: disk_read,
+        disk_write_bytes: disk_write,
+    })
+}
+
+// macOS: get CPU usage via ps command (more reliable than sysinfo)
+#[cfg(target_os = "macos")]
+fn get_cpu_via_ps(pid: u32) -> f32 {
+    use std::process::Command;
+
+    let output = Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "%cpu="])
+        .output();
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            stdout.trim().parse::<f32>().unwrap_or(0.0)
+        }
+        Err(_) => 0.0,
+    }
+}
+
+// Windows/Linux: get detailed process info via sysinfo
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn get_process_details(pid: u32) -> Result<ProcessDetails, String> {
+    use sysinfo::{System, Pid, ProcessesToUpdate, ProcessRefreshKind, UpdateKind};
+
+    let sysinfo_pid = Pid::from_u32(pid);
+
+    // Create system and do two refreshes with delay for accurate CPU usage
+    let mut sys = System::new();
+    let refresh_kind = ProcessRefreshKind::new()
+        .with_cpu()
+        .with_memory()
+        .with_disk_usage()
+        .with_exe(UpdateKind::OnlyIfNotSet)
+        .with_cwd(UpdateKind::OnlyIfNotSet)
+        .with_cmd(UpdateKind::OnlyIfNotSet);
+
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[sysinfo_pid]),
+        true,
+        refresh_kind,
+    );
+
+    // Small delay for CPU measurement
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[sysinfo_pid]),
+        true,
+        refresh_kind,
+    );
+
+    let process = sys.process(sysinfo_pid)
+        .ok_or_else(|| format!("Process {} not found", pid))?;
+
+    let to_mb = |b: u64| b as f64 / 1_048_576.0;
+
+    // Status mapping
+    let status = match process.status() {
+        sysinfo::ProcessStatus::Run => "Running",
+        sysinfo::ProcessStatus::Sleep => "Sleeping",
+        sysinfo::ProcessStatus::Stop => "Stopped",
+        sysinfo::ProcessStatus::Zombie => "Zombie",
+        sysinfo::ProcessStatus::Idle => "Idle",
+        _ => "Unknown",
+    }.to_string();
+
+    // Get cmd args
+    let cmd_args: Vec<String> = process.cmd().iter().map(|s| s.to_string_lossy().to_string()).collect();
+
+    let disk_usage = process.disk_usage();
+
+    Ok(ProcessDetails {
+        pid,
+        name: process.name().to_string_lossy().to_string(),
+        status,
+        user: None, // Not easily available via sysinfo on Windows/Linux
+        parent_pid: process.parent().map(|p| p.as_u32()),
+        exe_path: process.exe().map(|p| p.to_string_lossy().to_string()),
+        cwd: process.cwd().map(|p| p.to_string_lossy().to_string()),
+        cmd_args,
+        start_time: Some(process.start_time()),
+        cpu_usage: process.cpu_usage(),
+        memory_mb: to_mb(process.memory()),
+        virtual_mb: to_mb(process.virtual_memory()),
+        disk_read_bytes: disk_usage.read_bytes,
+        disk_write_bytes: disk_usage.written_bytes,
+    })
 }
 
 #[derive(serde::Serialize)]
@@ -771,7 +1060,7 @@ pub fn run() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![greet, set_tray_badge, get_disk_space, get_disk_space_detailed, get_memory_info, get_top_processes])
+        .invoke_handler(tauri::generate_handler![greet, set_tray_badge, get_disk_space, get_disk_space_detailed, get_memory_info, get_top_processes, get_process_details])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
