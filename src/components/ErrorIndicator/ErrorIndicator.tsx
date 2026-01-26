@@ -173,6 +173,16 @@ export function ErrorIndicator() {
     }
   }, [isPanelDragging, handlePanelMouseMove, handlePanelMouseUp]);
 
+  // Listen for reset event from Settings
+  useEffect(() => {
+    const handleReset = () => {
+      setBadgePosition(DEFAULT_BADGE_POSITION);
+      setPanelPosition(DEFAULT_PANEL_POSITION);
+    };
+    window.addEventListener('reset-ui-positions', handleReset);
+    return () => window.removeEventListener('reset-ui-positions', handleReset);
+  }, []);
+
   if (totalCount === 0 && !isOpen) {
     return null;
   }
