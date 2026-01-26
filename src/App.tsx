@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { load } from "@tauri-apps/plugin-store";
-import { MessageCircle, StickyNote, Bug, Globe } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Globe } from "lucide-react";
+import { AppTabsNavigation, AppTab } from "./components/AppTabsNavigation";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from '@tauri-apps/plugin-dialog';
-import { readFile } from '@tauri-apps/plugin-fs';
 
 // Check if running in Tauri environment
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-import { compressImage, blobToDataUrl, isImageFile, formatFileSize } from "./utils/imageCompression";
+import { compressImage, blobToDataUrl } from "./utils/imageCompression";
 import { initNotifications, consumePendingNotificationRoomId } from "./utils/notifications";
 import { useAuth } from "./contexts/AuthContext";
 import { useServerConfig } from "./contexts/ServerConfigContext";
@@ -16,11 +14,13 @@ import { useWebRTCCall } from "./hooks/useWebRTCCall";
 // import { useContacts } from "./hooks/useContacts";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder";
 import { useVideoRecorder } from "./hooks/useVideoRecorder";
+import { useVideoRecordingHandlers } from "./hooks/useVideoRecordingHandlers";
+import { useFileHandlers } from "./hooks/useFileHandlers";
+import { useDebugPreferences } from "./hooks/useDebugPreferences";
 import { useRooms } from "./hooks/useRooms";
 import { useNotes } from "./hooks/useNotes";
 import { useWindowState } from "./hooks/useWindowState";
 import { UserStatus } from "./types";
-import { UpdateNoteRequest } from "./services/api";
 // TODO: Restore Contact-related features in room context
 // import { Contact } from "./types";
 
@@ -37,9 +37,10 @@ import { CallOverlay } from "./components/Call/CallOverlay";
 import { IncomingCallModal } from "./components/Call/IncomingCallModal";
 // import { ContactModal } from "./components/Contact/ContactModal";
 import { AdminPanel } from "./components/Admin/AdminPanel";
-import { NotesList, NoteEditor, LabelManager } from "./components/Notes";
+import { NotesTabContent } from "./components/NotesTabContent";
 import { PetDebugScreen } from "./components/PetDebug";
 import { LogPanel } from "./components/LogPanel";
+import { SettingsScreen } from "./components/Settings";
 import { ErrorIndicator } from "./components/ErrorIndicator";
 import { StatusBar } from "./components/StatusBar";
 import { ConfirmModal } from "./components/ui/ConfirmModal";
@@ -73,9 +74,9 @@ function App() {
   // const [newContactInitialUserId, setNewContactInitialUserId] = useState("");
 
   // App tabs state - persist last visited tab
-  const [activeTab, setActiveTab] = useState<'chat' | 'notes' | 'pet'>(() => {
+  const [activeTab, setActiveTab] = useState<AppTab>(() => {
     const saved = localStorage.getItem('organizer-active-tab');
-    if (saved === 'chat' || saved === 'notes' || saved === 'pet') {
+    if (saved === 'chat' || saved === 'notes' || saved === 'pet' || saved === 'settings') {
       return saved;
     }
     return 'chat';
@@ -86,61 +87,15 @@ function App() {
     localStorage.setItem('organizer-active-tab', activeTab);
   }, [activeTab]);
 
-  // Dev tools state
-  const [showLogPanel, setShowLogPanel] = useState(false);
-  const [debugUseLocalServer, setDebugUseLocalServer] = useState(false);
-  const [debugViewMode, setDebugViewMode] = useState<'chat' | 'brain'>('chat');
-
-  // Track if preferences have been loaded to avoid overwriting on mount
-  const debugPrefsLoaded = useRef(false);
-
-  // Load debug preferences on mount
-  useEffect(() => {
-    const loadDebugPreferences = async () => {
-      try {
-        if (isTauri()) {
-          const store = await load('pet-debug.json', { autoSave: false, defaults: {} });
-          const savedServer = await store.get<boolean>('pet_debug_use_local');
-          if (savedServer !== null && savedServer !== undefined) {
-            setDebugUseLocalServer(savedServer);
-          }
-          const savedViewMode = await store.get<'chat' | 'brain'>('viewMode');
-          if (savedViewMode !== null && savedViewMode !== undefined) {
-            setDebugViewMode(savedViewMode);
-          }
-          const savedShowLogPanel = await store.get<boolean>('showLogPanel');
-          if (savedShowLogPanel !== null && savedShowLogPanel !== undefined) {
-            setShowLogPanel(savedShowLogPanel);
-          }
-        }
-        debugPrefsLoaded.current = true;
-      } catch (error) {
-        console.error('[App] Failed to load debug preferences:', error);
-        debugPrefsLoaded.current = true;
-      }
-    };
-    loadDebugPreferences();
-  }, []);
-
-  // Save showLogPanel when it changes (but not on initial mount)
-  useEffect(() => {
-    if (!debugPrefsLoaded.current) return;
-    if (!isTauri()) return;
-    const saveShowLogPanel = async () => {
-      try {
-        const store = await load('pet-debug.json', { autoSave: false, defaults: {} });
-        await store.set('showLogPanel', showLogPanel);
-        await store.save();
-      } catch (error) {
-        console.error('[App] Failed to save showLogPanel:', error);
-      }
-    };
-    saveShowLogPanel();
-  }, [showLogPanel]);
-
-  // Notes view state
-  const [notesView, setNotesView] = useState<'list' | 'editor' | 'labels'>('list');
-  const [creatingNoteType, setCreatingNoteType] = useState<'note' | 'checklist'>('note');
+  // Dev tools state (persisted)
+  const {
+    showLogPanel,
+    setShowLogPanel,
+    debugUseLocalServer,
+    setDebugUseLocalServer,
+    debugViewMode,
+    setDebugViewMode,
+  } = useDebugPreferences();
 
   const username = user?.displayName || "";
 
@@ -304,44 +259,27 @@ function App() {
     reset: resetVideoRecorder,
   } = useVideoRecorder();
 
-  // Video recording - show source selector when user clicks video button
-  const [showVideoSourceSelector, setShowVideoSourceSelector] = useState(false);
-
-  const handleStartVideoRecording = useCallback(() => {
-    setShowVideoSourceSelector(true);
-  }, []);
-
-  const handleSelectVideoSource = useCallback(async (source: 'screen' | 'webcam') => {
-    setShowVideoSourceSelector(false);
-    const success = await selectVideoSource(source);
-    if (success) {
-      startVideoRecording();
-    }
-  }, [selectVideoSource, startVideoRecording]);
-
-  const handleCancelVideoSourceSelector = useCallback(() => {
-    setShowVideoSourceSelector(false);
-    resetVideoRecorder();
-  }, [resetVideoRecorder]);
-
-  const handleSendVideo = useCallback(async () => {
-    if (!videoBlob) return;
-    setVideoUploading();
-    await sendVideo(videoBlob, undefined, setVideoUploadProgress);
-    resetVideoRecorder();
-  }, [videoBlob, setVideoUploading, sendVideo, setVideoUploadProgress, resetVideoRecorder]);
-
-  const handleDiscardVideo = useCallback(() => {
-    discardVideo();
-  }, [discardVideo]);
-
-  const handleRestartVideo = useCallback(() => {
-    restartVideoRecording();
-  }, [restartVideoRecording]);
-
-  const handleCancelVideoRecording = useCallback(() => {
-    resetVideoRecorder();
-  }, [resetVideoRecorder]);
+  // Video recording handlers
+  const {
+    showVideoSourceSelector,
+    handleStartVideoRecording,
+    handleSelectVideoSource,
+    handleCancelVideoSourceSelector,
+    handleSendVideo,
+    handleDiscardVideo,
+    handleRestartVideo,
+    handleCancelVideoRecording,
+  } = useVideoRecordingHandlers({
+    selectVideoSource,
+    startVideoRecording,
+    resetVideoRecorder,
+    discardVideo,
+    restartVideoRecording: restartVideoRecording,
+    setVideoUploading,
+    setVideoUploadProgress,
+    sendVideo,
+    videoBlob,
+  });
 
   // Notes - only load when authenticated
   const {
@@ -366,46 +304,6 @@ function App() {
     updateLabel,
     deleteLabel,
   } = useNotes({ enabled: isAuthenticated });
-
-  // Notes handlers
-  const handleCreateNote = useCallback((type: 'note' | 'checklist') => {
-    setCreatingNoteType(type);
-    selectNote(null);
-    setNotesView('editor');
-  }, [selectNote]);
-
-  const handleSelectNote = useCallback((noteId: string) => {
-    selectNote(noteId);
-    setNotesView('editor');
-  }, [selectNote]);
-
-  const handleSaveNote = useCallback(async (noteId: string | null, data: UpdateNoteRequest) => {
-    if (noteId) {
-      await updateNote(noteId, data);
-    } else {
-      const newNote = await createNote({
-        type: data.type || creatingNoteType,
-        title: data.title,
-        content: data.content,
-        color: data.color,
-        labels: data.labels,
-        assignedTo: data.assignedTo,
-      });
-      if (newNote) {
-        selectNote(newNote._id);
-      }
-    }
-  }, [updateNote, createNote, creatingNoteType, selectNote]);
-
-  const handleDeleteNoteFromEditor = useCallback(async (noteId: string) => {
-    await deleteNote(noteId);
-    setNotesView('list');
-  }, [deleteNote]);
-
-  const handleCloseNoteEditor = useCallback(() => {
-    selectNote(null);
-    setNotesView('list');
-  }, [selectNote]);
 
   useEffect(() => {
     if (isTauri()) {
@@ -494,136 +392,13 @@ function App() {
     return () => document.removeEventListener("paste", handlePaste);
   }, []);
 
-  // File picker handler
-  const handleSelectImageFile = async () => {
-    try {
-      const filePath = await open({
-        multiple: false,
-        directory: false,
-        filters: [
-          {
-            name: 'Images',
-            extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic']
-          }
-        ]
-      });
-
-      if (!filePath) return; // User cancelled
-
-      console.log('Selected file:', filePath);
-      setIsCompressing(true);
-
-      // Read file as Uint8Array
-      const fileData = await readFile(filePath as string);
-
-      // Validate file size before compression
-      if (fileData.byteLength > 10 * 1024 * 1024) {
-        alert('L\'image est trop volumineuse (max 10MB)');
-        setIsCompressing(false);
-        return;
-      }
-
-      // Convert to Blob (guess MIME type from extension)
-      const extension = (filePath as string).split('.').pop()?.toLowerCase();
-      const mimeType = extension === 'png' ? 'image/png' :
-                       extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' :
-                       extension === 'gif' ? 'image/gif' :
-                       extension === 'webp' ? 'image/webp' :
-                       extension === 'heic' ? 'image/heic' :
-                       'image/jpeg';
-
-      const originalBlob = new Blob([fileData], { type: mimeType });
-
-      if (!isImageFile(originalBlob)) {
-        alert('Veuillez sélectionner un fichier image valide');
-        setIsCompressing(false);
-        return;
-      }
-
-      console.log(`Original file size: ${formatFileSize(originalBlob.size)}`);
-
-      // Compress image
-      const { compressedFile, originalSize, compressedSize } = await compressImage(originalBlob);
-
-      // Warn if still large after compression
-      if (compressedSize > 2 * 1024 * 1024) {
-        console.warn(`Image still large after compression: ${formatFileSize(compressedSize)}`);
-      }
-
-      console.log(`Compressed: ${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)}`);
-
-      // Convert to Data URL for preview
-      const dataUrl = await blobToDataUrl(compressedFile);
-
-      setPendingImage(dataUrl);
-      setPendingImageBlob(compressedFile);
-      setIsCompressing(false);
-    } catch (error) {
-      console.error('File selection error:', error);
-      alert(`Erreur: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
-      setIsCompressing(false);
-    }
-  };
-
-  // File picker handler (non-image files)
-  const handleSelectFile = async () => {
-    try {
-      const filePath = await open({
-        multiple: false,
-        directory: false,
-      });
-
-      if (!filePath) return; // User cancelled
-
-      console.log('Selected file:', filePath);
-
-      // Read file as Uint8Array
-      const fileData = await readFile(filePath as string);
-
-      // Validate file size (25MB max)
-      if (fileData.byteLength > 25 * 1024 * 1024) {
-        alert('Le fichier est trop volumineux (max 25MB)');
-        return;
-      }
-
-      // Extract filename from path
-      const fileName = (filePath as string).split('/').pop() || (filePath as string).split('\\').pop() || 'file';
-
-      // Guess MIME type from extension
-      const extension = fileName.split('.').pop()?.toLowerCase() || '';
-      const mimeTypes: Record<string, string> = {
-        'pdf': 'application/pdf',
-        'doc': 'application/msword',
-        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'xls': 'application/vnd.ms-excel',
-        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'ppt': 'application/vnd.ms-powerpoint',
-        'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'txt': 'text/plain',
-        'zip': 'application/zip',
-        'rar': 'application/x-rar-compressed',
-        '7z': 'application/x-7z-compressed',
-        'mp4': 'video/mp4',
-        'mov': 'video/quicktime',
-        'mp3': 'audio/mpeg',
-        'wav': 'audio/wav',
-      };
-      const mimeType = mimeTypes[extension] || 'application/octet-stream';
-
-      // Create File object
-      const file = new File([fileData], fileName, { type: mimeType });
-
-      setPendingFile({
-        file,
-        name: fileName,
-        size: fileData.byteLength,
-      });
-
-    } catch (error) {
-      console.error('File selection error:', error);
-      alert(`Erreur: ${error instanceof Error ? error.message : 'Erreur inconnue'}`);
-    }
-  };
+  // File picker handlers
+  const { handleSelectImageFile, handleSelectFile } = useFileHandlers({
+    setPendingImage,
+    setPendingImageBlob,
+    setPendingFile,
+    setIsCompressing,
+  });
 
   const [showServerConfirm, setShowServerConfirm] = useState(false);
 
@@ -670,29 +445,7 @@ function App() {
       )}
 
       {/* App Tabs Navigation */}
-      <div className="app-tabs">
-        <button
-          className={`app-tab ${activeTab === 'chat' ? 'active' : ''}`}
-          onClick={() => setActiveTab('chat')}
-        >
-          <MessageCircle size={18} />
-          <span>Chat</span>
-        </button>
-        <button
-          className={`app-tab ${activeTab === 'notes' ? 'active' : ''}`}
-          onClick={() => setActiveTab('notes')}
-        >
-          <StickyNote size={18} />
-          <span>Notes</span>
-        </button>
-        <button
-          className={`app-tab ${activeTab === 'pet' ? 'active' : ''}`}
-          onClick={() => setActiveTab('pet')}
-        >
-          <Bug size={18} />
-          <span>Eko</span>
-        </button>
-      </div>
+      <AppTabsNavigation activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Chat Tab Content */}
       {activeTab === 'chat' && (
@@ -782,49 +535,28 @@ function App() {
 
       {/* Notes Tab Content */}
       {activeTab === 'notes' && (
-        <div className="notes-tab-content">
-          {notesView === 'list' && (
-            <NotesList
-              notes={notes}
-              labels={labels}
-              selectedLabelId={selectedLabelId}
-              isLoading={isLoadingNotes}
-              error={notesError}
-              onSelectNote={handleSelectNote}
-              onCreateNote={handleCreateNote}
-              onTogglePin={togglePin}
-              onDeleteNote={deleteNote}
-              onToggleChecklistItem={toggleChecklistItem}
-              onFilterByLabel={filterByLabel}
-              onRefresh={loadNotes}
-              onManageLabels={() => setNotesView('labels')}
-            />
-          )}
-          {notesView === 'editor' && (
-            <NoteEditor
-              note={selectedNote}
-              labels={labels}
-              isCreating={!selectedNote}
-              initialType={creatingNoteType}
-              onSave={handleSaveNote}
-              onDelete={handleDeleteNoteFromEditor}
-              onClose={handleCloseNoteEditor}
-              onToggleChecklistItem={toggleChecklistItem}
-              onAddChecklistItem={addChecklistItem}
-              onUpdateChecklistItemText={updateChecklistItemText}
-              onDeleteChecklistItem={deleteChecklistItem}
-            />
-          )}
-          {notesView === 'labels' && (
-            <LabelManager
-              labels={labels}
-              onCreateLabel={createLabel}
-              onUpdateLabel={updateLabel}
-              onDeleteLabel={deleteLabel}
-              onClose={() => setNotesView('list')}
-            />
-          )}
-        </div>
+        <NotesTabContent
+          notes={notes}
+          labels={labels}
+          selectedNote={selectedNote}
+          selectedLabelId={selectedLabelId}
+          isLoading={isLoadingNotes}
+          error={notesError}
+          loadNotes={loadNotes}
+          selectNote={selectNote}
+          createNote={createNote}
+          updateNote={updateNote}
+          deleteNote={deleteNote}
+          togglePin={togglePin}
+          toggleChecklistItem={toggleChecklistItem}
+          addChecklistItem={addChecklistItem}
+          updateChecklistItemText={updateChecklistItemText}
+          deleteChecklistItem={deleteChecklistItem}
+          filterByLabel={filterByLabel}
+          createLabel={createLabel}
+          updateLabel={updateLabel}
+          deleteLabel={deleteLabel}
+        />
       )}
 
       {/* Pet Debug Tab Content */}
@@ -840,6 +572,9 @@ function App() {
           />
         </div>
       )}
+
+      {/* Settings Tab Content */}
+      {activeTab === 'settings' && <SettingsScreen />}
 
       <StatusBar
         onOpenAdmin={() => setShowAdminPanel(true)}
