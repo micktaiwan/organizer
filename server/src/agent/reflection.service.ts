@@ -1,7 +1,8 @@
 import { Server } from 'socket.io';
 import Anthropic from '@anthropic-ai/sdk';
 import * as cron from 'node-cron';
-import { Message, Room, User, Reflection, getOrCreateStats, type IReflection } from '../models/index.js';
+import { CronExpressionParser } from 'cron-parser';
+import { Message, Room, User, Reflection, getOrCreateStats, getConfig, setConfig, type IReflection } from '../models/index.js';
 import { listGoalsWithIds, searchSelf, searchGoals, deleteGoal } from '../memory/self.service.js';
 import { searchFacts } from '../memory/qdrant.service.js';
 import { getAnthropicApiKey, getDigestModel } from '../config/agent.js';
@@ -81,10 +82,11 @@ interface TriggerOptions {
   roomId?: string;
   dryRun?: boolean;
   bypassRateLimit?: boolean;
+  force?: boolean; // Force trigger even if disabled
 }
 
 interface TriggerResult {
-  action: 'pass' | 'message';
+  action: 'pass' | 'message' | 'disabled';
   reason: string;
   message?: string;
   dryRun?: boolean;
@@ -94,19 +96,108 @@ interface TriggerResult {
   outputTokens?: number;
 }
 
+// Config key for persistence
+const CONFIG_KEY_REFLECTION_ENABLED = 'reflection.enabled';
+
 class ReflectionService {
   private io: Server | null = null;
   private currentStatus: EkoStatus = 'idle';
   private historyCache: ReflectionEntry[] = [];
   private cronTask: cron.ScheduledTask | null = null;
+  private enabled: boolean = true;
 
   /**
    * Initialize the service with Socket.io instance
    */
-  init(io: Server) {
+  async init(io: Server) {
     this.io = io;
+
+    // Load enabled state from MongoDB
+    const savedEnabled = await getConfig<boolean>(CONFIG_KEY_REFLECTION_ENABLED);
+    this.enabled = savedEnabled !== null ? savedEnabled : true;
+    console.log(`[Reflection] Loaded enabled state: ${this.enabled}`);
+
     this.startCron();
     console.log('[Reflection] Service initialized');
+  }
+
+  /**
+   * Check if the cron is enabled
+   */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * Toggle the enabled state
+   * @param toggledBy - Name of the user who toggled
+   */
+  async toggle(toggledBy?: string): Promise<boolean> {
+    this.enabled = !this.enabled;
+    await setConfig(CONFIG_KEY_REFLECTION_ENABLED, this.enabled);
+    console.log(`[Reflection] Toggled enabled to: ${this.enabled} by ${toggledBy || 'unknown'}`);
+
+    // Emit socket event for real-time sync
+    if (this.io) {
+      this.io.emit('cron:status', {
+        reflection: {
+          enabled: this.enabled,
+          nextRun: this.getNextRun(),
+        },
+      });
+    }
+
+    // Post a message in the Lobby
+    if (toggledBy) {
+      const message = this.enabled
+        ? `${toggledBy} m'a réactivé 🟢`
+        : `${toggledBy} m'a désactivé 🔴`;
+      await this.postMessageToLobby(message);
+    }
+
+    return this.enabled;
+  }
+
+  /**
+   * Post a message as Eko in the Lobby
+   */
+  private async postMessageToLobby(content: string): Promise<void> {
+    if (!this.io) return;
+
+    try {
+      const lobby = await Room.findOne({ isLobby: true });
+      if (!lobby) {
+        console.error('[Reflection] Lobby not found for toggle message');
+        return;
+      }
+
+      await this.postMessage(lobby._id.toString(), content);
+    } catch (err) {
+      console.error('[Reflection] Failed to post toggle message:', err);
+    }
+  }
+
+  /**
+   * Get the next scheduled run time
+   */
+  getNextRun(): { at: string; minutesUntil: number } | null {
+    if (!this.enabled) {
+      return null;
+    }
+
+    try {
+      const interval = CronExpressionParser.parse(CRON_SCHEDULE);
+      const nextDate = interval.next().toDate();
+      const minutesUntil = Math.round((nextDate.getTime() - Date.now()) / 60000);
+
+      return {
+        at: nextDate.toISOString(),
+        minutesUntil,
+      };
+    } catch (err) {
+      console.error('[Reflection] Failed to parse cron expression:', err);
+      return null;
+    }
   }
 
   /**
@@ -119,6 +210,13 @@ class ReflectionService {
 
     this.cronTask = cron.schedule(CRON_SCHEDULE, async () => {
       console.log('[Reflection] Cron triggered');
+
+      // Skip if disabled (cron runs but does nothing)
+      if (!this.enabled) {
+        console.log('[Reflection] Cron skipped: disabled');
+        return;
+      }
+
       try {
         await this.triggerReflection();
       } catch (error) {
@@ -568,7 +666,14 @@ goalId sera ajouté automatiquement.`;
    * Trigger a reflection with full LLM integration
    */
   async triggerReflection(options: TriggerOptions = {}): Promise<TriggerResult> {
-    const { roomId, dryRun = false, bypassRateLimit = false } = options;
+    const { roomId, dryRun = false, bypassRateLimit = false, force = false } = options;
+
+    // Skip if disabled (unless force)
+    if (!this.enabled && !force) {
+      console.log('[Reflection] Trigger skipped: disabled');
+      return { action: 'disabled', reason: 'Reflection is disabled' };
+    }
+
     this.setStatus('thinking');
     this.emitProgress('gathering');
     const startTime = Date.now();

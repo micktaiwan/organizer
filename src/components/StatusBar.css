@@ -580,6 +580,136 @@ button.status-bar-item.disk:hover {
   color: #333;
 }
 
+/* Cron toggle section */
+.eko-panel-cron {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background: linear-gradient(to bottom, #f8f8f8, #fafafa);
+}
+
+.cron-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cron-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #555;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.cron-next-run {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(76, 175, 80, 0.1);
+  color: #4CAF50;
+  font-size: 0.65rem;
+}
+
+.cron-disabled-msg {
+  margin-top: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+  font-size: 0.65rem;
+}
+
+/* Toggle switch */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-switch .slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.3s;
+  border-radius: 20px;
+}
+
+.toggle-switch .slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + .slider {
+  background-color: #4CAF50;
+}
+
+.toggle-switch input:checked + .slider:before {
+  transform: translateX(16px);
+}
+
+.toggle-switch.disabled .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Eko disabled state for button */
+button.status-bar-item.eko.disabled-cron {
+  opacity: 0.6;
+}
+
+/* Eko disabled toast */
+.eko-disabled-toast {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(244, 67, 54, 0.95);
+  color: white;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  animation: toast-appear 0.3s ease-out;
+  z-index: 9999;
+}
+
+@keyframes toast-appear {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 .eko-panel-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1159,6 +1289,37 @@ button.rate-limit-item.ready {
 
   .eko-panel-header button:hover {
     color: #ccc;
+  }
+
+  .eko-panel-cron {
+    border-color: #3a3a3a;
+    background: linear-gradient(to bottom, #2a2a2a, #252525);
+  }
+
+  .cron-toggle-label {
+    color: #999;
+  }
+
+  .cron-next-run {
+    background: rgba(76, 175, 80, 0.15);
+    color: #66BB6A;
+  }
+
+  .cron-disabled-msg {
+    background: rgba(244, 67, 54, 0.15);
+    color: #EF5350;
+  }
+
+  .toggle-switch .slider {
+    background-color: #555;
+  }
+
+  .toggle-switch input:checked + .slider {
+    background-color: #66BB6A;
+  }
+
+  .eko-disabled-toast {
+    background: rgba(239, 83, 80, 0.95);
   }
 
   .eko-panel-stats {

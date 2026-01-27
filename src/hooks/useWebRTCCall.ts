@@ -19,11 +19,15 @@ const ICE_SERVERS: RTCConfiguration = {
 interface UseWebRTCCallOptions {
   pcRef: React.MutableRefObject<RTCPeerConnection | null>;
   addSystemMessage: (type: 'missed-call' | 'rejected-call' | 'ended-call') => void;
+  selectedMicrophoneId?: string | null;
+  selectedCameraId?: string | null;
 }
 
 export const useWebRTCCall = ({
   pcRef,
   addSystemMessage,
+  selectedMicrophoneId,
+  selectedCameraId,
 }: UseWebRTCCallOptions) => {
   // Target user for the current call (caller or callee)
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
@@ -336,10 +340,14 @@ export const useWebRTCCall = ({
       isInitiatorRef.current = true;
       const pc = createPeerConnection(targetUser);
 
-      console.log('[WebRTC][CALLER] Step 2: Getting user media...', { withCamera });
+      console.log('[WebRTC][CALLER] Step 2: Getting user media...', { withCamera, selectedMicrophoneId, selectedCameraId });
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: withCamera,
+        audio: selectedMicrophoneId
+          ? { deviceId: { exact: selectedMicrophoneId } }
+          : true,
+        video: withCamera
+          ? (selectedCameraId ? { deviceId: { exact: selectedCameraId } } : true)
+          : false,
       });
       localStreamRef.current = stream;
       setIsCameraEnabled(withCamera);
@@ -394,10 +402,14 @@ export const useWebRTCCall = ({
       }
 
       // 2. Get user media
-      console.log('[WebRTC][RECEIVER] Step 2: Getting user media...', { withCamera });
+      console.log('[WebRTC][RECEIVER] Step 2: Getting user media...', { withCamera, selectedMicrophoneId, selectedCameraId });
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: withCamera,
+        audio: selectedMicrophoneId
+          ? { deviceId: { exact: selectedMicrophoneId } }
+          : true,
+        video: withCamera
+          ? (selectedCameraId ? { deviceId: { exact: selectedCameraId } } : true)
+          : false,
       });
       localStreamRef.current = stream;
       setIsCameraEnabled(withCamera);
@@ -498,8 +510,10 @@ export const useWebRTCCall = ({
       socketService.toggleCamera(targetUserId, false);
     } else {
       try {
-        console.log('Enabling camera...');
-        const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        console.log('Enabling camera...', { selectedCameraId });
+        const videoStream = await navigator.mediaDevices.getUserMedia({
+          video: selectedCameraId ? { deviceId: { exact: selectedCameraId } } : true,
+        });
         const videoTrack = videoStream.getVideoTracks()[0];
         localStreamRef.current.addTrack(videoTrack);
 

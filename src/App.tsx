@@ -10,6 +10,7 @@ import { initNotifications, consumePendingNotificationRoomId } from "./utils/not
 import { useAuth } from "./contexts/AuthContext";
 import { useServerConfig } from "./contexts/ServerConfigContext";
 import { useUserStatus } from "./contexts/UserStatusContext";
+import { useMediaDevices } from "./contexts/MediaDevicesContext";
 import { useWebRTCCall } from "./hooks/useWebRTCCall";
 // import { useContacts } from "./hooks/useContacts";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder";
@@ -54,6 +55,7 @@ function App() {
 
   const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
   const { isLoading: serverLoading, isConfigured, resetConfig, selectedServer } = useServerConfig();
+  const { selectedMicrophoneId, selectedCameraId } = useMediaDevices();
   const [inputMessage, setInputMessage] = useState("");
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [pendingImageBlob, setPendingImageBlob] = useState<Blob | null>(null);
@@ -217,7 +219,7 @@ function App() {
     toggleCamera,
     startScreenShare,
     stopScreenShare,
-  } = useWebRTCCall({ pcRef, addSystemMessage: addCallSystemMessage });
+  } = useWebRTCCall({ pcRef, addSystemMessage: addCallSystemMessage, selectedMicrophoneId, selectedCameraId });
 
   // TODO: Implement contact management in room context
   // const {

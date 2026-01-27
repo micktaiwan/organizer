@@ -12,6 +12,7 @@ import { connectDB } from './config/db.js';
 import { setupSocket } from './socket/index.js';
 import { setupLogStreamer } from './utils/logStreamer.js';
 import { authRoutes, usersRoutes, contactsRoutes, messagesRoutes, roomsRoutes, adminRoutes, apkRoutes, notesRoutes, labelsRoutes, filesRoutes } from './routes/index.js';
+import { authMiddleware, adminMiddleware } from './middleware/auth.js';
 import uploadRoutes from './routes/upload.js';
 import mcpRoutes from './mcp/index.js';
 import mcpAdminRoutes from './routes/mcp-admin.js';
@@ -60,12 +61,29 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Eko reflection status
+// Eko reflection status (enriched with enabled and nextRun)
 app.get('/reflection/status', async (_req, res) => {
   res.json({
     status: reflectionService.getStatus(),
+    enabled: reflectionService.isEnabled(),
+    nextRun: reflectionService.getNextRun(),
     stats: await reflectionService.getStats(),
   });
+});
+
+// Toggle reflection cron (admin-only)
+app.post('/reflection/toggle', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const authReq = req as import('./middleware/auth.js').AuthRequest;
+    const toggledBy = authReq.user?.displayName || authReq.user?.username || 'Admin';
+    const enabled = await reflectionService.toggle(toggledBy);
+    res.json({
+      enabled,
+      nextRun: reflectionService.getNextRun(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+  }
 });
 
 // Trigger manual reflection (bypasses rate limit)
@@ -178,9 +196,6 @@ app.set('io', io);
 // Setup log streamer (admin-only, protected by auth)
 setupLogStreamer(io);
 
-// Initialize reflection service
-reflectionService.init(io);
-
 // Start server
 const PORT = process.env.PORT || 3001;
 
@@ -259,6 +274,9 @@ async function start() {
     await connectDB();
     await ensureLobby();
     await ensureLiveCollection();
+
+    // Initialize reflection service (async - loads enabled state from DB)
+    await reflectionService.init(io);
 
     // Start the digest cron (fixed hours: 2h, 6h, 10h, 14h, 18h, 22h + catch-up on startup)
     const digestTask = await scheduleDigest();
