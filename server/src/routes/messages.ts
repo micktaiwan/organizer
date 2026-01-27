@@ -91,7 +91,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(201).json({ message });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Données invalides', details: error.errors });
+      res.status(400).json({ error: 'Données invalides', details: error.issues });
       return;
     }
     console.error('Send message error:', error);
@@ -226,7 +226,7 @@ router.post('/:id/react', async (req: AuthRequest, res: Response): Promise<void>
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Emoji invalide', details: error.errors });
+      res.status(400).json({ error: 'Emoji invalide', details: error.issues });
       return;
     }
     console.error('React to message error:', error);

@@ -73,7 +73,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(201).json({ label });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Données invalides', details: error.errors });
+      res.status(400).json({ error: 'Données invalides', details: error.issues });
       return;
     }
     console.error('Create label error:', error);
@@ -115,7 +115,7 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     res.json({ label });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Données invalides', details: error.errors });
+      res.status(400).json({ error: 'Données invalides', details: error.issues });
       return;
     }
     console.error('Update label error:', error);
