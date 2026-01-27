@@ -520,6 +520,30 @@ button.status-bar-item.disk:hover {
   height: 100%;
 }
 
+.disk-status-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  color: #888;
+}
+
+.disk-status-loading .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e0e0;
+  border-top-color: #2196F3;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.disk-status-error {
+  padding: 24px;
+  text-align: center;
+  color: #f44336;
+}
+
 .eko-panel {
   position: absolute;
   bottom: 100%;
@@ -1003,18 +1027,48 @@ button.rate-limit-item.ready {
 }
 
 .server-status-loading {
+  padding: 16px 12px;
+}
+
+.server-status-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  color: #999;
+  transition: all 0.2s ease;
+}
+
+.progress-step.active {
+  background: rgba(33, 150, 243, 0.1);
+  color: #2196F3;
+}
+
+.progress-step.done {
+  color: #4CAF50;
+}
+
+.step-indicator {
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 24px;
-  color: #888;
+  font-size: 0.65rem;
 }
 
-.server-status-loading .spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid #e0e0e0;
+.spinner-small {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(33, 150, 243, 0.3);
   border-top-color: #2196F3;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -1123,12 +1177,21 @@ button.rate-limit-item.ready {
     box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3);
   }
 
-  .server-status-loading {
-    color: #888;
+  .progress-step {
+    color: #666;
   }
 
-  .server-status-loading .spinner {
-    border-color: #3a3a3a;
+  .progress-step.active {
+    background: rgba(66, 165, 245, 0.15);
+    color: #42A5F5;
+  }
+
+  .progress-step.done {
+    color: #66BB6A;
+  }
+
+  .spinner-small {
+    border-color: rgba(66, 165, 245, 0.3);
     border-top-color: #42A5F5;
   }
 
@@ -1232,6 +1295,19 @@ button.rate-limit-item.ready {
 
   .disk-bar-used {
     background: #888;
+  }
+
+  .disk-status-loading {
+    color: #888;
+  }
+
+  .disk-status-loading .spinner {
+    border-color: #3a3a3a;
+    border-top-color: #42A5F5;
+  }
+
+  .disk-status-error {
+    color: #EF5350;
   }
 
   .status-bar-item.version {

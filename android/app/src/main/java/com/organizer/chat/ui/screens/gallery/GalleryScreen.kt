@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.Surface
@@ -84,6 +85,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.organizer.chat.data.api.ApiClient
 import com.organizer.chat.data.model.GalleryFile
+import com.organizer.chat.ui.components.AudioPlayer
 import com.organizer.chat.ui.components.FullscreenImagePagerDialog
 import com.organizer.chat.ui.theme.AccentBlue
 import com.organizer.chat.ui.theme.Charcoal
@@ -121,6 +123,7 @@ fun GalleryScreen(
 
     var selectedImageIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var selectedVideoFile by remember { mutableStateOf<GalleryFile?>(null) }
+    var selectedAudioFile by remember { mutableStateOf<GalleryFile?>(null) }
 
     // Grid state for scroll control
     val gridState = rememberLazyGridState()
@@ -268,6 +271,14 @@ fun GalleryScreen(
         )
     }
 
+    // Audio player dialog
+    selectedAudioFile?.let { file ->
+        AudioPlayerDialog(
+            file = file,
+            onDismiss = { selectedAudioFile = null }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -332,6 +343,9 @@ fun GalleryScreen(
                             onVideoClick = { file ->
                                 selectedVideoFile = file
                             },
+                            onAudioClick = { file ->
+                                selectedAudioFile = file
+                            },
                             onFileClick = { file ->
                                 FileOpener.downloadAndOpenFile(
                                     context = context,
@@ -369,6 +383,7 @@ private fun FilterChipsRow(
                             GalleryFilter.ALL -> "Tous"
                             GalleryFilter.IMAGES -> "Images"
                             GalleryFilter.VIDEOS -> "Vidéos"
+                            GalleryFilter.AUDIOS -> "Audios"
                             GalleryFilter.FILES -> "Fichiers"
                         }
                     )
@@ -390,6 +405,7 @@ private fun GalleryGrid(
     onLoadMore: () -> Unit,
     onImageClick: (GalleryFile) -> Unit,
     onVideoClick: (GalleryFile) -> Unit,
+    onAudioClick: (GalleryFile) -> Unit,
     onFileClick: (GalleryFile) -> Unit
 ) {
     LazyVerticalGrid(
@@ -404,9 +420,11 @@ private fun GalleryGrid(
             GalleryItem(
                 file = file,
                 onClick = {
-                    when (file.type) {
-                        "image" -> onImageClick(file)
-                        "video" -> onVideoClick(file)
+                    when {
+                        file.type == "image" -> onImageClick(file)
+                        file.type == "video" -> onVideoClick(file)
+                        file.type == "audio" -> onAudioClick(file)
+                        file.mimeType?.startsWith("audio/") == true -> onAudioClick(file)
                         else -> onFileClick(file)
                     }
                 }
@@ -443,8 +461,11 @@ private fun GalleryItem(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        when (file.type) {
-            "image" -> {
+        // Use when {} to check both type and mimeType for audio files
+        val isAudioFile = file.type == "audio" || file.mimeType?.startsWith("audio/") == true
+
+        when {
+            file.type == "image" -> {
                 val imageUrl = if (file.url.startsWith("/")) {
                     ApiClient.getBaseUrl().trimEnd('/') + file.url
                 } else {
@@ -458,7 +479,7 @@ private fun GalleryItem(
                     contentScale = ContentScale.Crop
                 )
             }
-            "video" -> {
+            file.type == "video" -> {
                 // Video thumbnail or placeholder
                 val thumbnailUrl = file.thumbnailUrl?.let {
                     if (it.startsWith("/")) {
@@ -530,6 +551,43 @@ private fun GalleryItem(
                             fontSize = 10.sp
                         )
                     }
+                }
+            }
+            isAudioFile -> {
+                // Audio item with music icon (type "audio" or mimeType "audio/*")
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    // Music icon with play overlay
+                    Box(contentAlignment = Alignment.Center) {
+                        Surface(
+                            shape = CircleShape,
+                            color = AccentBlue.copy(alpha = 0.2f),
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.MusicNote,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(28.dp),
+                                    tint = AccentBlue
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = file.fileName ?: "Audio",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        fontSize = 10.sp
+                    )
                 }
             }
             else -> {
@@ -621,6 +679,7 @@ private fun EmptyState(filter: GalleryFilter) {
                 GalleryFilter.ALL -> "Aucun fichier"
                 GalleryFilter.IMAGES -> "Aucune image"
                 GalleryFilter.VIDEOS -> "Aucune vidéo"
+                GalleryFilter.AUDIOS -> "Aucun audio"
                 GalleryFilter.FILES -> "Aucun fichier"
             },
             style = MaterialTheme.typography.bodyLarge,
@@ -729,6 +788,60 @@ private fun FullscreenVideoDialog(
                         tint = Color.White
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioPlayerDialog(
+    file: GalleryFile,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Charcoal)
+                    .padding(16.dp)
+            ) {
+                // Header with close button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Lecteur audio",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Fermer",
+                            tint = Color.White
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Audio player
+                AudioPlayer(
+                    source = file.url,
+                    fileName = file.fileName,
+                    compact = false
+                )
             }
         }
     }

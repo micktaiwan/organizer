@@ -11,7 +11,7 @@ router.use(authMiddleware);
 
 interface FileResult {
   id: string;
-  type: 'image' | 'file' | 'video';
+  type: 'image' | 'file' | 'video' | 'audio';
   url: string;
   fileName: string | null;
   fileSize: number | null;
@@ -34,7 +34,7 @@ interface FileResult {
 //   - limit: max files to return (default 100, max 200)
 //   - before: ISO date - only files created before this date (pagination)
 //   - after: ISO date - only files created after this date (incremental sync)
-//   - type: "image", "file", or "video" filter
+//   - type: "image", "file", "video", or "audio" filter
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = new Types.ObjectId(req.userId!);
@@ -55,7 +55,8 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const typeQuery = typeFilter === 'image' ? 'image'
       : typeFilter === 'file' ? 'file'
       : typeFilter === 'video' ? 'video'
-      : { $in: ['image', 'file', 'video'] };
+      : typeFilter === 'audio' ? 'audio'
+      : { $in: ['image', 'file', 'video', 'audio'] };
 
     const query: Record<string, unknown> = {
       roomId: { $in: roomIds },
@@ -99,7 +100,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
       const sender = msg.senderId as unknown as { _id: Types.ObjectId; displayName: string; username: string };
       const result: FileResult = {
         id: msg._id.toString(),
-        type: msg.type as 'image' | 'file' | 'video',
+        type: msg.type as 'image' | 'file' | 'video' | 'audio',
         url: msg.content,
         fileName: msg.fileName || null,
         fileSize: msg.fileSize || null,
@@ -148,8 +149,8 @@ router.delete('/:fileId', async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    // Verify it's a file/image/video message
-    if (message.type !== 'image' && message.type !== 'file' && message.type !== 'video') {
+    // Verify it's a file/image/video/audio message
+    if (message.type !== 'image' && message.type !== 'file' && message.type !== 'video' && message.type !== 'audio') {
       res.status(400).json({ error: 'This message is not a file' });
       return;
     }

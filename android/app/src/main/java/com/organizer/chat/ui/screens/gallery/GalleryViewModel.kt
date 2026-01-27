@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 enum class GalleryFilter {
-    ALL, IMAGES, VIDEOS, FILES
+    ALL, IMAGES, VIDEOS, AUDIOS, FILES
 }
 
 data class GalleryUiState(
@@ -151,6 +151,7 @@ class GalleryViewModel(context: Context) : ViewModel() {
         GalleryFilter.ALL -> null
         GalleryFilter.IMAGES -> "image"
         GalleryFilter.VIDEOS -> "video"
+        GalleryFilter.AUDIOS -> "audio"
         GalleryFilter.FILES -> "file"
     }
 
