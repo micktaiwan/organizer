@@ -241,10 +241,10 @@ fun MessageBubble(
                     // Render all messages in the group
                     messages.forEachIndexed { index, message ->
                         when (message.type) {
-                            "audio" -> AudioMessageContent(
-                                base64Content = message.content,
-                                messageId = message.id,
-                                onLongPress = onLongPress
+                            "audio" -> AudioPlayer(
+                                source = message.content,
+                                fileName = message.fileName,
+                                compact = true
                             )
                             "image" -> {
                                 if (message.fileDeleted) {
@@ -260,6 +260,13 @@ fun MessageBubble(
                             "file" -> {
                                 if (message.fileDeleted) {
                                     DeletedFileContent(caption = message.caption)
+                                } else if (message.mimeType?.startsWith("audio/") == true) {
+                                    // Audio file (mp3, wav, etc.) - use audio player
+                                    AudioPlayer(
+                                        source = message.content,
+                                        fileName = message.fileName,
+                                        compact = true
+                                    )
                                 } else {
                                     FileMessageContent(
                                         fileUrl = message.content,
@@ -534,81 +541,6 @@ private fun SystemMessageContent(
                 showReactionPicker = false
             },
             onDismiss = { showReactionPicker = false }
-        )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun AudioMessageContent(
-    base64Content: String,
-    messageId: String,
-    onLongPress: (() -> Unit)? = null
-) {
-    val context = LocalContext.current
-    var isPlaying by remember { mutableStateOf(false) }
-    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            mediaPlayer?.release()
-        }
-    }
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .padding(vertical = 4.dp)
-            .combinedClickable(
-                onClick = {
-                    if (isPlaying) {
-                        mediaPlayer?.stop()
-                        mediaPlayer?.release()
-                        mediaPlayer = null
-                        isPlaying = false
-                    } else {
-                        try {
-                            // Extract base64 data (remove data:audio/...;base64, prefix if present)
-                            val base64Data = if (base64Content.contains(",")) {
-                                base64Content.substringAfter(",")
-                            } else {
-                                base64Content
-                            }
-
-                            val audioBytes = Base64.decode(base64Data, Base64.DEFAULT)
-                            val tempFile = File(context.cacheDir, "audio_$messageId.tmp")
-                            FileOutputStream(tempFile).use { it.write(audioBytes) }
-
-                            mediaPlayer = MediaPlayer().apply {
-                                setDataSource(tempFile.absolutePath)
-                                prepare()
-                                start()
-                                setOnCompletionListener {
-                                    isPlaying = false
-                                    release()
-                                    mediaPlayer = null
-                                }
-                            }
-                            isPlaying = true
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    }
-                },
-                onLongClick = { onLongPress?.invoke() }
-            )
-    ) {
-        Icon(
-            imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
-            contentDescription = if (isPlaying) "Stop" else "Play",
-            tint = MessageSecondaryColor,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = if (isPlaying) "Lecture..." else "Message vocal",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MessageTextColor
         )
     }
 }

@@ -77,6 +77,7 @@ Il existe deux sources de données utilisateur qui doivent rester synchronisées
 - Un clic sur la miniature ouvre le lecteur plein écran
 - Les miniatures sont générées côté serveur (async, non bloquant)
 - Android : onglet "Vidéos" dans la galerie pour filtrer les vidéos
+- Android : onglet "Audios" dans la galerie pour filtrer les fichiers audio, avec lecteur audio dédié
 - Android : lecture plein écran avec ExoPlayer (contrôles natifs)
 - Android : bouton toggle dans le lecteur vidéo pour basculer entre mode Zoom (remplit l'écran) et mode Fit (vidéo entière visible)
 - Desktop : lecteur vidéo avec 3 modes d'affichage (original, fit, fill), barre espace pour play/pause, contrôles masquables

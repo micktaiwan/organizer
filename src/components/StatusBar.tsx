@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { HardDrive, Users, Wifi, WifiOff, Activity, Shield, Globe, Cloud, Bot, Eye, Brain, MessageCircle, Pause, Clock, Ban, Check, MemoryStick, Power } from "lucide-react";
 import { useSocketConnection } from "../contexts/SocketConnectionContext";
 import { useUserStatus } from "../contexts/UserStatusContext";
@@ -77,9 +78,11 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
   const [showEkoPanel, setShowEkoPanel] = useState(false);
   const [showDiskPanel, setShowDiskPanel] = useState(false);
   const [diskSpaceDetailed, setDiskSpaceDetailed] = useState<DiskSpaceDetailed | null>(null);
+  const [diskSpaceDetailedLoading, setDiskSpaceDetailedLoading] = useState(false);
   const [showServerDiskPanel, setShowServerDiskPanel] = useState(false);
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
   const [serverStatusLoading, setServerStatusLoading] = useState(false);
+  const [serverStatusStep, setServerStatusStep] = useState<string | null>(null);
   const [selectedProcessPid, setSelectedProcessPid] = useState<number | null>(null);
   const [reflectionText, setReflectionText] = useState<string | null>(null);
   const [reflectionFading, setReflectionFading] = useState(false);
@@ -158,17 +161,54 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showServerDiskPanel]);
 
-  // Fetch server status via SSH
+  // Fetch server status via SSH with progressive loading
   const fetchServerStatus = async () => {
     if (!isTauri()) return;
     setServerStatusLoading(true);
+    setServerStatusStep('connecting');
+    setServerStatus(null);
+
+    let unlisten: UnlistenFn | null = null;
+    const partialStatus: Partial<ServerStatus> = {};
+
     try {
-      const status = await invoke<ServerStatus>("get_server_status");
-      setServerStatus(status);
+      // Listen for step events
+      unlisten = await listen<{ step: string; data?: unknown }>('server-status:step', (event) => {
+        const { step, data } = event.payload;
+        setServerStatusStep(step);
+
+        switch (step) {
+          case 'disk':
+            partialStatus.disk = data as ServerStatus['disk'];
+            break;
+          case 'memory':
+            partialStatus.memory = data as ServerStatus['memory'];
+            break;
+          case 'containers':
+            partialStatus.containers = data as ServerStatus['containers'];
+            break;
+          case 'dirs':
+            partialStatus.top_dirs = data as ServerStatus['top_dirs'];
+            break;
+          case 'done':
+            // Assemble final status
+            if (partialStatus.disk && partialStatus.memory && partialStatus.containers && partialStatus.top_dirs) {
+              setServerStatus(partialStatus as ServerStatus);
+            }
+            setServerStatusLoading(false);
+            setServerStatusStep(null);
+            break;
+        }
+      });
+
+      // Start the streaming command
+      await invoke('stream_server_status');
     } catch (err) {
       console.error("[StatusBar] server status error:", err);
-    } finally {
       setServerStatusLoading(false);
+      setServerStatusStep(null);
+    } finally {
+      if (unlisten) unlisten();
     }
   };
 
@@ -199,11 +239,14 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
   // Fetch detailed disk space
   const fetchDiskSpaceDetailed = async () => {
     if (!isTauri()) return;
+    setDiskSpaceDetailedLoading(true);
     try {
       const detailed = await invoke<DiskSpaceDetailed>("get_disk_space_detailed");
       setDiskSpaceDetailed(detailed);
     } catch (err) {
       console.error("[StatusBar] disk space detailed error:", err);
+    } finally {
+      setDiskSpaceDetailedLoading(false);
     }
   };
 
@@ -828,8 +871,24 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
               </div>
               {serverStatusLoading ? (
                 <div className="server-status-loading">
-                  <div className="spinner" />
-                  <span>Connecting via SSH...</span>
+                  <div className="server-status-progress">
+                    <div className={`progress-step ${serverStatusStep === 'connecting' ? 'active' : serverStatusStep && ['disk', 'memory', 'containers', 'dirs', 'done'].includes(serverStatusStep) ? 'done' : ''}`}>
+                      <div className="step-indicator">{serverStatusStep === 'connecting' ? <div className="spinner-small" /> : '✓'}</div>
+                      <span>Connecting</span>
+                    </div>
+                    <div className={`progress-step ${serverStatusStep === 'disk' || serverStatusStep === 'memory' ? 'active' : serverStatusStep && ['containers', 'dirs', 'done'].includes(serverStatusStep) ? 'done' : ''}`}>
+                      <div className="step-indicator">{serverStatusStep === 'disk' || serverStatusStep === 'memory' ? <div className="spinner-small" /> : serverStatusStep && ['containers', 'dirs', 'done'].includes(serverStatusStep) ? '✓' : '○'}</div>
+                      <span>Disk & Memory</span>
+                    </div>
+                    <div className={`progress-step ${serverStatusStep === 'containers' ? 'active' : serverStatusStep && ['dirs', 'done'].includes(serverStatusStep) ? 'done' : ''}`}>
+                      <div className="step-indicator">{serverStatusStep === 'containers' ? <div className="spinner-small" /> : serverStatusStep && ['dirs', 'done'].includes(serverStatusStep) ? '✓' : '○'}</div>
+                      <span>Containers</span>
+                    </div>
+                    <div className={`progress-step ${serverStatusStep === 'dirs' ? 'active' : serverStatusStep === 'done' ? 'done' : ''}`}>
+                      <div className="step-indicator">{serverStatusStep === 'dirs' ? <div className="spinner-small" /> : serverStatusStep === 'done' ? '✓' : '○'}</div>
+                      <span>Directories</span>
+                    </div>
+                  </div>
                 </div>
               ) : serverStatus ? (
                 <div className="server-status-content">
@@ -935,12 +994,18 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
             </button>
           </Tooltip>
 
-          {showDiskPanel && diskSpaceDetailed && (
+          {showDiskPanel && (
             <div className="disk-panel">
               <div className="disk-panel-header">
                 <span>Local Disk Space</span>
                 <button onClick={() => setShowDiskPanel(false)}>&times;</button>
               </div>
+              {diskSpaceDetailedLoading ? (
+                <div className="disk-status-loading">
+                  <div className="spinner" />
+                  <span>Loading...</span>
+                </div>
+              ) : diskSpaceDetailed ? (
               <div className="disk-panel-content">
                 <div className="disk-stat-row">
                   <span className="disk-stat-label">Total</span>
@@ -981,6 +1046,9 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
                   </div>
                 </div>
               </div>
+              ) : (
+                <div className="disk-status-error">Failed to load disk info</div>
+              )}
             </div>
           )}
         </div>
