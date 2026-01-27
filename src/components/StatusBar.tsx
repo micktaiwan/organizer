@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { HardDrive, Users, Wifi, WifiOff, Activity, Shield, Globe, Cloud, Bot, Eye, Brain, MessageCircle, Pause, Clock, Ban, Check, MemoryStick } from "lucide-react";
+import { HardDrive, Users, Wifi, WifiOff, Activity, Shield, Globe, Cloud, Bot, Eye, Brain, MessageCircle, Pause, Clock, Ban, Check, MemoryStick, Power } from "lucide-react";
 import { useSocketConnection } from "../contexts/SocketConnectionContext";
 import { useUserStatus } from "../contexts/UserStatusContext";
+import { useAuth } from "../contexts/AuthContext";
 import { getApiBaseUrl } from "../services/api";
 import { socketService } from "../services/socket";
 import { Tooltip } from "./Tooltip";
@@ -83,8 +84,13 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
   const [reflectionText, setReflectionText] = useState<string | null>(null);
   const [reflectionFading, setReflectionFading] = useState(false);
   const [reflectionIsPass, setReflectionIsPass] = useState(false);
+  const [ekoEnabled, setEkoEnabled] = useState(true);
+  const [nextRunMinutes, setNextRunMinutes] = useState<number | null>(null);
+  const [showDisabledToast, setShowDisabledToast] = useState(false);
+  const [togglingEko, setTogglingEko] = useState(false);
   const { isConnected, status } = useSocketConnection();
   const { statuses } = useUserStatus();
+  const { user, token } = useAuth();
   const pingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const ekoPanelRef = useRef<HTMLDivElement>(null);
   const diskPanelRef = useRef<HTMLDivElement>(null);
@@ -101,6 +107,8 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
       if (response.ok) {
         const data = await response.json();
         setEkoStats(data.stats);
+        setEkoEnabled(data.enabled ?? true);
+        setNextRunMinutes(data.nextRun?.minutesUntil ?? null);
       }
     } catch (err) {
       console.error('[StatusBar] Failed to fetch Eko stats:', err);
@@ -232,6 +240,31 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
     };
 
     const unsub = socketService.on('reflection:update', handleReflectionUpdate);
+    return () => {
+      unsub();
+    };
+  }, [isConnected]);
+
+  // Cron status updates via Socket.io (for toggle sync)
+  useEffect(() => {
+    if (!isConnected) return;
+
+    const handleCronStatus = (data: unknown) => {
+      const payload = data as { reflection?: { enabled?: boolean; nextRun?: { minutesUntil?: number } } };
+      if (payload?.reflection) {
+        console.log('[StatusBar] Cron status update:', payload.reflection);
+        if (payload.reflection.enabled !== undefined) {
+          setEkoEnabled(payload.reflection.enabled);
+        }
+        if (payload.reflection.nextRun?.minutesUntil !== undefined) {
+          setNextRunMinutes(payload.reflection.nextRun.minutesUntil);
+        } else if (!payload.reflection.enabled) {
+          setNextRunMinutes(null);
+        }
+      }
+    };
+
+    const unsub = socketService.on('cron:status', handleCronStatus);
     return () => {
       unsub();
     };
@@ -413,6 +446,30 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
     return { label: 'Max reached', className: 'maxed' };
   };
 
+  // Handle toggle Eko cron
+  const handleToggleEko = async () => {
+    if (!user?.isAdmin || togglingEko || !token) return;
+    setTogglingEko(true);
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/reflection/toggle`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setEkoEnabled(data.enabled);
+        setNextRunMinutes(data.nextRun?.minutesUntil ?? null);
+      }
+    } catch (err) {
+      console.error('[StatusBar] Failed to toggle Eko:', err);
+    } finally {
+      setTogglingEko(false);
+    }
+  };
+
   return (
     <div className="status-bar">
       <Tooltip content="Version de l'application" position="top">
@@ -449,10 +506,18 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
       <div className="eko-container" ref={ekoPanelRef}>
         <Tooltip content={`Eko: ${ekoStatus === 'idle' ? 'Clic = réfléchir, Clic droit = stats' : ekoStatus === 'observing' ? 'Observe le Lobby' : 'Réfléchit...'}`} position="top" disabled={showEkoPanel}>
           <button
-            className={`status-bar-item eko ${ekoStatus}`}
+            className={`status-bar-item eko ${ekoStatus} ${!ekoEnabled ? 'disabled-cron' : ''}`}
             onClick={async () => {
-              console.log('[StatusBar] Eko clicked, status:', ekoStatus, 'roomId:', currentRoomId);
+              console.log('[StatusBar] Eko clicked, status:', ekoStatus, 'enabled:', ekoEnabled, 'roomId:', currentRoomId);
               if (ekoStatus !== 'idle') return;
+
+              // Show toast if disabled
+              if (!ekoEnabled) {
+                setShowDisabledToast(true);
+                setTimeout(() => setShowDisabledToast(false), 2000);
+                return;
+              }
+
               try {
                 const url = `${getApiBaseUrl()}/reflection/trigger`;
                 console.log('[StatusBar] Triggering reflection:', url);
@@ -483,9 +548,40 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
         {showEkoPanel && ekoStats && (
           <div className="eko-panel">
             <div className="eko-panel-header">
-              <span>Eko Stats</span>
+              <span>Eko Settings</span>
               <button onClick={() => setShowEkoPanel(false)}>&times;</button>
             </div>
+
+            {/* Cron toggle section */}
+            <div className="eko-panel-cron">
+              <div className="cron-toggle-row">
+                <div className="cron-toggle-label">
+                  <Power size={14} />
+                  <span>Reflection automatique</span>
+                </div>
+                <label className={`toggle-switch ${!user?.isAdmin ? 'disabled' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={ekoEnabled}
+                    onChange={handleToggleEko}
+                    disabled={!user?.isAdmin || togglingEko}
+                  />
+                  <span className="slider"></span>
+                </label>
+              </div>
+              {ekoEnabled && nextRunMinutes !== null && (
+                <div className="cron-next-run">
+                  <Clock size={12} />
+                  <span>Prochain dans {nextRunMinutes} min</span>
+                </div>
+              )}
+              {!ekoEnabled && (
+                <div className="cron-disabled-msg">
+                  <span>Le cron est désactivé</span>
+                </div>
+              )}
+            </div>
+
             <div className="eko-panel-stats">
               <div className="stat-item">
                 <span className="stat-value">{ekoStats.totalReflections}</span>
@@ -895,6 +991,13 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
           {reflectionIsPass ? <Pause size={12} /> : <Brain size={12} />}
           <span className="reflection-text">{reflectionText}</span>
         </span>
+      )}
+
+      {showDisabledToast && (
+        <div className="eko-disabled-toast">
+          <Ban size={14} />
+          <span>Eko désactivé</span>
+        </div>
       )}
 
       <span className="status-bar-spacer" />

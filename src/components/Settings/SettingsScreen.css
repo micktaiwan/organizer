@@ -97,3 +97,77 @@
   background: #2a3a2a;
   color: #4CAF50;
 }
+
+.settings-btn-small {
+  padding: 4px 10px;
+  background: #6B9FFF;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.settings-btn-small:hover {
+  background: #5a8fee;
+}
+
+.settings-select {
+  min-width: 200px;
+  padding: 8px 12px;
+  background: #3d3d3d;
+  border: 1px solid #4d4d4d;
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.settings-select:hover {
+  border-color: #5d5d5d;
+}
+
+.settings-select:focus {
+  border-color: #6B9FFF;
+}
+
+.settings-select option {
+  background: #2d2d2d;
+  color: #e0e0e0;
+}
+
+.settings-no-device {
+  font-size: 13px;
+  color: #888;
+  font-style: italic;
+}
+
+.settings-item-icon {
+  vertical-align: middle;
+  margin-right: 6px;
+  opacity: 0.8;
+}
+
+.settings-item-label {
+  display: flex;
+  align-items: center;
+}
+
+.settings-permission-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #3a3520;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #e8c547;
+}
+
+.settings-permission-warning svg {
+  flex-shrink: 0;
+}

@@ -82,7 +82,7 @@ const CpuSparkline = ({ history }: CpuSparklineProps) => {
     ctx.clearRect(0, 0, width, height);
 
     // Draw bars from right to left (newest on right)
-    const barWidth = 1;
+    const barWidth = 2;
     const startX = width - history.length * barWidth;
 
     history.forEach((value, i) => {
