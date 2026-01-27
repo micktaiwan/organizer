@@ -57,7 +57,7 @@ router.post('/tokens', async (req: AuthRequest, res: Response): Promise<void> =>
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid data', details: error.errors });
+      res.status(400).json({ error: 'Invalid data', details: error.issues });
       return;
     }
     console.error('Create MCP token error:', error);

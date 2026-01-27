@@ -242,12 +242,12 @@ router.post('/image', imageUpload.single('image'), async (req: AuthRequest, res:
     // Create message in database
     const message = await Message.create({
       roomId,
-      senderId: req.userId,
+      senderId: req.userId!,
       type: 'image',
       content: urlPath, // Store relative path
       caption: caption || undefined,
       status: 'sent',
-      readBy: [req.userId],
+      readBy: [req.userId!],
       clientSource: clientSource || undefined,
     });
 
@@ -317,7 +317,7 @@ router.post('/file', fileUpload.single('file'), async (req: AuthRequest, res: Re
     // Create message in database
     const message = await Message.create({
       roomId,
-      senderId: req.userId,
+      senderId: req.userId!,
       type: 'file',
       content: urlPath,
       caption: caption || undefined,
@@ -325,7 +325,7 @@ router.post('/file', fileUpload.single('file'), async (req: AuthRequest, res: Re
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
       status: 'sent',
-      readBy: [req.userId],
+      readBy: [req.userId!],
       clientSource: clientSource || undefined,
     });
 
@@ -382,15 +382,15 @@ router.post('/video', videoUpload.single('video'), async (req: AuthRequest, res:
     // Create message in database (thumbnailUrl will be set async)
     const message = await Message.create({
       roomId,
-      senderId: req.userId,
+      senderId: req.userId!,
       type: 'video',
       content: urlPath,
       caption: caption || undefined,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
-      thumbnailUrl: null, // Will be updated by thumbnail job
+      thumbnailUrl: undefined, // Will be updated by thumbnail job
       status: 'sent',
-      readBy: [req.userId],
+      readBy: [req.userId!],
       clientSource: clientSource || undefined,
     });
 

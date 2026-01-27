@@ -162,7 +162,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(201).json({ note });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Données invalides', details: error.errors });
+      res.status(400).json({ error: 'Données invalides', details: error.issues });
       return;
     }
     console.error('Create note error:', error);
@@ -205,7 +205,7 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     res.json({ note });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Données invalides', details: error.errors });
+      res.status(400).json({ error: 'Données invalides', details: error.issues });
       return;
     }
     console.error('Update note error:', error);
@@ -248,7 +248,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     res.json({ note });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Données invalides', details: error.errors });
+      res.status(400).json({ error: 'Données invalides', details: error.issues });
       return;
     }
     console.error('Patch note error:', error);
@@ -307,7 +307,7 @@ router.post('/reorder', async (req: AuthRequest, res: Response): Promise<void> =
     res.json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Données invalides', details: error.errors });
+      res.status(400).json({ error: 'Données invalides', details: error.issues });
       return;
     }
     console.error('Reorder note error:', error);
@@ -352,7 +352,7 @@ router.post('/:id/items', async (req: AuthRequest, res: Response): Promise<void>
     res.json({ note });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Données invalides', details: error.errors });
+      res.status(400).json({ error: 'Données invalides', details: error.issues });
       return;
     }
     console.error('Add item error:', error);
@@ -392,7 +392,7 @@ router.patch('/:id/items/:itemId', async (req: AuthRequest, res: Response): Prom
     res.json({ note });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Données invalides', details: error.errors });
+      res.status(400).json({ error: 'Données invalides', details: error.issues });
       return;
     }
     console.error('Update item error:', error);
@@ -463,7 +463,7 @@ router.post('/:id/items/reorder', async (req: AuthRequest, res: Response): Promi
     res.json({ note });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Données invalides', details: error.errors });
+      res.status(400).json({ error: 'Données invalides', details: error.issues });
       return;
     }
     console.error('Reorder items error:', error);

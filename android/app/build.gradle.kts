@@ -13,9 +13,9 @@ android {
     defaultConfig {
         applicationId = "com.organizer.chat"
         minSdk = 34
-        targetSdk = 34
-        versionCode = 63
-        versionName = "1.10.3"
+        targetSdk = 35
+        versionCode = 64
+        versionName = "1.10.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -48,10 +48,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
     }
@@ -60,6 +56,12 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -128,11 +130,11 @@ dependencies {
     implementation("io.getstream:stream-webrtc-android:1.3.8")
 
     // ExoPlayer (Media3) for video playback
-    implementation("androidx.media3:media3-exoplayer:1.5.1")
-    implementation("androidx.media3:media3-ui:1.5.1")
+    implementation("androidx.media3:media3-exoplayer:1.6.0")
+    implementation("androidx.media3:media3-ui:1.6.0")
 
     // CameraX for video recording
-    val cameraxVersion = "1.3.1"
+    val cameraxVersion = "1.5.0"
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
