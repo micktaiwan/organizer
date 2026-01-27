@@ -1,4 +1,7 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
+import { Paperclip } from 'lucide-react';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { readFile } from '@tauri-apps/plugin-fs';
 import { Room } from '../../services/api';
 import { Message } from '../../types';
 import { VideoRecorderState, VideoSource } from '../../hooks/useVideoRecorder';
@@ -103,6 +106,63 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   onStopVideoRecording,
   onCancelVideoRecording,
 }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Tauri drag-drop event listener
+  useEffect(() => {
+    const webview = getCurrentWebviewWindow();
+
+    const unlisten = webview.onDragDropEvent(async (event) => {
+      console.log('[Tauri DnD]', event.payload.type, event.payload);
+
+      if (event.payload.type === 'enter' || event.payload.type === 'over') {
+        setIsDragging(true);
+      } else if (event.payload.type === 'leave') {
+        setIsDragging(false);
+      } else if (event.payload.type === 'drop') {
+        setIsDragging(false);
+
+        const paths = event.payload.paths;
+        if (paths.length === 0) return;
+
+        const filePath = paths[0];
+        const fileName = filePath.split('/').pop() || 'file';
+
+        // Read file using Tauri fs plugin
+        try {
+          const data = await readFile(filePath);
+
+          // 25MB max
+          if (data.byteLength > 25 * 1024 * 1024) {
+            alert('Le fichier est trop volumineux (max 25MB)');
+            return;
+          }
+
+          // Guess MIME type from extension
+          const ext = fileName.split('.').pop()?.toLowerCase() || '';
+          const mimeTypes: Record<string, string> = {
+            'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+            'gif': 'image/gif', 'webp': 'image/webp', 'svg': 'image/svg+xml',
+            'pdf': 'application/pdf', 'mp3': 'audio/mpeg', 'mp4': 'video/mp4',
+            'wav': 'audio/wav', 'txt': 'text/plain', 'json': 'application/json',
+          };
+          const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+          const blob = new Blob([data], { type: mimeType });
+          const file = new File([blob], fileName, { type: mimeType });
+          setPendingFile({ file, name: fileName, size: data.byteLength });
+        } catch (err) {
+          console.error('[Tauri DnD] Error reading file:', err);
+        }
+      }
+    });
+
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, [setPendingFile]);
+
   // Use refs to avoid re-triggering effects when callbacks change reference
   const onTypingStartRef = useRef(onTypingStart);
   const onTypingStopRef = useRef(onTypingStop);
@@ -174,7 +234,18 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   };
 
   return (
-    <div className="room-messaging">
+    <div
+      ref={containerRef}
+      className={`room-messaging ${isDragging ? 'drag-over' : ''}`}
+    >
+      {isDragging && (
+        <div className="drop-overlay">
+          <div className="drop-overlay-content">
+            <Paperclip size={48} />
+            <span>Deposez votre fichier ici</span>
+          </div>
+        </div>
+      )}
       <MessageList
         messages={messages}
         isRemoteTyping={(typingUsers?.size ?? 0) > 0}

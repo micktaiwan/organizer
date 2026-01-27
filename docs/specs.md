@@ -79,6 +79,12 @@ Il existe deux sources de données utilisateur qui doivent rester synchronisées
 - Android : onglet "Vidéos" dans la galerie pour filtrer les vidéos
 - Android : lecture plein écran avec ExoPlayer (contrôles natifs)
 - Android : bouton toggle dans le lecteur vidéo pour basculer entre mode Zoom (remplit l'écran) et mode Fit (vidéo entière visible)
+- Desktop : lecteur vidéo avec 3 modes d'affichage (original, fit, fill), barre espace pour play/pause, contrôles masquables
+
+## Fichiers
+
+- Desktop : glisser-déposer des fichiers directement dans le chat pour les partager (max 25MB)
+- Desktop : les fichiers audio (.mp3, .wav, .ogg, .m4a, .aac, .flac) affichent un lecteur audio intégré au lieu d'un simple lien de téléchargement
 
 ## Messages non lus
 

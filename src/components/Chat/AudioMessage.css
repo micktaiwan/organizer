@@ -22,8 +22,49 @@
 }
 
 .audio-player {
-  max-width: 200px;
+  max-width: 250px;
   height: 36px;
+}
+
+.audio-file-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(107, 159, 255, 0.1);
+  border-radius: 8px;
+}
+
+.audio-file-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.audio-file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.audio-file-info .file-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audio-file-info .file-size {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.audio-file-message .audio-player {
+  width: 100%;
+  max-width: 300px;
 }
 
 .voice-btn {

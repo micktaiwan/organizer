@@ -49,10 +49,37 @@
 }
 
 .room-messaging {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.drop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(107, 159, 255, 0.1);
+  border: 2px dashed #6B9FFF;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #6B9FFF;
+  font-size: 1.1rem;
+  font-weight: 500;
 }
 
 .room-messaging-empty {

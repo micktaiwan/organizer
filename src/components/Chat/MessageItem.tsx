@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText, Monitor, Smartphone, Bot, CheckCircle, Check, Play, Film } from "lucide-react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { Phone, PhoneOff, Trash2, X, SmilePlus, Megaphone, Download, FileText, Monitor, Smartphone, Bot, CheckCircle, Check, Play, Film, SlidersHorizontal, Maximize2, Minimize2, Scan } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -149,6 +149,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | undefined>(undefined);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | undefined>(undefined);
+  const [showVideoControls, setShowVideoControls] = useState(false);
+  const [videoFitMode, setVideoFitMode] = useState<'original' | 'fit' | 'fill'>('fit');
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Close fullscreen image on Escape key
   useEffect(() => {
@@ -162,12 +165,50 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showFullscreenImage]);
 
-  // Close video player on Escape key
+  // Close video player and reset controls
+  const closeVideoPlayer = () => {
+    setShowVideoPlayer(false);
+    setShowVideoControls(false);
+    setVideoFitMode('fit');
+  };
+
+  // Cycle video fit mode: original → fit → fill → original
+  const cycleVideoFitMode = () => {
+    setVideoFitMode(prev => {
+      if (prev === 'original') return 'fit';
+      if (prev === 'fit') return 'fill';
+      return 'original';
+    });
+  };
+
+  // Get video fit mode label and icon
+  const getVideoFitInfo = () => {
+    switch (videoFitMode) {
+      case 'original': return { label: 'Original', next: 'Fit (agrandir)' };
+      case 'fit': return { label: 'Fit', next: 'Fill (remplir)' };
+      case 'fill': return { label: 'Fill', next: 'Original (taille native)' };
+    }
+  };
+
+  // Video player keyboard controls
   useEffect(() => {
     if (!showVideoPlayer) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setShowVideoPlayer(false);
+        closeVideoPlayer();
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        const video = videoRef.current;
+        if (video) {
+          if (video.ended) {
+            video.currentTime = 0;
+            video.play();
+          } else if (video.paused) {
+            video.play();
+          } else {
+            video.pause();
+          }
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -379,20 +420,46 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   <audio controls src={getImageUrl(msg.audio)} className="audio-player" />
                 </div>
               )}
-              {msg.type === 'file' && msg.fileUrl && (
-                <div className="file-message" onClick={() => handleDownloadFile(msg)} style={{ cursor: 'pointer' }}>
-                  <div className="file-icon">
-                    <FileText size={24} />
+              {msg.type === 'file' && msg.fileUrl && (() => {
+                const ext = msg.fileName?.split('.').pop()?.toLowerCase() || '';
+                const isAudio = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
+
+                if (isAudio) {
+                  return (
+                    <div className="audio-file-message">
+                      <div className="audio-file-header">
+                        <div className="audio-file-info">
+                          <span className="file-name">{msg.fileName || 'Audio'}</span>
+                          {msg.fileSize && <span className="file-size">{formatFileSize(msg.fileSize)}</span>}
+                        </div>
+                        <button
+                          className="file-download"
+                          disabled={isDownloading}
+                          onClick={(e) => { e.stopPropagation(); handleDownloadFile(msg); }}
+                        >
+                          {isDownloading ? '...' : <Download size={18} />}
+                        </button>
+                      </div>
+                      <audio controls src={getImageUrl(msg.fileUrl)} className="audio-player" />
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="file-message" onClick={() => handleDownloadFile(msg)} style={{ cursor: 'pointer' }}>
+                    <div className="file-icon">
+                      <FileText size={24} />
+                    </div>
+                    <div className="file-info">
+                      <span className="file-name">{msg.fileName || 'Fichier'}</span>
+                      {msg.fileSize && <span className="file-size">{formatFileSize(msg.fileSize)}</span>}
+                    </div>
+                    <button className="file-download" disabled={isDownloading}>
+                      {isDownloading ? '...' : <Download size={18} />}
+                    </button>
                   </div>
-                  <div className="file-info">
-                    <span className="file-name">{msg.fileName || 'Fichier'}</span>
-                    {msg.fileSize && <span className="file-size">{formatFileSize(msg.fileSize)}</span>}
-                  </div>
-                  <button className="file-download" disabled={isDownloading}>
-                    {isDownloading ? '...' : <Download size={18} />}
-                  </button>
-                </div>
-              )}
+                );
+              })()}
               {msg.caption && msg.type === 'file' && <span className="file-caption"><MarkdownText text={msg.caption} /></span>}
               {msg.type === 'video' && msg.videoUrl && (
                 <div
@@ -510,17 +577,36 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         </div>
       )}
       {showVideoPlayer && videoPlayerUrl && (
-        <div className="video-player-overlay" onClick={() => setShowVideoPlayer(false)}>
-          <button className="video-player-close" onClick={() => setShowVideoPlayer(false)}>
-            <X size={24} />
-          </button>
+        <div className="video-player-overlay" onClick={closeVideoPlayer}>
           <video
+            ref={videoRef}
             src={getImageUrl(videoPlayerUrl)}
-            controls
+            controls={showVideoControls}
             autoPlay
-            className="video-player-fullscreen"
+            className={`video-player-fullscreen video-player-${videoFitMode}`}
             onClick={(e) => e.stopPropagation()}
           />
+          <div className="video-player-buttons" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="video-player-fit-toggle"
+              onClick={cycleVideoFitMode}
+              title={`${getVideoFitInfo().label} → ${getVideoFitInfo().next}`}
+            >
+              {videoFitMode === 'original' && <Minimize2 size={20} />}
+              {videoFitMode === 'fit' && <Maximize2 size={20} />}
+              {videoFitMode === 'fill' && <Scan size={20} />}
+            </button>
+            <button
+              className={`video-player-controls-toggle ${showVideoControls ? 'active' : ''}`}
+              onClick={() => setShowVideoControls(!showVideoControls)}
+              title={showVideoControls ? "Masquer les contrôles" : "Afficher les contrôles"}
+            >
+              <SlidersHorizontal size={20} />
+            </button>
+            <button className="video-player-close" onClick={closeVideoPlayer}>
+              <X size={24} />
+            </button>
+          </div>
         </div>
       )}
     </div>
