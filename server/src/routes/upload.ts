@@ -332,6 +332,20 @@ router.post('/file', fileUpload.single('file'), async (req: AuthRequest, res: Re
     // Populate sender info
     await message.populate('senderId', 'username displayName isOnline status statusMessage');
 
+    // Update room's lastMessageAt for sorting
+    await Room.findByIdAndUpdate(roomId, { lastMessageAt: new Date() });
+
+    // Emit socket event so connected clients receive the message
+    const io = req.app.get('io');
+    if (io) {
+      await emitNewMessage({
+        io,
+        roomId,
+        userId: req.userId!,
+        message: message as any,
+      });
+    }
+
     // Return message (format expected by client)
     res.status(201).json({
       message
