@@ -68,6 +68,7 @@ class SocketService {
       'call:end',
       'call:toggle-camera',
       'call:screen-share',
+      'call:answered-elsewhere',
       // Notes events
       'note:created',
       'note:updated',

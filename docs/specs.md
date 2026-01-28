@@ -49,6 +49,7 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 - Desktop: durée de l'appel affichée en temps réel
 - Desktop: modale de confirmation avant de changer de serveur
 - Android: mode Picture-in-Picture pendant les appels (la vidéo continue dans une fenêtre flottante quand on quitte l'app)
+- Desktop + Android : décrocher un appel sur un appareil arrête la sonnerie sur les autres appareils
 
 ## User Switcher
 
