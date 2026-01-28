@@ -114,6 +114,36 @@ interface UpdateNoteRequest {
   isArchived?: boolean;
 }
 
+// Gallery types
+interface GalleryFile {
+  id: string;
+  type: 'image' | 'file' | 'video' | 'audio';
+  url: string;
+  fileName: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
+  caption: string | null;
+  roomId: string;
+  roomName: string;
+  senderId: string;
+  senderName: string;
+  createdAt: string;
+  isVoiceNote?: boolean;
+  thumbnailUrl?: string | null;
+  duration?: number | null;
+  width?: number | null;
+  height?: number | null;
+}
+
+interface GetFilesParams {
+  type?: string;
+  limit?: number;
+  before?: string;
+  search?: string;
+  sort?: 'date' | 'size';
+  offset?: number;
+}
+
 interface AuthResponse {
   token: string;
   user: User;
@@ -637,7 +667,26 @@ class ApiService {
       method: 'DELETE',
     });
   }
+
+  // Gallery / Files
+  async getFiles(params: GetFilesParams = {}): Promise<{ files: GalleryFile[] }> {
+    const searchParams = new URLSearchParams();
+    if (params.type) searchParams.set('type', params.type);
+    if (params.limit) searchParams.set('limit', String(params.limit));
+    if (params.before) searchParams.set('before', params.before);
+    if (params.search) searchParams.set('search', params.search);
+    if (params.sort) searchParams.set('sort', params.sort);
+    if (params.offset) searchParams.set('offset', String(params.offset));
+    const qs = searchParams.toString();
+    return this.request<{ files: GalleryFile[] }>(`/files${qs ? `?${qs}` : ''}`);
+  }
+
+  async deleteFile(fileId: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(`/files/${fileId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const api = new ApiService();
-export type { User, AuthResponse, Contact, Message, Room, RoomMember, ApiError, AdminStats, AdminUser, Pagination, Note, Label, ChecklistItem, CreateNoteRequest, UpdateNoteRequest, Reaction };
+export type { User, AuthResponse, Contact, Message, Room, RoomMember, ApiError, AdminStats, AdminUser, Pagination, Note, Label, ChecklistItem, CreateNoteRequest, UpdateNoteRequest, Reaction, GalleryFile, GetFilesParams };

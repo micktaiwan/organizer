@@ -86,6 +86,12 @@ Il existe deux sources de données utilisateur qui doivent rester synchronisées
 
 - Desktop : glisser-déposer des fichiers directement dans le chat pour les partager (max 25MB)
 - Desktop : les fichiers audio (.mp3, .wav, .ogg, .m4a, .aac, .flac) affichent un lecteur audio intégré au lieu d'un simple lien de téléchargement
+- Desktop : onglet Gallery avec vue grille de tous les fichiers partagés (images, vidéos, audios, fichiers)
+- Desktop : filtres par type (All, Images, Videos, Audios, Files) et tri par date ou taille dans la galerie
+- Desktop : recherche par nom de fichier ou légende dans la galerie
+- Desktop : overlay plein écran avec navigation flèches (clavier + boutons) dans la galerie
+- Desktop : téléchargement et suppression de fichiers depuis la galerie (suppression réservée à l'expéditeur)
+- Desktop + Server : les fichiers avec mimeType audio sont regroupés sous le filtre Audio (distinction voix / fichiers audio)
 
 ## Messages non lus
 

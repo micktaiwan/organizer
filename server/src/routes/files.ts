@@ -22,6 +22,7 @@ interface FileResult {
   senderId: string;
   senderName: string;
   createdAt: string;
+  isVoiceNote?: boolean;
   // Video-specific fields
   thumbnailUrl?: string | null;
   duration?: number | null;
@@ -35,6 +36,8 @@ interface FileResult {
 //   - before: ISO date - only files created before this date (pagination)
 //   - after: ISO date - only files created after this date (incremental sync)
 //   - type: "image", "file", "video", or "audio" filter
+//   - sort: "date" (default) or "size" - sort order (always DESC)
+//   - offset: number - skip N results (for size sort pagination)
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = new Types.ObjectId(req.userId!);
@@ -42,6 +45,9 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const before = req.query.before as string | undefined;
     const after = req.query.after as string | undefined;
     const typeFilter = req.query.type as string | undefined;
+    const search = req.query.search as string | undefined;
+    const sortBy = req.query.sort === 'size' ? 'size' : 'date';
+    const offset = parseInt(req.query.offset as string) || 0;
 
     // Get all rooms user is a member of
     const userRooms = await Room.find({
@@ -52,17 +58,37 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const roomNameMap = new Map(userRooms.map(r => [r._id.toString(), r.name]));
 
     // Build query for files (exclude deleted files)
-    const typeQuery = typeFilter === 'image' ? 'image'
-      : typeFilter === 'file' ? 'file'
-      : typeFilter === 'video' ? 'video'
-      : typeFilter === 'audio' ? 'audio'
-      : { $in: ['image', 'file', 'video', 'audio'] };
+    // Audio filter: include both type=audio AND type=file with audio mimeType
+    // File filter: exclude files that are actually audio
+    const audioMimeRegex = /^audio\//;
+
+    let typeCondition: unknown;
+    if (typeFilter === 'audio') {
+      typeCondition = { $or: [
+        { type: 'audio' },
+        { type: 'file', mimeType: audioMimeRegex }
+      ]};
+    } else if (typeFilter === 'file') {
+      typeCondition = { type: 'file', mimeType: { $not: audioMimeRegex } };
+    } else if (typeFilter === 'image') {
+      typeCondition = { type: 'image' };
+    } else if (typeFilter === 'video') {
+      typeCondition = { type: 'video' };
+    } else {
+      typeCondition = { type: { $in: ['image', 'file', 'video', 'audio'] } };
+    }
 
     const query: Record<string, unknown> = {
       roomId: { $in: roomIds },
-      type: typeQuery,
+      ...typeCondition as Record<string, unknown>,
       fileDeleted: { $ne: true }
     };
+
+    // Search filter
+    if (search) {
+      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      query.$or = [{ fileName: regex }, { caption: regex }];
+    }
 
     // Date filters
     if (before && after) {
@@ -74,7 +100,11 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     }
 
     // Get messages with files (with projection for performance)
-    const messages = await Message.find(query, {
+    const sortOption: Record<string, -1> = sortBy === 'size'
+      ? { fileSize: -1, _id: -1 }
+      : { createdAt: -1 };
+
+    let dbQuery = Message.find(query, {
       _id: 1,
       type: 1,
       content: 1,
@@ -91,16 +121,30 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
       width: 1,
       height: 1
     })
-      .sort({ createdAt: -1 })
+      .sort(sortOption)
       .limit(limit)
-      .populate('senderId', 'displayName username')
-      .lean();
+      .populate('senderId', 'displayName username');
+
+    if (offset > 0) {
+      dbQuery = dbQuery.skip(offset);
+    }
+
+    const messages = await dbQuery.lean();
 
     const files: FileResult[] = messages.map(msg => {
       const sender = msg.senderId as unknown as { _id: Types.ObjectId; displayName: string; username: string };
+      // Remap type: files with audio mimeType should be presented as audio
+      let effectiveType = msg.type as 'image' | 'file' | 'video' | 'audio';
+      if (msg.type === 'file' && msg.mimeType && audioMimeRegex.test(msg.mimeType)) {
+        effectiveType = 'audio';
+      }
+      // Voice notes have original type 'audio' (recorded in chat)
+      // Audio files have original type 'file' with audio mimeType (uploaded MP3, etc.)
+      const isVoiceNote = msg.type === 'audio';
       const result: FileResult = {
         id: msg._id.toString(),
-        type: msg.type as 'image' | 'file' | 'video' | 'audio',
+        type: effectiveType,
+        isVoiceNote,
         url: msg.content,
         fileName: msg.fileName || null,
         fileSize: msg.fileSize || null,
