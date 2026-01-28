@@ -1,6 +1,6 @@
-import { MessageCircle, StickyNote, Bug, Settings } from "lucide-react";
+import { MessageCircle, StickyNote, Images, Bug, Settings } from "lucide-react";
 
-export type AppTab = 'chat' | 'notes' | 'pet' | 'settings';
+export type AppTab = 'chat' | 'notes' | 'gallery' | 'pet' | 'settings';
 
 interface AppTabsNavigationProps {
   activeTab: AppTab;
@@ -10,6 +10,7 @@ interface AppTabsNavigationProps {
 const tabs: { id: AppTab; label: string; icon: typeof MessageCircle }[] = [
   { id: 'chat', label: 'Chat', icon: MessageCircle },
   { id: 'notes', label: 'Notes', icon: StickyNote },
+  { id: 'gallery', label: 'Gallery', icon: Images },
   { id: 'pet', label: 'Eko', icon: Bug },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];

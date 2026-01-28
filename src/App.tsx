@@ -20,6 +20,7 @@ import { useFileHandlers } from "./hooks/useFileHandlers";
 import { useDebugPreferences } from "./hooks/useDebugPreferences";
 import { useRooms } from "./hooks/useRooms";
 import { useNotes } from "./hooks/useNotes";
+import { useGallery } from "./hooks/useGallery";
 import { useWindowState } from "./hooks/useWindowState";
 import { UserStatus } from "./types";
 // TODO: Restore Contact-related features in room context
@@ -39,6 +40,7 @@ import { IncomingCallModal } from "./components/Call/IncomingCallModal";
 // import { ContactModal } from "./components/Contact/ContactModal";
 import { AdminPanel } from "./components/Admin/AdminPanel";
 import { NotesTabContent } from "./components/NotesTabContent";
+import { GalleryTabContent } from "./components/GalleryTabContent";
 import { PetDebugScreen } from "./components/PetDebug";
 import { LogPanel } from "./components/LogPanel";
 import { SettingsScreen } from "./components/Settings";
@@ -78,7 +80,7 @@ function App() {
   // App tabs state - persist last visited tab
   const [activeTab, setActiveTab] = useState<AppTab>(() => {
     const saved = localStorage.getItem('organizer-active-tab');
-    if (saved === 'chat' || saved === 'notes' || saved === 'pet' || saved === 'settings') {
+    if (saved === 'chat' || saved === 'notes' || saved === 'gallery' || saved === 'pet' || saved === 'settings') {
       return saved;
     }
     return 'chat';
@@ -306,6 +308,22 @@ function App() {
     updateLabel,
     deleteLabel,
   } = useNotes({ enabled: isAuthenticated });
+
+  // Gallery
+  const {
+    files: galleryFiles,
+    filter: galleryFilter,
+    sort: gallerySort,
+    searchQuery: gallerySearch,
+    isLoading: isLoadingGallery,
+    isLoadingMore: isLoadingMoreGallery,
+    hasMore: galleryHasMore,
+    setFilter: setGalleryFilter,
+    setSort: setGallerySort,
+    setSearch: setGallerySearch,
+    loadMore: loadMoreGallery,
+    deleteFile: deleteGalleryFile,
+  } = useGallery({ enabled: isAuthenticated });
 
   useEffect(() => {
     if (isTauri()) {
@@ -558,6 +576,25 @@ function App() {
           createLabel={createLabel}
           updateLabel={updateLabel}
           deleteLabel={deleteLabel}
+        />
+      )}
+
+      {/* Gallery Tab Content */}
+      {activeTab === 'gallery' && (
+        <GalleryTabContent
+          files={galleryFiles}
+          filter={galleryFilter}
+          sort={gallerySort}
+          searchQuery={gallerySearch}
+          isLoading={isLoadingGallery}
+          isLoadingMore={isLoadingMoreGallery}
+          hasMore={galleryHasMore}
+          currentUserId={user?.id}
+          onFilterChange={setGalleryFilter}
+          onSortChange={setGallerySort}
+          onSearchChange={setGallerySearch}
+          onLoadMore={loadMoreGallery}
+          onDeleteFile={deleteGalleryFile}
         />
       )}
 
