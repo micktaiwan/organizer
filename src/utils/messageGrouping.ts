@@ -36,18 +36,26 @@ export function getMessageGroupingFlags(messages: Message[], index: number): Mes
   }
 
   // Check if grouped with previous message
+  // A message with reactions CAN group with previous (it just must be the last in group)
+  // But we can't group after a message that has reactions (it must stay last)
   const isGroupedWithPrevious = prev !== null
     && !prev.isSystemMessage
     && prev.type !== 'system'
     && isSameSender(prev, msg)
-    && (msg.timestamp.getTime() - prev.timestamp.getTime()) < ONE_MINUTE_MS;
+    && (msg.timestamp.getTime() - prev.timestamp.getTime()) < ONE_MINUTE_MS
+    && !hasMedia(msg)
+    && !hasMedia(prev)
+    && !hasReactions(prev);
 
   // Check if last message in group
   const isLastInGroup = next === null
     || next.isSystemMessage
     || next.type === 'system'
     || !isSameSender(msg, next)
-    || (next.timestamp.getTime() - msg.timestamp.getTime()) >= ONE_MINUTE_MS;
+    || (next.timestamp.getTime() - msg.timestamp.getTime()) >= ONE_MINUTE_MS
+    || hasMedia(msg)
+    || hasMedia(next)
+    || hasReactions(msg);
 
   return { isGroupedWithPrevious, isLastInGroup };
 }
@@ -66,6 +74,14 @@ export interface MessageGroup {
  */
 function hasMedia(msg: Message): boolean {
   return !!(msg.image || msg.audio || msg.fileUrl || msg.videoUrl);
+}
+
+/**
+ * Check if a message has emoji reactions.
+ * Messages with reactions break the group so reactions stay visible.
+ */
+function hasReactions(msg: Message): boolean {
+  return !!(msg.reactions && msg.reactions.length > 0);
 }
 
 /**
@@ -100,15 +116,17 @@ export function groupConsecutiveMessages(messages: Message[]): MessageGroup[] {
     // Conditions to group:
     // - Same sender
     // - < 1 minute since last message in group
-    // - Current message has no media
-    // - Last message in group has no media
+    // - Neither message has media
+    // - Last message in group has no reactions (it must stay last to show its reactions)
+    // Note: current msg CAN have reactions and still join the group (it becomes the new last)
     const shouldGroup =
       currentGroup &&
       lastMsgInGroup &&
       isSameSender(lastMsgInGroup, msg) &&
       timeDiffMs < ONE_MINUTE_MS &&
       !hasMedia(msg) &&
-      !hasMedia(lastMsgInGroup);
+      !hasMedia(lastMsgInGroup) &&
+      !hasReactions(lastMsgInGroup);
 
     if (shouldGroup && currentGroup) {
       currentGroup.messages.push(msg);

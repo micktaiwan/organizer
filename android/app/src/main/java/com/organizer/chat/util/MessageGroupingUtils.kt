@@ -42,11 +42,16 @@ object MessageGroupingUtils {
         val nextTime = next?.let { parseIsoDate(it.createdAt) }
 
         // Check if grouped with previous message
+        // A message with reactions CAN group with previous (it just must be the last in group)
+        // But we can't group after a message that has reactions (it must stay last)
         val isGroupedWithPrevious = prev != null
             && prev.type != "system"
             && prev.senderId.id == msg.senderId.id
             && prevTime != null && msgTime != null
             && (msgTime - prevTime) < ONE_MINUTE_MS
+            && !hasMedia(msg)
+            && !hasMedia(prev)
+            && !hasReactions(prev)
 
         // Check if last message in group
         val isLastInGroup = next == null
@@ -54,6 +59,9 @@ object MessageGroupingUtils {
             || next.senderId.id != msg.senderId.id
             || nextTime == null || msgTime == null
             || (nextTime - msgTime) >= ONE_MINUTE_MS
+            || hasMedia(msg)
+            || hasMedia(next)
+            || hasReactions(msg)
 
         return MessageGroupingFlags(isGroupedWithPrevious, isLastInGroup)
     }
@@ -82,6 +90,14 @@ object MessageGroupingUtils {
      */
     private fun hasMedia(msg: Message): Boolean {
         return msg.type == "image" || msg.type == "audio" || msg.type == "file" || msg.type == "video"
+    }
+
+    /**
+     * Check if a message has emoji reactions.
+     * A message with reactions must be the last in its group so reactions stay visible.
+     */
+    private fun hasReactions(msg: Message): Boolean {
+        return msg.reactions.isNotEmpty()
     }
 
     /**
@@ -127,15 +143,17 @@ object MessageGroupingUtils {
             // Conditions to group:
             // - Same sender
             // - < 1 minute since last message in group
-            // - Current message has no media
-            // - Last message in group has no media
+            // - Neither message has media
+            // - Last message in group has no reactions (it must stay last to show its reactions)
+            // Note: current msg CAN have reactions and still join the group (it becomes the new last)
             val shouldGroup = currentGroup != null &&
                 lastMsgInGroup != null &&
                 currentSenderId == msg.senderId.id &&
                 lastMsgTime != null && msgTime != null &&
                 (msgTime - lastMsgTime) < ONE_MINUTE_MS &&
                 !hasMedia(msg) &&
-                !hasMedia(lastMsgInGroup)
+                !hasMedia(lastMsgInGroup) &&
+                !hasReactions(lastMsgInGroup)
 
             if (shouldGroup) {
                 currentGroup?.add(msg)
