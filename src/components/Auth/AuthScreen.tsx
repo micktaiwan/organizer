@@ -274,13 +274,13 @@ export const AuthScreen: React.FC = () => {
           {error && <div className="auth-error" style={{ whiteSpace: 'pre-wrap' }}>{error}</div>}
 
           <div className="form-group">
-            <label htmlFor="username">Nom d'utilisateur</label>
+            <label htmlFor="username">Nom d'utilisateur ou email</label>
             <input
               id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="john_doe"
+              placeholder="john_doe ou john@example.com"
               required
               autoFocus
               autoComplete="username"

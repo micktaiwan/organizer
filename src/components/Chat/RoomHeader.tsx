@@ -3,6 +3,7 @@ import { Hash, Search } from 'lucide-react';
 import { Room } from '../../services/api';
 import { UserStatus } from '../../types';
 import { RoomMembers } from './RoomMembers';
+import { OnlineMembers } from './OnlineMembers';
 import { StatusSelector } from '../ui/StatusSelector';
 import { UserSwitcher } from '../ui/UserSwitcher';
 
@@ -50,6 +51,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
 
       {/* Center: Room Actions */}
       <div className="room-header__actions">
+        <OnlineMembers room={room} currentUserId={currentUserId} />
         <RoomMembers
           room={room}
           currentUserId={currentUserId}

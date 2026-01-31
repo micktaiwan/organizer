@@ -1,0 +1,42 @@
+.online-members {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.online-members__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.online-members__chip .status-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+.online-members__name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #555;
+  line-height: 1;
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  .online-members__chip {
+    background: #2a2a2a;
+    border-color: #3a3a3a;
+  }
+
+  .online-members__name {
+    color: #bbb;
+  }
+}

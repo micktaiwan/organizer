@@ -29,6 +29,11 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 - Desktop: tooltips sur tous les éléments de la barre de statut
 - Desktop: le compteur d'utilisateurs en ligne exclut les bots
 - Desktop: bordure rouge sur le champ de message quand connecté en tant que bot
+- Desktop: les membres en ligne (hors bots et soi-même) sont affichés sous forme de chips dans le header de la room
+
+## Authentification
+
+- La connexion accepte un nom d'utilisateur ou une adresse email
 
 ## Mises à jour
 

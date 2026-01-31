@@ -85,7 +85,10 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     const data = loginSchema.parse(req.body);
 
     // Trouver l'utilisateur
-    const user = await User.findOne({ username: data.username.toLowerCase() });
+    const identifier = data.username.toLowerCase();
+    const user = await User.findOne(
+      identifier.includes('@') ? { email: identifier } : { username: identifier }
+    );
 
     if (!user) {
       console.log(`[AUTH] Login failed: user "${data.username}" not found`);
