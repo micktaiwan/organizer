@@ -69,27 +69,29 @@
 }
 
 /* Dark mode */
-@media (prefers-color-scheme: dark) {
-  .cpu-sparkline {
+
+
+[data-theme="dark"] .cpu-sparkline {
     background: rgba(255, 255, 255, 0.05);
   }
-  .process-ancestor-link {
+
+[data-theme="dark"] .process-ancestor-link {
     color: #64B5F6;
   }
 
-  .process-ancestor-link:hover {
+[data-theme="dark"] .process-ancestor-link:hover {
     background: rgba(100, 181, 246, 0.15);
   }
 
-  .process-ancestor-arrow {
+[data-theme="dark"] .process-ancestor-arrow {
     color: #666;
   }
 
-  .process-ancestor.current {
+[data-theme="dark"] .process-ancestor.current {
     color: #eee;
   }
 
-  .process-ancestor-pid {
+[data-theme="dark"] .process-ancestor-pid {
     color: #888;
   }
-}
+

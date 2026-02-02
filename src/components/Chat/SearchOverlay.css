@@ -266,111 +266,112 @@
 /* ============================================
    Dark Mode
    ============================================ */
-@media (prefers-color-scheme: dark) {
-  .search-overlay__backdrop {
+
+
+[data-theme="dark"] .search-overlay__backdrop {
     background: rgba(0, 0, 0, 0.6);
   }
 
-  .search-overlay__panel {
+[data-theme="dark"] .search-overlay__panel {
     background: #2a2a2a;
     box-shadow:
       0 24px 48px rgba(0, 0, 0, 0.4),
       0 0 0 1px rgba(255, 255, 255, 0.05);
   }
 
-  .search-overlay__header {
+[data-theme="dark"] .search-overlay__header {
     border-bottom-color: #3a3a3a;
   }
 
-  .search-overlay__input-wrapper {
+[data-theme="dark"] .search-overlay__input-wrapper {
     background: #333;
   }
 
-  .search-overlay__input-wrapper:focus-within {
+[data-theme="dark"] .search-overlay__input-wrapper:focus-within {
     background: #2a2a2a;
     border-color: #0a84ff;
     box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.2);
   }
 
-  .search-overlay__icon {
+[data-theme="dark"] .search-overlay__icon {
     color: #777;
   }
 
-  .search-overlay__input {
+[data-theme="dark"] .search-overlay__input {
     color: #f0f0f0;
   }
 
-  .search-overlay__input::placeholder {
+[data-theme="dark"] .search-overlay__input::placeholder {
     color: #666;
   }
 
-  .search-overlay__clear {
+[data-theme="dark"] .search-overlay__clear {
     background: #444;
     color: #999;
   }
 
-  .search-overlay__clear:hover {
+[data-theme="dark"] .search-overlay__clear:hover {
     background: #555;
     color: #fff;
   }
 
-  .search-overlay__close {
+[data-theme="dark"] .search-overlay__close {
     color: #999;
   }
 
-  .search-overlay__close:hover {
+[data-theme="dark"] .search-overlay__close:hover {
     background: #333;
     color: #fff;
   }
 
-  .search-overlay__loading,
-  .search-overlay__empty,
-  .search-overlay__hint {
+[data-theme="dark"] .search-overlay__loading,
+[data-theme="dark"] .search-overlay__empty,
+[data-theme="dark"] .search-overlay__hint {
     color: #777;
   }
 
-  .search-overlay__error {
+[data-theme="dark"] .search-overlay__error {
     color: #ff6b6b;
   }
 
-  .search-overlay__spinner {
+[data-theme="dark"] .search-overlay__spinner {
     border-color: #444;
     border-top-color: #0a84ff;
   }
 
-  .search-overlay__count {
+[data-theme="dark"] .search-overlay__count {
     color: #777;
   }
 
-  .search-overlay__result:hover {
+[data-theme="dark"] .search-overlay__result:hover {
     background: #333;
   }
 
-  .search-overlay__result:active {
+[data-theme="dark"] .search-overlay__result:active {
     background: #3a3a3a;
   }
 
-  .search-overlay__result-author {
+[data-theme="dark"] .search-overlay__result-author {
     color: #f0f0f0;
   }
 
-  .search-overlay__result-date {
+[data-theme="dark"] .search-overlay__result-date {
     color: #777;
   }
 
-  .search-overlay__result-content {
+[data-theme="dark"] .search-overlay__result-content {
     color: #aaa;
   }
 
-  .search-overlay__result-content mark {
+[data-theme="dark"] .search-overlay__result-content mark {
     background: rgba(255, 200, 0, 0.3);
   }
 
-  .search-overlay__result-arrow {
+[data-theme="dark"] .search-overlay__result-arrow {
     color: #555;
   }
 
-  .search-overlay__result:hover .search-overlay__result-arrow {
+[data-theme="dark"] .search-overlay__result:hover .search-overlay__result-arrow {
     color: #0a84ff;
   }
-}
+

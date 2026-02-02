@@ -22,6 +22,7 @@ import { useRooms } from "./hooks/useRooms";
 import { useNotes } from "./hooks/useNotes";
 import { useGallery } from "./hooks/useGallery";
 import { useWindowState } from "./hooks/useWindowState";
+import { usePresenceNotifications } from "./hooks/usePresenceNotifications";
 import { UserStatus } from "./types";
 // TODO: Restore Contact-related features in room context
 // import { Contact } from "./types";
@@ -54,6 +55,9 @@ import "./App.css";
 function App() {
   // Persist and restore window position/size
   useWindowState();
+
+  // Desktop notifications when a non-bot user comes online
+  usePresenceNotifications();
 
   const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
   const { isLoading: serverLoading, isConfigured, resetConfig, selectedServer } = useServerConfig();

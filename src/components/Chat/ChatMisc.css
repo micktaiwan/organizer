@@ -91,23 +91,24 @@
   background: #f9f9f9;
 }
 
-@media (prefers-color-scheme: dark) {
-.room-leave-btn,
-  .room-delete-btn {
+
+
+[data-theme="dark"] .room-leave-btn,
+[data-theme="dark"] .room-delete-btn {
     color: #666;
   }
 
-.room-leave-btn:hover {
+[data-theme="dark"] .room-leave-btn:hover {
     color: #fd7e14;
     background: rgba(253, 126, 20, 0.1);
   }
 
-.room-delete-btn:hover {
+[data-theme="dark"] .room-delete-btn:hover {
     color: #ff6b6b;
     background: rgba(255, 107, 107, 0.1);
   }
 
-.room-messaging-empty {
+[data-theme="dark"] .room-messaging-empty {
     background: #1a1a1a;
   }
-}
+

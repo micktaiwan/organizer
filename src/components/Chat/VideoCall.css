@@ -299,22 +299,23 @@
   background: #0056b3;
 }
 
-@media (prefers-color-scheme: dark) {
-.call-button.audio {
+
+
+[data-theme="dark"] .call-button.audio {
     background: #1a3a4a;
     color: #5fa8d3;
   }
 
-.call-button.audio:hover {
+[data-theme="dark"] .call-button.audio:hover {
     background: #244a5a;
   }
 
-.call-button.video {
+[data-theme="dark"] .call-button.video {
     background: #1a3a1a;
     color: #5fd35f;
   }
 
-.call-button.video:hover {
+[data-theme="dark"] .call-button.video:hover {
     background: #244a24;
   }
-}
+

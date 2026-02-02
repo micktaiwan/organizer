@@ -114,8 +114,9 @@
   font-size: 0.9rem;
 }
 
-@media (prefers-color-scheme: dark) {
-.recording-ui {
+
+
+[data-theme="dark"] .recording-ui {
     background: #3a2020;
   }
-}
+

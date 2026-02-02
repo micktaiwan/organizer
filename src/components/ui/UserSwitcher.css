@@ -221,24 +221,25 @@
 /* ============================================
    Dark Mode
    ============================================ */
-@media (prefers-color-scheme: dark) {
-  .user-switcher-trigger {
+
+
+[data-theme="dark"] .user-switcher-trigger {
     color: #e0e0e0;
   }
 
-  .user-switcher-trigger:hover {
+[data-theme="dark"] .user-switcher-trigger:hover {
     background: rgba(255, 255, 255, 0.08);
   }
 
-  .user-switcher-username {
+[data-theme="dark"] .user-switcher-username {
     color: #e0e0e0;
   }
 
-  .user-switcher-chevron {
+[data-theme="dark"] .user-switcher-chevron {
     color: #999;
   }
 
-  .user-switcher-dropdown {
+[data-theme="dark"] .user-switcher-dropdown {
     background: #252525;
     border-color: #3a3a3a;
     box-shadow:
@@ -246,54 +247,54 @@
       0 10px 20px rgba(0, 0, 0, 0.3);
   }
 
-  .user-switcher-account:hover {
+[data-theme="dark"] .user-switcher-account:hover {
     background: #333;
     border-color: #444;
   }
 
-  .user-switcher-account.current {
+[data-theme="dark"] .user-switcher-account.current {
     background: linear-gradient(135deg, #1a3a4a 0%, #0d2a3a 100%);
     border-color: #2a5a7a;
   }
 
-  .user-switcher-account.error {
+[data-theme="dark"] .user-switcher-account.error {
     background: #3a2020;
     border-color: #6b2020;
   }
 
-  .user-switcher-account-indicator .empty-indicator {
+[data-theme="dark"] .user-switcher-account-indicator .empty-indicator {
     background: #555;
   }
 
-  .user-switcher-display-name {
+[data-theme="dark"] .user-switcher-display-name {
     color: #e0e0e0;
   }
 
-  .user-switcher-account-username {
+[data-theme="dark"] .user-switcher-account-username {
     color: #999;
   }
 
-  .user-switcher-remove {
+[data-theme="dark"] .user-switcher-remove {
     color: #666;
   }
 
-  .user-switcher-remove:hover {
+[data-theme="dark"] .user-switcher-remove:hover {
     background: rgba(255, 255, 255, 0.1);
     color: #ef4444;
   }
 
-  .user-switcher-divider {
+[data-theme="dark"] .user-switcher-divider {
     background: #333;
   }
 
-  .user-switcher-add {
+[data-theme="dark"] .user-switcher-add {
     border-color: #444;
     color: #999;
   }
 
-  .user-switcher-add:hover {
+[data-theme="dark"] .user-switcher-add:hover {
     background: #333;
     border-color: #0a84ff;
     color: #0a84ff;
   }
-}
+

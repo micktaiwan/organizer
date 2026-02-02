@@ -221,58 +221,59 @@
   font-size: 0.75rem;
 }
 
-@media (prefers-color-scheme: dark) {
-.connection-box {
+
+
+[data-theme="dark"] .connection-box {
     background: #2a2a2a;
   }
 
-.peer-id-display code {
+[data-theme="dark"] .peer-id-display code {
     background: #333;
     color: #f5f5f5;
   }
 
-.auth-tabs {
+[data-theme="dark"] .auth-tabs {
     border-color: #444;
   }
 
-.auth-tab {
+[data-theme="dark"] .auth-tab {
     color: #999;
   }
 
-.auth-tab:hover {
+[data-theme="dark"] .auth-tab:hover {
     color: #f5f5f5;
   }
 
-.auth-tab.active {
+[data-theme="dark"] .auth-tab.active {
     color: #007aff;
   }
 
-.auth-error {
+[data-theme="dark"] .auth-error {
     background: #3a2020;
     color: #ff6b6b;
   }
 
-.user-search-item {
+[data-theme="dark"] .user-search-item {
     background: #333;
   }
 
-.user-search-username {
+[data-theme="dark"] .user-search-username {
     color: #999;
   }
 
-.recent-users h3 {
+[data-theme="dark"] .recent-users h3 {
     color: #999;
   }
 
-.recent-user-item {
+[data-theme="dark"] .recent-user-item {
     border-color: #444;
   }
 
-.recent-user-item .user-username,
-  .recent-user-item .user-date {
+[data-theme="dark"] .recent-user-item .user-username,
+[data-theme="dark"] .recent-user-item .user-date {
     color: #777;
   }
-}
+
 
 .continue-btn {
   width: 100%;

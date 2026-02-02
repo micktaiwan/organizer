@@ -416,40 +416,41 @@
   object-fit: cover;
 }
 
-@media (prefers-color-scheme: dark) {
-.pending-image-preview {
+
+
+[data-theme="dark"] .pending-image-preview {
     background: #2a2a2a;
     border-color: #333;
   }
 
-.pending-file-preview {
+[data-theme="dark"] .pending-file-preview {
     background: #2a2a2a;
     border-color: #333;
   }
 
-.pending-file-icon {
+[data-theme="dark"] .pending-file-icon {
     background: #3a3a3a;
     color: #aaa;
   }
 
-.cancel-file {
+[data-theme="dark"] .cancel-file {
     background: rgba(255, 255, 255, 0.1);
     color: #aaa;
   }
 
-.cancel-file:hover {
+[data-theme="dark"] .cancel-file:hover {
     background: rgba(255, 255, 255, 0.2);
   }
 
-.file-message {
+[data-theme="dark"] .file-message {
     background: rgba(255, 255, 255, 0.05);
   }
 
-.file-icon {
+[data-theme="dark"] .file-icon {
     background: rgba(0, 122, 255, 0.2);
   }
 
-.video-thumbnail-placeholder {
+[data-theme="dark"] .video-thumbnail-placeholder {
     background: #2a2a2a;
   }
-}
+
