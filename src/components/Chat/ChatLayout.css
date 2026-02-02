@@ -64,12 +64,13 @@
   width: 70%;
 }
 
-@media (prefers-color-scheme: dark) {
-.chat-header {
+
+
+[data-theme="dark"] .chat-header {
     background: #2a2a2a;
     border-color: #4a4a4a;
   }
-}
+
 
 .chat-layout {
   display: flex;
@@ -107,13 +108,14 @@
   white-space: nowrap;
 }
 
-@media (prefers-color-scheme: dark) {
-.chat-room-header {
+
+
+[data-theme="dark"] .chat-room-header {
     background: #2a2a2a;
     border-color: #444;
   }
 
-.chat-room-header h2 {
+[data-theme="dark"] .chat-room-header h2 {
     color: #f5f5f5;
   }
-}
+

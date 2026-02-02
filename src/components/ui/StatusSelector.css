@@ -272,31 +272,32 @@
 /* ============================================
    Dark Mode
    ============================================ */
-@media (prefers-color-scheme: dark) {
-  .status-selector-trigger {
+
+
+[data-theme="dark"] .status-selector-trigger {
     background: #2a2a2a;
     border-color: #3a3a3a;
     color: #e0e0e0;
   }
 
-  .status-selector-trigger:hover {
+[data-theme="dark"] .status-selector-trigger:hover {
     background: #333;
     border-color: #444;
   }
 
-  .status-selector-trigger .status-dot {
+[data-theme="dark"] .status-selector-trigger .status-dot {
     box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3);
   }
 
-  .status-selector-trigger .status-label {
+[data-theme="dark"] .status-selector-trigger .status-label {
     color: #e0e0e0;
   }
 
-  .status-selector-trigger .status-message {
+[data-theme="dark"] .status-selector-trigger .status-message {
     color: #999;
   }
 
-  .status-selector-dropdown {
+[data-theme="dark"] .status-selector-dropdown {
     background: #252525;
     border-color: #3a3a3a;
     box-shadow:
@@ -304,93 +305,93 @@
       0 10px 20px rgba(0, 0, 0, 0.3);
   }
 
-  .status-option {
+[data-theme="dark"] .status-option {
     color: #e0e0e0;
   }
 
-  .status-option:hover {
+[data-theme="dark"] .status-option:hover {
     background: #333;
     border-color: #444;
   }
 
-  .status-option.active {
+[data-theme="dark"] .status-option.active {
     background: linear-gradient(135deg, #1a3a4a 0%, #0d2a3a 100%);
     border-color: #2a5a7a;
   }
 
-  .status-message-input input {
+[data-theme="dark"] .status-message-input input {
     background: #1e1e1e;
     border-color: #3a3a3a;
     color: #e0e0e0;
   }
 
-  .status-message-input input::placeholder {
+[data-theme="dark"] .status-message-input input::placeholder {
     color: #666;
   }
 
-  .status-message-input input:focus {
+[data-theme="dark"] .status-message-input input:focus {
     background: #252525;
     border-color: #0a84ff;
     box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.15);
   }
 
-  .status-mute-toggle {
+[data-theme="dark"] .status-mute-toggle {
     background: #2a2a2a;
     color: #bbb;
   }
 
-  .status-mute-toggle:hover {
+[data-theme="dark"] .status-mute-toggle:hover {
     background: #333;
   }
 
-  .status-mute-toggle span {
+[data-theme="dark"] .status-mute-toggle span {
     color: #bbb;
   }
 
-  .status-expiration label {
+[data-theme="dark"] .status-expiration label {
     color: #999;
   }
 
-  .status-expiration select {
+[data-theme="dark"] .status-expiration select {
     background-color: #1e1e1e;
     border-color: #3a3a3a;
     color: #e0e0e0;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   }
 
-  .status-expiration select:hover {
+[data-theme="dark"] .status-expiration select:hover {
     background-color: #252525;
     border-color: #444;
   }
 
-  .status-expiration select:focus {
+[data-theme="dark"] .status-expiration select:focus {
     background-color: #252525;
     border-color: #0a84ff;
     box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.15);
   }
 
-  .status-actions {
+[data-theme="dark"] .status-actions {
     border-top-color: #333;
   }
 
-  .status-actions .btn-secondary {
+[data-theme="dark"] .status-actions .btn-secondary {
     background: #333;
     border-color: #444;
     color: #ccc;
   }
 
-  .status-actions .btn-secondary:hover {
+[data-theme="dark"] .status-actions .btn-secondary:hover {
     background: #3a3a3a;
     border-color: #555;
     color: #fff;
   }
 
-  .status-actions .btn-primary {
+[data-theme="dark"] .status-actions .btn-primary {
     background: linear-gradient(135deg, #0a84ff 0%, #0066cc 100%);
     box-shadow: 0 2px 4px rgba(10, 132, 255, 0.3);
   }
 
-  .status-actions .btn-primary:hover {
+[data-theme="dark"] .status-actions .btn-primary:hover {
     background: linear-gradient(135deg, #0077ee 0%, #0055bb 100%);
   }
-}
+

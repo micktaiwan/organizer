@@ -176,8 +176,7 @@ button.copied {
   }
 }
 
-@media (prefers-color-scheme: dark) {
-:root {
+:root[data-theme="dark"] {
     color: #f5f5f5;
     background-color: #1a1a1a;
 
@@ -190,12 +189,11 @@ button.copied {
     --color-text-tertiary: #999999;
   }
 
-input {
+[data-theme="dark"] input {
     background: #333;
     border-color: #444;
     color: #f5f5f5;
   }
-}
 
 /* ===== App Tabs - Refined Terminal Style ===== */
 .app-tabs {
@@ -249,10 +247,13 @@ input {
 
 .app-tab:hover:not(.active) {
   color: #374151;
+  background: rgba(0, 0, 0, 0.04);
 }
 
-.app-tab.active {
+.app-tab.active,
+.app-tab.active:hover {
   color: #1f2937;
+  background: transparent;
 }
 
 .app-tab svg {
@@ -265,35 +266,36 @@ input {
 }
 
 /* Dark mode */
-@media (prefers-color-scheme: dark) {
-  .app-tabs {
+[data-theme="dark"] .app-tabs {
     background: linear-gradient(180deg, #1e1e1e 0%, #1a1a1a 100%);
     border-color: rgba(255, 255, 255, 0.06);
   }
 
-  .app-tabs-track {
+[data-theme="dark"] .app-tabs-track {
     background: rgba(255, 255, 255, 0.05);
   }
 
-  .app-tabs-indicator {
+[data-theme="dark"] .app-tabs-indicator {
     background: rgba(255, 255, 255, 0.1);
     box-shadow:
       0 0 0 1px rgba(255, 255, 255, 0.08),
       0 2px 8px rgba(0, 0, 0, 0.3);
   }
 
-  .app-tab {
+[data-theme="dark"] .app-tab {
     color: #9ca3af;
   }
 
-  .app-tab:hover:not(.active) {
+[data-theme="dark"] .app-tab:hover:not(.active) {
     color: #d1d5db;
+    background: rgba(255, 255, 255, 0.06);
   }
 
-  .app-tab.active {
+[data-theme="dark"] .app-tab.active,
+[data-theme="dark"] .app-tab.active:hover {
     color: #f3f4f6;
+    background: transparent;
   }
-}
 
 .pet-tab-content {
   display: flex;

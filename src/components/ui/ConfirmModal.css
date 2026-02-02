@@ -52,26 +52,27 @@
   background: #e0332b !important;
 }
 
-@media (prefers-color-scheme: dark) {
-  .confirm-modal {
+
+
+[data-theme="dark"] .confirm-modal {
     background: #2a2a2a;
   }
 
-  .confirm-modal__icon {
+[data-theme="dark"] .confirm-modal__icon {
     background: #1a2d3d;
     color: #64b5f6;
   }
 
-  .confirm-modal__icon--danger {
+[data-theme="dark"] .confirm-modal__icon--danger {
     background: #3d2e1a;
     color: #ffb74d;
   }
 
-  .confirm-modal__title {
+[data-theme="dark"] .confirm-modal__title {
     color: #f0f0f0;
   }
 
-  .confirm-modal__text {
+[data-theme="dark"] .confirm-modal__text {
     color: #999;
   }
-}
+

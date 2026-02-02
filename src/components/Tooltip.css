@@ -109,24 +109,25 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  .tooltip {
+
+
+[data-theme="dark"] .tooltip {
     background: #5a3c7a;
   }
 
-  .tooltip-top::after {
+[data-theme="dark"] .tooltip-top::after {
     border-top-color: #5a3c7a;
   }
 
-  .tooltip-bottom::after {
+[data-theme="dark"] .tooltip-bottom::after {
     border-bottom-color: #5a3c7a;
   }
 
-  .tooltip-left::after {
+[data-theme="dark"] .tooltip-left::after {
     border-left-color: #5a3c7a;
   }
 
-  .tooltip-right::after {
+[data-theme="dark"] .tooltip-right::after {
     border-right-color: #5a3c7a;
   }
-}
+

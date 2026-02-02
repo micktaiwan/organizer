@@ -150,74 +150,75 @@
 }
 
 /* Dark mode */
-@media (prefers-color-scheme: dark) {
-  .info-panel {
+
+
+[data-theme="dark"] .info-panel {
     background: #2a2a2a;
   }
 
-  .info-panel-header {
+[data-theme="dark"] .info-panel-header {
     border-color: #3a3a3a;
     color: #f0f0f0;
   }
 
-  .info-panel-header button {
+[data-theme="dark"] .info-panel-header button {
     color: #888;
   }
 
-  .info-panel-header button:hover {
+[data-theme="dark"] .info-panel-header button:hover {
     background: rgba(255, 255, 255, 0.08);
     color: #ccc;
   }
 
-  .info-panel-header-content {
+[data-theme="dark"] .info-panel-header-content {
     background: #222;
     border-color: #3a3a3a;
     color: #888;
   }
 
-  .info-panel-loading {
+[data-theme="dark"] .info-panel-loading {
     color: #888;
   }
 
-  .info-panel-error {
+[data-theme="dark"] .info-panel-error {
     color: #EF5350;
   }
 
-  .info-panel-section-title {
+[data-theme="dark"] .info-panel-section-title {
     color: #777;
     border-color: #3a3a3a;
   }
 
-  .info-panel-label {
+[data-theme="dark"] .info-panel-label {
     color: #888;
   }
 
-  .info-panel-value {
+[data-theme="dark"] .info-panel-value {
     color: #eee;
   }
 
-  .info-panel-row.highlight-green .info-panel-label,
-  .info-panel-row.highlight-green .info-panel-value {
+[data-theme="dark"] .info-panel-row.highlight-green .info-panel-label,
+[data-theme="dark"] .info-panel-row.highlight-green .info-panel-value {
     color: #66BB6A;
   }
 
-  .info-panel-row.highlight-orange .info-panel-label,
-  .info-panel-row.highlight-orange .info-panel-value {
+[data-theme="dark"] .info-panel-row.highlight-orange .info-panel-label,
+[data-theme="dark"] .info-panel-row.highlight-orange .info-panel-value {
     color: #FFA726;
   }
 
-  .info-panel-row.highlight-red .info-panel-label,
-  .info-panel-row.highlight-red .info-panel-value {
+[data-theme="dark"] .info-panel-row.highlight-red .info-panel-label,
+[data-theme="dark"] .info-panel-row.highlight-red .info-panel-value {
     color: #EF5350;
   }
 
-  .info-panel-row.highlight-blue .info-panel-label,
-  .info-panel-row.highlight-blue .info-panel-value {
+[data-theme="dark"] .info-panel-row.highlight-blue .info-panel-label,
+[data-theme="dark"] .info-panel-row.highlight-blue .info-panel-value {
     color: #42A5F5;
   }
 
-  .info-panel-row.highlight-yellow .info-panel-label,
-  .info-panel-row.highlight-yellow .info-panel-value {
+[data-theme="dark"] .info-panel-row.highlight-yellow .info-panel-label,
+[data-theme="dark"] .info-panel-row.highlight-yellow .info-panel-value {
     color: #FFCA28;
   }
-}
+

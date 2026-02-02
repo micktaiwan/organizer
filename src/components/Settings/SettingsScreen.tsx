@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { RotateCcw, Check, Mic, Video, RefreshCw, AlertCircle } from 'lucide-react';
+import { RotateCcw, Check, Mic, Video, RefreshCw, AlertCircle, Monitor, Sun, Moon } from 'lucide-react';
 import { useMediaDevices } from '../../contexts/MediaDevicesContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import './SettingsScreen.css';
 
 const UI_POSITION_KEYS = [
@@ -11,6 +12,7 @@ const UI_POSITION_KEYS = [
 export function SettingsScreen() {
   const [resetConfirmed, setResetConfirmed] = useState(false);
   const [refreshConfirmed, setRefreshConfirmed] = useState(false);
+  const { preference, setPreference } = useTheme();
   const {
     microphones,
     cameras,
@@ -139,6 +141,39 @@ export function SettingsScreen() {
                 </>
               )}
             </button>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h3>Apparence</h3>
+          <div className="settings-item">
+            <div className="settings-item-info">
+              <span className="settings-item-label">Thème</span>
+              <span className="settings-item-description">Choisir le mode d'affichage de l'application</span>
+            </div>
+            <div className="theme-segmented">
+              <button
+                className={`theme-segment ${preference === 'system' ? 'active' : ''}`}
+                onClick={() => setPreference('system')}
+              >
+                <Monitor size={14} />
+                Système
+              </button>
+              <button
+                className={`theme-segment ${preference === 'light' ? 'active' : ''}`}
+                onClick={() => setPreference('light')}
+              >
+                <Sun size={14} />
+                Clair
+              </button>
+              <button
+                className={`theme-segment ${preference === 'dark' ? 'active' : ''}`}
+                onClick={() => setPreference('dark')}
+              >
+                <Moon size={14} />
+                Sombre
+              </button>
+            </div>
           </div>
         </section>
 

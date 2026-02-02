@@ -179,71 +179,72 @@
   margin-left: 0.75rem;
 }
 
-@media (prefers-color-scheme: dark) {
-.room-members {
+
+
+[data-theme="dark"] .room-members {
     color: #777;
   }
 
-.room-members-toggle {
+[data-theme="dark"] .room-members-toggle {
     background: #1a3a4a;
     color: #5fa8d3;
   }
 
-.room-members-toggle:hover {
+[data-theme="dark"] .room-members-toggle:hover {
     background: #244a5a;
   }
 
-.room-members-dropdown {
+[data-theme="dark"] .room-members-dropdown {
     background: #2a2a2a;
     border-color: #444;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   }
 
-.room-members-header {
+[data-theme="dark"] .room-members-header {
     border-color: #444;
     color: #999;
   }
 
-.room-member-item {
+[data-theme="dark"] .room-member-item {
     border-color: #333;
   }
 
-.room-member-item:hover {
+[data-theme="dark"] .room-member-item:hover {
     background: #333;
   }
 
-.member-name {
+[data-theme="dark"] .member-name {
     color: #f5f5f5;
   }
 
-.member-username {
+[data-theme="dark"] .member-username {
     color: #777;
   }
 
-.member-status-label.available {
+[data-theme="dark"] .member-status-label.available {
     background: rgba(52, 199, 89, 0.2);
   }
 
-.member-status-label.busy {
+[data-theme="dark"] .member-status-label.busy {
     background: rgba(255, 149, 0, 0.2);
   }
 
-.member-status-label.away {
+[data-theme="dark"] .member-status-label.away {
     background: rgba(255, 59, 48, 0.2);
   }
 
-.member-status-label.dnd {
+[data-theme="dark"] .member-status-label.dnd {
     background: rgba(142, 142, 147, 0.2);
   }
 
-.member-status-expires {
+[data-theme="dark"] .member-status-expires {
     color: #777;
   }
 
-.member-status-message {
+[data-theme="dark"] .member-status-message {
     color: #777;
   }
-}
+
 
 .member-status-message {
   font-size: 0.75rem;

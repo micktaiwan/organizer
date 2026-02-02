@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useMemo, useState } from "react";
 import { ArrowDown } from "lucide-react";
 import { Message } from "../../types";
 import { MessageItem } from "./MessageItem";
@@ -46,7 +46,15 @@ export const MessageList: React.FC<MessageListProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const firstUnreadRef = useRef<HTMLDivElement>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
   const { getStatus } = useUserStatus();
+
+  // Reset when messages are cleared (room switch)
+  useEffect(() => {
+    if (messages.length === 0) {
+      setIsReady(false);
+    }
+  }, [messages.length]);
 
   // Group consecutive messages from same sender (< 1 min)
   const messageGroups = useMemo(() => groupConsecutiveMessages(messages), [messages]);
@@ -87,18 +95,19 @@ export const MessageList: React.FC<MessageListProps> = ({
   }, [targetMessageId, messageMode, messageGroups]);
 
   // Scroll to first unread message or bottom depending on context
-  useEffect(() => {
-    if (messageMode === 'around') return; // Don't auto-scroll in around mode
+  // useLayoutEffect ensures scroll happens before browser paint (no flash)
+  useLayoutEffect(() => {
+    if (messageMode === 'around') return;
+    if (messages.length === 0) return;
 
     // If there's a first unread message, scroll to it
     if (firstUnreadId && firstUnreadRef.current) {
-      setTimeout(() => {
-        firstUnreadRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 100);
+      firstUnreadRef.current.scrollIntoView({ behavior: "instant", block: "center" });
     } else {
       // Otherwise scroll to bottom
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
     }
+    setIsReady(true);
   }, [messages, isRemoteTyping, messageMode, firstUnreadId]);
 
   // Check if a message group contains the highlighted message
@@ -109,6 +118,13 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   return (
     <div className="messages" ref={containerRef}>
+      {/* Loading overlay - hides messages until scroll is positioned */}
+      {!isReady && messages.length > 0 && (
+        <div className="messages-loading-overlay">
+          <div className="load-more-spinner" />
+        </div>
+      )}
+
       {/* Load More button at the top */}
       {hasMoreMessages && onLoadMore && (
         <div className="load-more-container">

@@ -196,50 +196,51 @@
   opacity: 0.5;
 }
 
-@media (prefers-color-scheme: dark) {
-.admin-panel {
+
+
+[data-theme="dark"] .admin-panel {
     background: #2a2a2a;
   }
 
-.admin-header {
+[data-theme="dark"] .admin-header {
     border-color: #444;
   }
 
-.admin-tabs {
+[data-theme="dark"] .admin-tabs {
     border-color: #444;
   }
 
-.admin-tab {
+[data-theme="dark"] .admin-tab {
     color: #999;
   }
 
-.admin-tab:hover {
+[data-theme="dark"] .admin-tab:hover {
     color: #f5f5f5;
   }
 
-.stat-card {
+[data-theme="dark"] .stat-card {
     background: #333;
   }
 
-.stat-label {
+[data-theme="dark"] .stat-label {
     color: #999;
   }
 
-.user-item {
+[data-theme="dark"] .user-item {
     background: #333;
   }
 
-.user-details .user-meta {
+[data-theme="dark"] .user-details .user-meta {
     color: #999;
   }
 
-.user-details .user-date {
+[data-theme="dark"] .user-details .user-date {
     color: #777;
   }
 
-.toggle-admin-btn,
-  .pagination button {
+[data-theme="dark"] .toggle-admin-btn,
+[data-theme="dark"] .pagination button {
     background: #444;
     color: #f5f5f5;
   }
-}
+

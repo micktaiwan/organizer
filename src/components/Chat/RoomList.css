@@ -117,39 +117,37 @@
   opacity: 1;
 }
 
-@media (prefers-color-scheme: dark) {
-.room-list {
+[data-theme="dark"] .room-list {
     background: #2a2a2a;
     border-color: #444;
   }
 
-.room-list-header {
+[data-theme="dark"] .room-list-header {
     border-color: #444;
   }
 
-.room-item {
+[data-theme="dark"] .room-item {
     border-color: #333;
   }
 
-.room-item:hover {
+[data-theme="dark"] .room-item:hover {
     background: #333;
   }
 
-.room-item.active {
+[data-theme="dark"] .room-item.active {
     background: #1a3a4a;
     border: 1px solid #007aff;
     border-left: 3px solid #007aff;
   }
 
-.room-name {
+[data-theme="dark"] .room-name {
     color: #f5f5f5;
   }
 
-.room-list-loading,
-  .room-list-empty {
+[data-theme="dark"] .room-list-loading,
+[data-theme="dark"] .room-list-empty {
     color: #777;
   }
-}
 
 .room-list-footer {
   padding: 12px;
@@ -178,19 +176,17 @@
   color: #e0e0e0;
 }
 
-@media (prefers-color-scheme: light) {
-.room-list-footer {
+[data-theme="light"] .room-list-footer {
     border-color: #e0e0e0;
   }
 
-.room-list-logout-btn {
+[data-theme="light"] .room-list-logout-btn {
     border-color: #e0e0e0;
     color: #666;
   }
 
-.room-list-logout-btn:hover {
+[data-theme="light"] .room-list-logout-btn:hover {
     background: #f5f5f5;
     border-color: #ccc;
     color: #333;
   }
-}

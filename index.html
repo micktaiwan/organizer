@@ -5,6 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tauri + React + Typescript</title>
+    <script>
+      (function() {
+        var pref = localStorage.getItem('organizer-theme');
+        var theme;
+        if (pref === 'dark' || pref === 'light') theme = pref;
+        else theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
   </head>
 
   <body>

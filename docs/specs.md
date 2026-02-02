@@ -105,3 +105,11 @@ Il existe deux sources de données utilisateur qui doivent rester synchronisées
 - Desktop + Android : séparateur visuel "Nouveaux messages" qui indique où commencent les messages non lus dans une conversation
 - Desktop + Android : au retour dans une room, l'app scrolle automatiquement vers le premier message non lu
 
+## Apparence
+
+- Desktop : sélecteur de thème (Système / Clair / Sombre) dans les paramètres, appliqué sans flash au chargement
+
+## Notifications
+
+- Desktop : notification desktop quand un utilisateur (hors bots) se connecte
+

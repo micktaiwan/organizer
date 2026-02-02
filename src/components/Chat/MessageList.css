@@ -25,6 +25,17 @@
   padding: 1rem;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.messages-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg, #1a1a1a);
+  z-index: 20;
 }
 
 .message {
@@ -327,64 +338,62 @@
   filter: invert(1) hue-rotate(180deg);
 }
 
-@media (prefers-color-scheme: dark) {
-  .message.them .bubble {
+[data-theme="dark"] .message.them .bubble {
     background: #333333;
     color: #f5f5f5;
   }
 
-  .timestamp {
+[data-theme="dark"] .timestamp {
     color: #aaaaaa;
   }
 
-  .message-input {
+[data-theme="dark"] .message-input {
     background: #2a2a2a;
     border-color: #333;
   }
 
-  .message-input textarea {
+[data-theme="dark"] .message-input textarea {
     background: #1a1a1a;
     color: #f5f5f5;
     border-color: #444;
   }
 
-  .message-input textarea:focus {
+[data-theme="dark"] .message-input textarea:focus {
     border-color: #0a84ff;
   }
 
-  .message-input button[type="submit"]:disabled {
+[data-theme="dark"] .message-input button[type="submit"]:disabled {
     background: transparent;
     color: #666;
     border: 1px solid #444;
   }
 
-  .message-input.bot-mode {
+[data-theme="dark"] .message-input.bot-mode {
     border-top-color: #f44336;
   }
 
-  .message-input.bot-mode textarea {
+[data-theme="dark"] .message-input.bot-mode textarea {
     border-color: #f44336;
   }
 
-  .message-input.bot-mode textarea:focus {
+[data-theme="dark"] .message-input.bot-mode textarea:focus {
     border-color: #e53935;
   }
 
   /* Markdown dark mode styles */
-  .bubble .inline-code,
-  .bubble .code-block {
+[data-theme="dark"] .bubble .inline-code,
+[data-theme="dark"] .bubble .code-block {
     background: rgba(255, 255, 255, 0.1);
   }
 
-  .message.me .bubble .inline-code,
-  .message.me .bubble .code-block {
+[data-theme="dark"] .message.me .bubble .inline-code,
+[data-theme="dark"] .message.me .bubble .code-block {
     background: rgba(0, 0, 0, 0.2);
   }
 
-  .bubble blockquote {
+[data-theme="dark"] .bubble blockquote {
     border-left-color: rgba(255, 255, 255, 0.3);
   }
-}
 
 .message {
   position: relative;
@@ -421,15 +430,13 @@
   margin-left: auto;
 }
 
-@media (prefers-color-scheme: dark) {
-.message-delete-btn {
+[data-theme="dark"] .message-delete-btn {
     background: rgba(255, 59, 48, 0.15);
   }
 
-.message-delete-btn:hover {
+[data-theme="dark"] .message-delete-btn:hover {
     background: rgba(255, 59, 48, 0.3);
   }
-}
 
 /* Message group wrapper - must maintain flex alignment */
 .message-group-wrapper {
@@ -591,12 +598,7 @@
     0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-@media (prefers-color-scheme: dark) {
-  .message-group-highlight {
-    animation: messageHighlightDark 2s ease-out;
-  }
-
-  @keyframes messageHighlightDark {
+@keyframes messageHighlightDark {
     0% {
       background: rgba(10, 132, 255, 0.25);
       border-radius: 12px;
@@ -606,17 +608,20 @@
     }
   }
 
-  .return-to-latest-btn {
+[data-theme="dark"] .message-group-highlight {
+    animation: messageHighlightDark 2s ease-out;
+  }
+
+[data-theme="dark"] .return-to-latest-btn {
     background: #0a84ff;
     box-shadow:
       0 4px 12px rgba(10, 132, 255, 0.3),
       0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
-  .return-to-latest-btn:hover {
+[data-theme="dark"] .return-to-latest-btn:hover {
     background: #0077ed;
     box-shadow:
       0 6px 16px rgba(10, 132, 255, 0.4),
       0 3px 6px rgba(0, 0, 0, 0.25);
   }
-}

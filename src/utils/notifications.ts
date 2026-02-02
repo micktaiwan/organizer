@@ -59,6 +59,24 @@ export async function showMessageNotification(
 }
 
 /**
+ * Show a desktop notification when a user comes online.
+ */
+export async function showPresenceNotification(displayName: string): Promise<void> {
+  if (!permissionGranted) {
+    permissionGranted = await isPermissionGranted();
+    if (!permissionGranted) return;
+  }
+  try {
+    sendNotification({
+      title: `${displayName} is online`,
+      body: `${displayName} just connected`,
+    });
+  } catch (err) {
+    console.error("Failed to send presence notification:", err);
+  }
+}
+
+/**
  * Get and clear the pending notification roomId.
  * Call this when the window gains focus to navigate to the room.
  */

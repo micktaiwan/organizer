@@ -408,116 +408,117 @@
 }
 
 /* Dark mode */
-@media (prefers-color-scheme: dark) {
-  .video-recording-ui {
+
+
+[data-theme="dark"] .video-recording-ui {
     background: #3a2020;
   }
 
-  .video-recording-ui .webcam-preview {
+[data-theme="dark"] .video-recording-ui .webcam-preview {
     border: 1px solid #555;
   }
 
-  .video-btn {
+[data-theme="dark"] .video-btn {
     color: #aaa;
   }
 
-  .video-btn-control.pause,
-  .video-btn-control.resume {
+[data-theme="dark"] .video-btn-control.pause,
+[data-theme="dark"] .video-btn-control.resume {
     background: #3a3a3a;
     color: #fff;
   }
 
-  .video-btn-control.pause:hover,
-  .video-btn-control.resume:hover {
+[data-theme="dark"] .video-btn-control.pause:hover,
+[data-theme="dark"] .video-btn-control.resume:hover {
     background: #4a4a4a;
   }
 
-  .video-btn-control.cancel {
+[data-theme="dark"] .video-btn-control.cancel {
     background: #3a3a3a;
   }
 
-  .video-btn-control.cancel:hover {
+[data-theme="dark"] .video-btn-control.cancel:hover {
     background: #4a2020;
   }
 
-  .video-modal {
+[data-theme="dark"] .video-modal {
     background: #2a2a2a;
   }
 
-  .source-selector h3 {
+[data-theme="dark"] .source-selector h3 {
     color: #fff;
   }
 
-  .section-label {
+[data-theme="dark"] .section-label {
     color: #999;
   }
 
-  .video-error {
+[data-theme="dark"] .video-error {
     background: #4a2020;
     color: #ff8080;
   }
 
-  .source-option {
+[data-theme="dark"] .source-option {
     background: #333;
     border-color: #444;
     color: #fff;
   }
 
-  .source-option:hover {
+[data-theme="dark"] .source-option:hover {
     border-color: #007aff;
     background: #1a3050;
   }
 
-  .source-option.selected {
+[data-theme="dark"] .source-option.selected {
     border-color: #007aff;
     background: #1a3050;
   }
 
-  .quality-option {
+[data-theme="dark"] .quality-option {
     background: #333;
     border-color: #444;
   }
 
-  .quality-option:hover {
+[data-theme="dark"] .quality-option:hover {
     border-color: #007aff;
     background: #1a3050;
   }
 
-  .quality-option.selected {
+[data-theme="dark"] .quality-option.selected {
     border-color: #007aff;
     background: #1a3050;
   }
 
-  .quality-option .quality-label {
+[data-theme="dark"] .quality-option .quality-label {
     color: #fff;
   }
 
-  .quality-option .quality-desc {
+[data-theme="dark"] .quality-option .quality-desc {
     color: #999;
   }
 
-  .video-modal-cancel {
+[data-theme="dark"] .video-modal-cancel {
     color: #999;
   }
 
-  .video-modal-cancel:hover {
+[data-theme="dark"] .video-modal-cancel:hover {
     background: #3a3a3a;
     color: #fff;
   }
 
-  .video-modal-start:disabled {
+[data-theme="dark"] .video-modal-start:disabled {
     background: #444;
   }
 
-  .preview-btn.restart {
+[data-theme="dark"] .preview-btn.restart {
     background: #3a3a3a;
     color: #fff;
   }
 
-  .preview-btn.restart:hover:not(:disabled) {
+[data-theme="dark"] .preview-btn.restart:hover:not(:disabled) {
     background: #4a4a4a;
   }
-}
+
 
 /* Animation for recording indicator */
 @keyframes pulse-recording {

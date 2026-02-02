@@ -73,16 +73,17 @@
   gap: 0.75rem;
 }
 
-@media (prefers-color-scheme: dark) {
-.contact-item {
+
+
+[data-theme="dark"] .contact-item {
     background: #333;
   }
 
-.contact-modal {
+[data-theme="dark"] .contact-modal {
     background: #2a2a2a;
   }
 
-.contacts-section {
+[data-theme="dark"] .contacts-section {
     border-color: #333;
   }
-}
+
