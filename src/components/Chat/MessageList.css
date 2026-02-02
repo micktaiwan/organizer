@@ -322,6 +322,18 @@
   color: #bbb;
 }
 
+[data-theme="light"] .system-message {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .system-message-text {
+  color: #666;
+}
+
+[data-theme="light"] .system-message-time {
+  color: #999;
+}
+
 .sent-icon {
   color: #888;
   margin-left: 4px;
