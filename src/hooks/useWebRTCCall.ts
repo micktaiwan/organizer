@@ -63,6 +63,19 @@ export const useWebRTCCall = ({
   // Ref to hold latest stopScreenShareInternal (avoids stale closure in onended)
   const stopScreenShareInternalRef = useRef<() => void>(() => {});
 
+  // Guard against concurrent endCallInternal calls
+  const isCleaningUpRef = useRef(false);
+
+  // Generation counter for getUserMedia abort on rapid hangup
+  const callGenerationRef = useRef(0);
+
+  // Stable ref for endCallInternal (used inside createPeerConnection and socket handlers to avoid stale closure)
+  const endCallInternalRef = useRef<() => void>(() => {});
+
+  // Stable refs for values used in socket event handlers (avoids re-subscribing on every change)
+  const callStateRef = useRef<CallState>('idle');
+  const addSystemMessageRef = useRef(addSystemMessage);
+
   // Create RTCPeerConnection
   const createPeerConnection = useCallback((targetUser: string, username?: string) => {
     console.log('[WebRTC][PC] Creating RTCPeerConnection for', targetUser, username ? `(${username})` : '');
@@ -128,7 +141,7 @@ export const useWebRTCCall = ({
           clearTimeout(iceRestartTimeoutRef.current);
           iceRestartTimeoutRef.current = null;
         }
-        endCallInternal();
+        endCallInternalRef.current();
       }
       // 'disconnected' is handled by oniceconnectionstatechange (ICE restart)
     };
@@ -149,7 +162,7 @@ export const useWebRTCCall = ({
             console.log('[WebRTC][ICE-RESTART] Restart offer sent to', targetUser);
           }).catch((err) => {
             console.error('[WebRTC][ICE-RESTART] Failed to create restart offer:', err);
-            endCallInternal();
+            endCallInternalRef.current();
           });
         }
 
@@ -157,7 +170,7 @@ export const useWebRTCCall = ({
         iceRestartTimeoutRef.current = setTimeout(() => {
           console.log('[WebRTC][ICE-RESTART] Timeout (10s), ending call');
           iceRestartTimeoutRef.current = null;
-          endCallInternal();
+          endCallInternalRef.current();
         }, 10000);
       } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         if (iceRestartTimeoutRef.current) {
@@ -172,7 +185,7 @@ export const useWebRTCCall = ({
           clearTimeout(iceRestartTimeoutRef.current);
           iceRestartTimeoutRef.current = null;
         }
-        endCallInternal();
+        endCallInternalRef.current();
       }
     };
 
@@ -224,6 +237,7 @@ export const useWebRTCCall = ({
       pcRef.current = null;
     }
     pendingIceCandidatesRef.current = [];
+    remoteStreamRef.current?.getTracks().forEach(t => t.stop());
     remoteStreamRef.current = null;
   }, []);
 
@@ -270,6 +284,12 @@ export const useWebRTCCall = ({
 
   // End call internally
   const endCallInternal = useCallback(() => {
+    if (isCleaningUpRef.current) {
+      console.log('[WebRTC] endCallInternal - already cleaning up, skipping');
+      return;
+    }
+    isCleaningUpRef.current = true;
+    callGenerationRef.current++;
     console.log('[WebRTC] endCallInternal - cleaning up. PC state:', pcRef.current?.connectionState, 'ICE:', pcRef.current?.iceConnectionState);
     if (iceRestartTimeoutRef.current) {
       clearTimeout(iceRestartTimeoutRef.current);
@@ -304,7 +324,12 @@ export const useWebRTCCall = ({
     setTargetUserId(null);
     setRemoteUsername(null);
     isInitiatorRef.current = false;
+    isCleaningUpRef.current = false;
   }, [stopLocalStream, removeTracksFromPC, closePeerConnection]);
+
+  endCallInternalRef.current = endCallInternal;
+  callStateRef.current = callState;
+  addSystemMessageRef.current = addSystemMessage;
 
   // Process pending ICE candidates
   const processPendingIceCandidates = useCallback(async () => {
@@ -340,6 +365,7 @@ export const useWebRTCCall = ({
       isInitiatorRef.current = true;
       const pc = createPeerConnection(targetUser);
 
+      const generation = ++callGenerationRef.current;
       console.log('[WebRTC][CALLER] Step 2: Getting user media...', { withCamera, selectedMicrophoneId, selectedCameraId });
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: selectedMicrophoneId
@@ -349,6 +375,13 @@ export const useWebRTCCall = ({
           ? (selectedCameraId ? { deviceId: { exact: selectedCameraId } } : true)
           : false,
       });
+
+      if (callGenerationRef.current !== generation) {
+        console.log('[WebRTC][CALLER] Call generation changed during getUserMedia, stopping late tracks');
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
+
       localStreamRef.current = stream;
       setIsCameraEnabled(withCamera);
       console.log('[WebRTC][CALLER] Step 2: Got media tracks:', stream.getTracks().map(t => `${t.kind}:${t.enabled}`));
@@ -378,7 +411,7 @@ export const useWebRTCCall = ({
       closePeerConnection();
       alert("Impossible d'accéder au micro ou à la caméra. Vérifiez les permissions système.");
     }
-  }, [createPeerConnection, closePeerConnection]);
+  }, [createPeerConnection, closePeerConnection, selectedMicrophoneId, selectedCameraId]);
 
   // Accept an incoming call
   const acceptCall = useCallback(async (withCamera: boolean) => {
@@ -443,7 +476,7 @@ export const useWebRTCCall = ({
       closePeerConnection();
       alert('Erreur micro/caméra: ' + (err as Error).message);
     }
-  }, [incomingCallFrom, createPeerConnection, closePeerConnection]);
+  }, [incomingCallFrom, createPeerConnection, closePeerConnection, selectedMicrophoneId, selectedCameraId]);
 
   // Reject an incoming call
   const rejectCall = useCallback(() => {
@@ -569,6 +602,7 @@ export const useWebRTCCall = ({
   const startScreenShare = useCallback(async () => {
     const pc = pcRef.current;
     if (!pc || !targetUserId) return;
+    if (isScreenSharing || screenTrackRef.current) return;
 
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
@@ -591,57 +625,60 @@ export const useWebRTCCall = ({
     } catch (err) {
       console.log('[WebRTC][SCREEN] User cancelled screen share or error:', err);
     }
-  }, [targetUserId]);
+  }, [targetUserId, isScreenSharing]);
 
   // Public stop screen share
   const stopScreenShare = useCallback(() => {
     stopScreenShareInternal();
   }, [stopScreenShareInternal]);
 
-  // Handle Socket.io call events
+  // Handle Socket.io call events (register once, use refs to avoid re-subscribe gap)
   useEffect(() => {
-    const handleCallRequest = (data: { from: string; fromUsername: string; withCamera: boolean }) => {
-      console.log('[WebRTC][SIGNAL] call:request received from', data.fromUsername, `(${data.from})`, { withCamera: data.withCamera });
+    const unsubRequest = socketService.on('call:request', (data) => {
+      const { from, fromUsername, withCamera } = data as { from: string; fromUsername: string; withCamera: boolean };
+      console.log('[WebRTC][SIGNAL] call:request received from', fromUsername, `(${from})`, { withCamera });
       console.log('[WebRTC][SIGNAL] PC already exists?', !!pcRef.current, 'remoteDesc?', !!pcRef.current?.remoteDescription);
-      setIncomingCallFrom({ userId: data.from, username: data.fromUsername });
-      setRemoteUsername(data.fromUsername);
-      setIncomingCallWithCamera(data.withCamera);
+      setIncomingCallFrom({ userId: from, username: fromUsername });
+      setRemoteUsername(fromUsername);
+      setIncomingCallWithCamera(withCamera);
       setCallState('incoming');
       playRingtone();
-    };
+    });
 
-    const handleCallAccept = (data: { from: string; withCamera: boolean }) => {
-      console.log('[WebRTC][SIGNAL] call:accept received from', data.from, { withCamera: data.withCamera });
+    const unsubAccept = socketService.on('call:accept', (data) => {
+      const { from, withCamera } = data as { from: string; withCamera: boolean };
+      console.log('[WebRTC][SIGNAL] call:accept received from', from, { withCamera });
       console.log('[WebRTC][SIGNAL] PC state:', pcRef.current?.connectionState, 'ICE:', pcRef.current?.iceConnectionState);
       stopRingback();
-      setRemoteHasCamera(data.withCamera);
+      setRemoteHasCamera(withCamera);
       setCallState('connected');
-    };
+    });
 
-    const handleCallReject = () => {
+    const unsubReject = socketService.on('call:reject', () => {
       console.log('[WebRTC][SIGNAL] call:reject received');
-      addSystemMessage(callState === 'calling' ? 'rejected-call' : 'missed-call');
-      endCallInternal();
-    };
+      addSystemMessageRef.current(callStateRef.current === 'calling' ? 'rejected-call' : 'missed-call');
+      endCallInternalRef.current();
+    });
 
-    const handleCallEnd = () => {
+    const unsubEnd = socketService.on('call:end', () => {
       console.log('[WebRTC][SIGNAL] call:end received');
-      if (callState === 'incoming') {
-        addSystemMessage('missed-call');
+      if (callStateRef.current === 'incoming') {
+        addSystemMessageRef.current('missed-call');
       } else {
-        addSystemMessage('ended-call');
+        addSystemMessageRef.current('ended-call');
       }
-      endCallInternal();
-    };
+      endCallInternalRef.current();
+    });
 
-    const handleToggleCamera = (data: { from: string; enabled: boolean }) => {
-      setRemoteHasCamera(data.enabled);
-    };
+    const unsubToggle = socketService.on('call:toggle-camera', (data) => {
+      setRemoteHasCamera((data as { from: string; enabled: boolean }).enabled);
+    });
 
-    const handleScreenShare = (data: { from: string; enabled: boolean; trackId?: string }) => {
-      console.log('[WebRTC][SCREEN] Remote screen share:', data.enabled, 'trackId:', data.trackId);
-      if (data.enabled && data.trackId) {
-        remoteScreenTrackIdRef.current = data.trackId;
+    const unsubScreenShare = socketService.on('call:screen-share', (data) => {
+      const { enabled, trackId } = data as { from: string; enabled: boolean; trackId?: string };
+      console.log('[WebRTC][SCREEN] Remote screen share:', enabled, 'trackId:', trackId);
+      if (enabled && trackId) {
+        remoteScreenTrackIdRef.current = trackId;
         setRemoteIsScreenSharing(true);
       } else {
         remoteScreenTrackIdRef.current = null;
@@ -650,55 +687,33 @@ export const useWebRTCCall = ({
           remoteScreenVideoRef.current.srcObject = null;
         }
       }
-    };
+    });
 
-    const handleCallError = (data: { error: string; message: string }) => {
-      console.error('Call error:', data.error, data.message);
-      alert(`Erreur d'appel: ${data.message}`);
-      endCallInternal();
-    };
+    const unsubCallError = socketService.on('call:error', (data) => {
+      const { error, message } = data as { error: string; message: string };
+      console.error('Call error:', error, message);
+      alert(`Erreur d'appel: ${message}`);
+      endCallInternalRef.current();
+    });
 
-    const handleWebRTCError = (data: { error: string; message: string }) => {
-      console.error('WebRTC error:', data.error, data.message);
-      // Only alert if we're actively in a call
-      if (callState === 'calling' || callState === 'connected') {
-        alert(`Erreur WebRTC: ${data.message}`);
-        endCallInternal();
+    const unsubWebRTCError = socketService.on('webrtc:error', (data) => {
+      const { error, message } = data as { error: string; message: string };
+      console.error('WebRTC error:', error, message);
+      const cs = callStateRef.current;
+      if (cs === 'calling' || cs === 'connected') {
+        alert(`Erreur WebRTC: ${message}`);
+        endCallInternalRef.current();
       }
-    };
+    });
 
-    const handleAnsweredElsewhere = () => {
-      // Only dismiss if we're in incoming state (ringing)
-      if (callState !== 'incoming') return;
-
+    const unsubAnsweredElsewhere = socketService.on('call:answered-elsewhere', () => {
+      if (callStateRef.current !== 'incoming') return;
       console.log('Call answered on another device');
       stopRingtone();
       setCallState('idle');
       setIncomingCallFrom(null);
       setRemoteUsername(null);
-    };
-
-    const unsubRequest = socketService.on('call:request', (data) =>
-      handleCallRequest(data as { from: string; fromUsername: string; withCamera: boolean })
-    );
-    const unsubAccept = socketService.on('call:accept', (data) =>
-      handleCallAccept(data as { from: string; withCamera: boolean })
-    );
-    const unsubReject = socketService.on('call:reject', handleCallReject);
-    const unsubEnd = socketService.on('call:end', handleCallEnd);
-    const unsubToggle = socketService.on('call:toggle-camera', (data) =>
-      handleToggleCamera(data as { from: string; enabled: boolean })
-    );
-    const unsubCallError = socketService.on('call:error', (data) =>
-      handleCallError(data as { error: string; message: string })
-    );
-    const unsubWebRTCError = socketService.on('webrtc:error', (data) =>
-      handleWebRTCError(data as { error: string; message: string })
-    );
-    const unsubAnsweredElsewhere = socketService.on('call:answered-elsewhere', handleAnsweredElsewhere);
-    const unsubScreenShare = socketService.on('call:screen-share', (data) =>
-      handleScreenShare(data as { from: string; enabled: boolean; trackId?: string })
-    );
+    });
 
     return () => {
       unsubRequest();
@@ -711,7 +726,7 @@ export const useWebRTCCall = ({
       unsubAnsweredElsewhere();
       unsubScreenShare();
     };
-  }, [callState, addSystemMessage, endCallInternal]);
+  }, []);
 
   // Handle WebRTC signaling events
   useEffect(() => {
@@ -720,6 +735,14 @@ export const useWebRTCCall = ({
 
       // Create peer connection if not exists
       let pc = pcRef.current;
+
+      // Glare resolution: if we're the initiator and already sent an offer,
+      // ignore incoming offers (the callee should answer ours, not send a new one)
+      if (pc && isInitiatorRef.current && pc.signalingState === 'have-local-offer') {
+        console.log('[WebRTC][SIGNAL] Ignoring offer - we are the initiator with pending local offer (glare resolution)');
+        return;
+      }
+
       if (!pc) {
         console.log('[WebRTC][SIGNAL] No PC exists, creating one for offer');
         pc = createPeerConnection(data.from, data.fromUsername);
@@ -796,7 +819,7 @@ export const useWebRTCCall = ({
 
     const handleWebRTCClose = (data: { from: string }) => {
       console.log('[WebRTC][SIGNAL] webrtc:close from', data.from);
-      endCallInternal();
+      endCallInternalRef.current();
     };
 
     const unsubOffer = socketService.on('webrtc:offer', (data) =>
@@ -818,11 +841,16 @@ export const useWebRTCCall = ({
       unsubICE();
       unsubClose();
     };
-  }, [createPeerConnection, processPendingIceCandidates, endCallInternal]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- createPeerConnection and processPendingIceCandidates have [] deps, stable forever
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (iceRestartTimeoutRef.current) {
+        clearTimeout(iceRestartTimeoutRef.current);
+        iceRestartTimeoutRef.current = null;
+      }
       stopLocalStream();
       removeTracksFromPC();
       closePeerConnection();

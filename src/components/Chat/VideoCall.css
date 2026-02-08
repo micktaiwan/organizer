@@ -299,6 +299,153 @@
   background: #0056b3;
 }
 
+/* Minimize button in full overlay */
+.call-minimize-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  z-index: 20;
+  transition: background 0.2s;
+}
+
+.call-minimize-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Override position for minimize btn inside call-status-bar */
+.call-status-bar .call-minimize-btn {
+  position: static;
+  margin-left: 0.5rem;
+}
+
+/* Minimized call bar */
+.call-minimized-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: #1a7f37;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  z-index: 1000;
+  color: #fff;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.call-minimized-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.call-minimized-username {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.call-minimized-duration {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
+}
+
+.call-minimized-status {
+  opacity: 0.9;
+}
+
+.call-minimized-bar.reconnecting {
+  background: #cc7700;
+}
+
+.call-minimized-status.reconnecting {
+  color: #ffcc00;
+}
+
+.call-minimized-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control-btn-mini {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.control-btn-mini:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.control-btn-mini.disabled {
+  background: rgba(255, 60, 48, 0.8);
+}
+
+.control-btn-mini.maximize {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.control-btn-mini.maximize:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.control-btn-mini.end {
+  background: #ff3b30;
+  transform: rotate(135deg);
+}
+
+.control-btn-mini.end:hover {
+  background: #e0342b;
+}
+
+.remote-screen-share-label {
+  position: absolute;
+  top: 3.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  padding: 0.3rem 0.8rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  z-index: 6;
+}
+
+.local-video-off {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #333;
+  color: #999;
+}
+
 
 
 [data-theme="dark"] .call-button.audio {

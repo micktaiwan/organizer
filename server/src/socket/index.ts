@@ -18,6 +18,9 @@ interface AuthenticatedSocket extends Socket {
 const typingTimeouts = new Map<string, NodeJS.Timeout>();
 const TYPING_TIMEOUT_MS = 3000;
 
+// Track active calls: userId -> remoteUserId
+const activeCalls = new Map<string, string>();
+
 export function setupSocket(httpServer: HttpServer): Server {
   const io = new Server(httpServer, {
     cors: {
@@ -274,8 +277,11 @@ export function setupSocket(httpServer: HttpServer): Server {
     });
 
     // Fermer la connexion WebRTC
-    socket.on('webrtc:close', (data: { to: string }) => {
-      // No auth check - always allow closing
+    socket.on('webrtc:close', async (data: { to: string }) => {
+      const canCall = await canCommunicate(userId, data.to);
+      if (!canCall) return;
+      activeCalls.delete(userId);
+      activeCalls.delete(data.to);
       io.to(`user:${data.to}`).emit('webrtc:close', {
         from: userId,
       });
@@ -304,6 +310,8 @@ export function setupSocket(httpServer: HttpServer): Server {
         socket.emit('call:error', { error: 'unauthorized', message: 'You cannot accept this call' });
         return;
       }
+      activeCalls.set(userId, data.to);
+      activeCalls.set(data.to, userId);
       // Notify the caller
       io.to(`user:${data.to}`).emit('call:accept', {
         from: userId,
@@ -326,15 +334,17 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     // Fin d'appel
     socket.on('call:end', (data: { to: string }) => {
-      // No auth check - always allow ending calls
+      activeCalls.delete(userId);
+      activeCalls.delete(data.to);
       io.to(`user:${data.to}`).emit('call:end', {
         from: userId,
       });
     });
 
     // Toggle caméra pendant l'appel
-    socket.on('call:toggle-camera', (data: { to: string; enabled: boolean }) => {
-      // No auth check - if call was established, toggling camera is allowed
+    socket.on('call:toggle-camera', async (data: { to: string; enabled: boolean }) => {
+      const canCall = await canCommunicate(userId, data.to);
+      if (!canCall) return;
       io.to(`user:${data.to}`).emit('call:toggle-camera', {
         from: userId,
         enabled: data.enabled,
@@ -342,7 +352,9 @@ export function setupSocket(httpServer: HttpServer): Server {
     });
 
     // Screen share toggle
-    socket.on('call:screen-share', (data: { to: string; enabled: boolean; trackId?: string }) => {
+    socket.on('call:screen-share', async (data: { to: string; enabled: boolean; trackId?: string }) => {
+      const canCall = await canCommunicate(userId, data.to);
+      if (!canCall) return;
       io.to(`user:${data.to}`).emit('call:screen-share', {
         from: userId,
         enabled: data.enabled,
@@ -404,6 +416,14 @@ export function setupSocket(httpServer: HttpServer): Server {
         userRooms.forEach(room => {
           socket.to(`room:${room._id}`).emit('user:offline', { userId, roomId: room._id });
         });
+      }
+
+      // Notify call partner if user had an active call
+      const callPartner = activeCalls.get(userId);
+      if (callPartner) {
+        io.to(`user:${callPartner}`).emit('call:end', { from: userId });
+        activeCalls.delete(callPartner);
+        activeCalls.delete(userId);
       }
 
       // Clean up typing timeouts for this user
