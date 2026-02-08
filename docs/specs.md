@@ -56,6 +56,11 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 - Desktop: modale de confirmation avant de changer de serveur
 - Android: mode Picture-in-Picture pendant les appels (la vidéo continue dans une fenêtre flottante quand on quitte l'app)
 - Desktop + Android : décrocher un appel sur un appareil arrête la sonnerie sur les autres appareils
+- Desktop : décompte de reconnexion visible (10s) pendant une coupure réseau
+- Desktop : l'appel peut être minimisé en barre compacte avec contrôles (micro, raccrocher, agrandir)
+- Desktop : indicateur visuel "Écran de [nom]" quand on reçoit un partage d'écran
+- Desktop : placeholder visible quand la caméra locale est désactivée
+- Desktop : la barre minimisée change de couleur (orange) pendant la reconnexion
 
 ## User Switcher
 
