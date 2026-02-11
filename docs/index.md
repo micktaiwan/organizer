@@ -34,6 +34,7 @@
 | Document | Description |
 |----------|-------------|
 | [architecture.md](server/architecture.md) | Architecture services, MCP, Worker |
+| [auth-tokens.md](server/auth-tokens.md) | Auth JWT + refresh token (server, desktop, TODO Android) |
 | [https.md](server/https.md) | TODO: Migration vers HTTPS |
 
 ## Archive
