@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { User, IUser } from '../models/index.js';
+import crypto from 'crypto';
+import { User, IUser, RefreshToken } from '../models/index.js';
 
 export interface JwtPayload {
   userId: string;
@@ -83,7 +84,38 @@ export function generateToken(userId: string, username: string): string {
     throw new Error('JWT_SECRET non défini');
   }
 
-  return jwt.sign({ userId, username }, secret, { expiresIn: '7d' });
+  return jwt.sign({ userId, username }, secret, { expiresIn: '1h' });
+}
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+export async function generateRefreshToken(userId: string): Promise<string> {
+  const token = crypto.randomBytes(64).toString('hex');
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+  await RefreshToken.create({ tokenHash, userId, expiresAt });
+
+  return token;
+}
+
+export async function verifyRefreshToken(token: string): Promise<{ userId: string } | null> {
+  const tokenHash = hashToken(token);
+  const doc = await RefreshToken.findOne({ tokenHash, revoked: false });
+
+  if (!doc || doc.expiresAt < new Date()) {
+    return null;
+  }
+
+  return { userId: doc.userId.toString() };
+}
+
+export async function revokeRefreshToken(token: string): Promise<boolean> {
+  const tokenHash = hashToken(token);
+  const result = await RefreshToken.updateOne({ tokenHash }, { revoked: true });
+  return result.modifiedCount > 0;
 }
 
 export async function adminMiddleware(

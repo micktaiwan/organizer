@@ -12,3 +12,4 @@ export { McpAuditLog, type IMcpAuditLog, type McpAuditAction } from './McpAuditL
 export { SystemConfig, type ISystemConfig, getConfig, setConfig } from './SystemConfig.js';
 export { Reflection, type IReflection, type ReflectionAction, type ReflectionTone } from './Reflection.js';
 export { ReflectionStats, type IReflectionStats, getOrCreateStats } from './ReflectionStats.js';
+export { RefreshToken, type IRefreshToken } from './RefreshToken.js';

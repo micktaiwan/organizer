@@ -38,6 +38,9 @@ class SocketService {
 
     this.socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error.message);
+      if (error.message.includes('Token invalide') || error.message.includes('Token expiré')) {
+        this.emit('internal:auth-error', error.message);
+      }
       this.emit('internal:error', error.message);
     });
 
@@ -99,6 +102,12 @@ class SocketService {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
+    }
+  }
+
+  updateAuth(token: string) {
+    if (this.socket) {
+      this.socket.auth = { token, clientType: 'desktop' };
     }
   }
 
