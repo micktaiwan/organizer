@@ -146,7 +146,13 @@ interface GetFilesParams {
 
 interface AuthResponse {
   token: string;
+  refreshToken?: string;
   user: User;
+}
+
+interface RefreshResponse {
+  token: string;
+  refreshToken: string;
 }
 
 interface Contact {
@@ -200,14 +206,62 @@ interface Room {
 
 class ApiService {
   private token: string | null = null;
+  private refreshToken: string | null = null;
+  private refreshPromise: Promise<boolean> | null = null;
+  onTokenRefreshed: ((token: string, refreshToken: string) => void) | null = null;
+  onAuthExpired: (() => void) | null = null;
 
   setToken(token: string | null) {
     this.token = token;
   }
 
+  setRefreshToken(refreshToken: string | null) {
+    this.refreshToken = refreshToken;
+  }
+
+  getToken(): string | null {
+    return this.token;
+  }
+
+  async tryRefresh(): Promise<boolean> {
+    if (!this.refreshToken) return false;
+
+    // Mutex: if a refresh is already in progress, wait for it
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: this.refreshToken }),
+        });
+
+        if (!response.ok) {
+          return false;
+        }
+
+        const data = await response.json() as RefreshResponse;
+        this.token = data.token;
+        this.refreshToken = data.refreshToken;
+        this.onTokenRefreshed?.(data.token, data.refreshToken);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
+  }
+
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    _isRetry = false
   ): Promise<T> {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
@@ -223,6 +277,15 @@ class ApiService {
         ...options,
         headers,
       });
+
+      if (response.status === 401 && !_isRetry && endpoint !== '/auth/refresh') {
+        const refreshed = await this.tryRefresh();
+        if (refreshed) {
+          return this.request<T>(endpoint, options, true);
+        }
+        this.onAuthExpired?.();
+        throw new Error('Session expirée');
+      }
 
       const data = await response.json();
 
@@ -285,6 +348,18 @@ class ApiService {
 
   async getMe(): Promise<{ user: User }> {
     return this.request<{ user: User }>('/auth/me');
+  }
+
+  async logoutFromServer(refreshToken: string): Promise<void> {
+    try {
+      await fetch(`${apiBaseUrl}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch {
+      // Best-effort: don't fail logout if server is unreachable
+    }
   }
 
   // Users
@@ -689,4 +764,4 @@ class ApiService {
 }
 
 export const api = new ApiService();
-export type { User, AuthResponse, Contact, Message, Room, RoomMember, ApiError, AdminStats, AdminUser, Pagination, Note, Label, ChecklistItem, CreateNoteRequest, UpdateNoteRequest, Reaction, GalleryFile, GetFilesParams };
+export type { User, AuthResponse, RefreshResponse, Contact, Message, Room, RoomMember, ApiError, AdminStats, AdminUser, Pagination, Note, Label, ChecklistItem, CreateNoteRequest, UpdateNoteRequest, Reaction, GalleryFile, GetFilesParams };

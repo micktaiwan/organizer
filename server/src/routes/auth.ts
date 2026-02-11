@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { User } from '../models/index.js';
-import { generateToken, authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { generateToken, generateRefreshToken, verifyRefreshToken, revokeRefreshToken, authMiddleware, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -55,11 +55,13 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
     await user.save();
 
-    // Générer le token
+    // Générer les tokens
     const token = generateToken(user._id.toString(), user.username);
+    const refreshToken = await generateRefreshToken(user._id.toString());
 
     res.status(201).json({
       token,
+      refreshToken,
       user: {
         id: user._id,
         username: user.username,
@@ -109,13 +111,15 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     user.lastSeen = new Date();
     await user.save();
 
-    // Générer le token
+    // Générer les tokens
     const token = generateToken(user._id.toString(), user.username);
+    const refreshToken = await generateRefreshToken(user._id.toString());
 
     console.log(`[AUTH] Login successful: user "${data.username}"`);
 
     res.json({
       token,
+      refreshToken,
       user: {
         id: user._id,
         username: user.username,
@@ -132,6 +136,59 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
     console.error('Login error:', error);
     res.status(500).json({ error: 'Erreur lors de la connexion' });
+  }
+});
+
+// POST /auth/refresh - Renouveler l'access token via refresh token
+router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      res.status(400).json({ error: 'Refresh token manquant' });
+      return;
+    }
+
+    const result = await verifyRefreshToken(refreshToken);
+    if (!result) {
+      res.status(401).json({ error: 'Refresh token invalide ou expiré' });
+      return;
+    }
+
+    const user = await User.findById(result.userId);
+    if (!user) {
+      res.status(401).json({ error: 'Utilisateur non trouvé' });
+      return;
+    }
+
+    // Rotation: revoke old, issue new
+    await revokeRefreshToken(refreshToken);
+    const newToken = generateToken(user._id.toString(), user.username);
+    const newRefreshToken = await generateRefreshToken(user._id.toString());
+
+    res.json({
+      token: newToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (error) {
+    console.error('Refresh error:', error);
+    res.status(500).json({ error: 'Erreur lors du rafraîchissement du token' });
+  }
+});
+
+// POST /auth/logout - Révoquer le refresh token
+router.post('/logout', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (refreshToken) {
+      await revokeRefreshToken(refreshToken);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Erreur lors de la déconnexion' });
   }
 });
 
