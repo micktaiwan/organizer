@@ -117,4 +117,5 @@ Il existe deux sources de données utilisateur qui doivent rester synchronisées
 ## Notifications
 
 - Desktop : notification desktop quand un utilisateur (hors bots) se connecte
+- Desktop : les notifications (messages et connexion) jouent un son système
 
