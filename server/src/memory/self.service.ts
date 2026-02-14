@@ -109,6 +109,32 @@ async function deleteFromCollection(collection: string, id: string): Promise<voi
 }
 
 // ============================================================================
+// Counts (exact totals from Qdrant)
+// ============================================================================
+
+export async function countSelf(): Promise<number> {
+  try {
+    const result = await qdrantRequest<{ result: { points_count: number } }>(
+      `/collections/${SELF_COLLECTION}`
+    );
+    return result.result.points_count;
+  } catch {
+    return 0;
+  }
+}
+
+export async function countGoals(): Promise<number> {
+  try {
+    const result = await qdrantRequest<{ result: { points_count: number } }>(
+      `/collections/${GOALS_COLLECTION}`
+    );
+    return result.result.points_count;
+  } catch {
+    return 0;
+  }
+}
+
+// ============================================================================
 // Self (Identity)
 // ============================================================================
 

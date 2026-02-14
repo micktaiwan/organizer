@@ -279,6 +279,29 @@ export async function searchFacts(query: string, limit = 5): Promise<MemorySearc
 }
 
 /**
+ * Count all facts (exact total from Qdrant)
+ */
+export async function countFacts(): Promise<number> {
+  try {
+    const result = await qdrantRequest<{ result: { count: number } }>(
+      `/collections/${COLLECTION_NAME}/points/count`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          filter: {
+            must: [{ key: 'type', match: { value: 'fact' } }],
+          },
+          exact: true,
+        }),
+      }
+    );
+    return result.result.count;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * List all facts (for brain dashboard)
  */
 export async function listFacts(limit = 50): Promise<{ id: string; payload: MemoryPayload }[]> {
