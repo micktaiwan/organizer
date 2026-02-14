@@ -3,6 +3,9 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import {
   listSelfWithIds,
   listGoalsWithIds,
+  countSelf,
+  countGoals,
+  countFacts,
   deleteSelf,
   deleteGoal,
   listFacts,
@@ -18,17 +21,17 @@ const router = Router();
 // GET /brain/counts - Get counts for all brain components
 router.get('/counts', authMiddleware, async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const [selfItems, goalsItems, facts, liveInfo] = await Promise.all([
-      listSelfWithIds(100),
-      listGoalsWithIds(100),
-      listFacts(100),
+    const [selfCount, goalsCount, factsCount, liveInfo] = await Promise.all([
+      countSelf(),
+      countGoals(),
+      countFacts(),
       getLiveCollectionInfo(),
     ]);
 
     res.json({
-      self: selfItems.length,
-      goals: goalsItems.length,
-      facts: facts.length,
+      self: selfCount,
+      goals: goalsCount,
+      facts: factsCount,
       live: liveInfo.pointsCount,
     });
   } catch (error) {
