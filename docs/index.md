@@ -1,45 +1,54 @@
 # Documentation Index
 
-## Agent
+## Agent (Eko)
 
-| Document | Description |
-|----------|-------------|
-| [index.md](agent/index.md) | Vision, architecture, roadmap, capacités évolutives |
-| [memory-architecture.md](agent/memory-architecture.md) | Stratégie mémoire : collections, stockage, conscience émergente |
-
-### À venir
-
-| Document | Description |
-|----------|-------------|
-| personality.md | Personnalité, ton, comportement du pet |
-| autonomy.md | Actions autonomes : crons, notifications, initiatives |
-| tools.md | Tools disponibles pour le pet (remember, forget, search, etc.) |
-
-## Android
-
-| Document | Description |
-|----------|-------------|
-| [architecture.md](android/architecture.md) | Architecture technique de l'app Android |
-| [sensors.md](android/sensors.md) | Capteurs (accéléromètre, gyroscope, rotation vector) |
-| [long_press_debug.md](android/long_press_debug.md) | Notes de debug pour les gestes long press |
-
-## Desktop (Tauri)
-
-| Document | Description |
-|----------|-------------|
-| [notifications.md](desktop/notifications.md) | Système de notifications macOS, limitation dev vs prod |
+| Document | Description | Statut |
+|----------|-------------|--------|
+| [index.md](agent/index.md) | Vision, architecture, roadmap, capacites evolutives | Actif |
+| [memory-architecture.md](agent/memory-architecture.md) | Strategie memoire : collections Qdrant, dedup, TTL, conscience emergente | Actif |
+| [reactive-eko.md](agent/reactive-eko.md) | Systeme proactif : reflection, goals, rate limiting, cron 3h | Actif |
+| [implementation-eko-rooms.md](agent/implementation-eko-rooms.md) | Eko dans les rooms : mention @eko, handler, reponses contextuelles | Actif |
+| [roadmap-assistant-collaboratif.md](agent/roadmap-assistant-collaboratif.md) | Vision 7 phases : Tamagotchi vers assistant collaboratif | Actif |
 
 ## Server
 
-| Document | Description |
-|----------|-------------|
-| [architecture.md](server/architecture.md) | Architecture services, MCP, Worker |
-| [auth-tokens.md](server/auth-tokens.md) | Auth JWT + refresh token (server, desktop, TODO Android) |
-| [https.md](server/https.md) | TODO: Migration vers HTTPS |
+| Document | Description | Statut |
+|----------|-------------|--------|
+| [architecture.md](server/architecture.md) | Architecture complete : routes, socket.io, models, MCP, memoire, deploiement | Actif |
+| [auth-tokens.md](server/auth-tokens.md) | Auth JWT + refresh token (server, desktop, TODO Android) | Actif |
+| [backup.md](server/backup.md) | Backup MongoDB cron quotidien, retention 7 jours, procedure de restore | Actif |
+| [bugs.md](server/bugs.md) | Analyse securite/perf (23 bugs identifies) | Stale |
+| [https.md](server/https.md) | Plan migration HTTPS (non implemente) | Stale |
+
+## Desktop (Tauri)
+
+| Document | Description | Statut |
+|----------|-------------|--------|
+| [notifications.md](desktop/notifications.md) | Notifications macOS, workaround localStorage, dev vs prod | Actif |
+
+## Android
+
+| Document | Description | Statut |
+|----------|-------------|--------|
+| [architecture.md](android/architecture.md) | Architecture MVVM, Foreground Service, Socket.io | Actif |
+| [sensors.md](android/sensors.md) | Capteurs pour Pet (accelerometre, gyroscope, rotation vector) | Actif |
+| [long_press_debug.md](android/long_press_debug.md) | Investigation gestures long press (resolu) | Archive |
+| [video_fullscreen_bug.md](android/video_fullscreen_bug.md) | Bug fullscreen video RESIZE_MODE_ZOOM (resolu) | Archive |
+| [debug-video-fullscreen.md](android/debug-video-fullscreen.md) | Checklist debug video fullscreen | Actif |
+
+## Specs
+
+| Document | Description | Statut |
+|----------|-------------|--------|
+| [specs.md](specs.md) | Specs fonctionnelles completes (messages, auth, WebRTC, video, fichiers) | Actif |
+| [prompt_specs.md](prompt_specs.md) | Guide de test de regression et verification de specs | Actif |
+| [webrtc-android-specs.md](webrtc-android-specs.md) | Specs WebRTC Android (V0 a V2, decision matrix, tests) | Actif |
+| [video-recording-specs.md](video-recording-specs.md) | Specs enregistrement video (screen/webcam, Desktop V1 done, Android TODO) | Actif |
+| [css-split-plan.md](css-split-plan.md) | Plan split App.css en fichiers composants (incomplet) | Stale |
+| [bugs.md](bugs.md) | 3 bugs duplication messages (investigation + resolution) | Actif |
 
 ## Archive
 
 | Document | Description |
 |----------|-------------|
-| [agent_plan.md](agent_plan.md) | Plan initial de développement de l'agent |
-| [archive/server_plan.md](archive/server_plan.md) | Plan initial du serveur (archivé) |
+| [archive/server_plan.md](archive/server_plan.md) | Plan initial du serveur (supersede par l'implementation) |

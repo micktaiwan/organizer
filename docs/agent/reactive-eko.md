@@ -269,13 +269,84 @@ Exemples :
 
 ---
 
+## Ameliorations identifiees
+
+### [HIGH] Transformation goal → fact quand reponse recue
+
+**Probleme** : Quand Eko pose une question et recoit une reponse, le goal est supprime mais la reponse n'est pas stockee comme fait. Le cycle curiosite → savoir est incomplet.
+
+**Flow actuel** :
+```
+1. Eko poste : "Qui est Corentin ?"
+2. deleteGoal(goalId) ✅
+3. User repond : "Corentin est dev chez lemlist"
+4. Reponse non capturee comme fact ❌
+```
+
+**Solution** : Etendre `handleEkoMention()` pour detecter si le message repond a une question de reflection recente :
+
+```typescript
+// Dans eko-handler.ts, apres la reponse de l'agent
+const recentReflection = await Reflection.findOne({
+  action: 'message',
+  roomId: params.roomId,
+  createdAt: { $gte: new Date(Date.now() - 60 * 60 * 1000) } // Derniere heure
+}).sort({ createdAt: -1 });
+
+if (recentReflection) {
+  // Extraire les sujets de la question, stocker la reponse comme fact
+  await storeFactMemory({
+    content: params.messageContent,
+    subjects: extractSubjectsFromQuestion(recentReflection.message),
+    ttl: null
+  });
+}
+```
+
+**Alternative** : Ajouter du contexte au system prompt de l'agent sur les questions pendantes.
+
+**Fichiers** : `server/src/utils/eko-handler.ts`, `server/src/agent/reflection.service.ts`
+
+---
+
+### [LOW] Prompt de reflection plus contextuel
+
+**Probleme** : Le prompt actuel est tres directif ("POSE CETTE QUESTION"), ce qui marche mais produit des interventions mecaniques deconnectees du contexte conversationnel.
+
+**Amelioration** : Prendre en compte le flux de conversation pour une intervention plus naturelle :
+
+```
+Tu es Eko. Tu observes le Lobby.
+
+## Curiosite actuelle
+${context.goal.content}
+
+## Ce que tu sais sur ce sujet
+${factsFormatted}
+
+## Activite recente
+${messagesFormatted}
+
+## Mission
+Tu as une question importante a poser. Choisis le bon moment :
+- Si la conversation est active et liee → interviens naturellement
+- Si c'est calme → pose ta question directement
+- Si quelqu'un parle d'un sujet connexe → fais le lien
+
+Formule ta question de maniere naturelle et contextuelle.
+```
+
+**Fichier** : `server/src/agent/reflection.service.ts` (buildPrompt)
+
+---
+
 ## Questions ouvertes restantes
 
-### À implémenter
+### A implementer
 
-- Déduplication des goals (Phase 3)
-- Transformation curiosité → fact quand réponse reçue (Phase 3)
-- Cooldown adaptatif (plus long si ignoré) ?
+- ~~Deduplication des goals (Phase 3)~~ ✅
+- Transformation curiosite → fact quand reponse recue (Phase 3, voir ci-dessus)
+- Cooldown adaptatif (plus long si ignore) ?
 
 ---
 
@@ -306,20 +377,21 @@ Exemples :
 - [x] Skip si dernier message vient d'Eko
 - [x] Rate limiting : 30min cooldown, max 5/jour
 
-### Phase 3 : Déduplication et apprentissage
+### Phase 3 : Deduplication et apprentissage
 
-- [ ] Fix déduplication des goals à la source
-- [ ] Nettoyage des duplicatas pendant réflexion
-- [ ] Transformation curiosité → fait quand réponse reçue
-- [x] Suppression automatique des goals posés (supprimé de Qdrant après post)
+- [x] Fix deduplication des goals a la source (seuil abaisse a 0.75 + optimisation embedding)
+- [ ] Nettoyage des duplicatas pendant reflexion
+- [ ] Transformation curiosite → fait quand reponse recue (voir ci-dessous)
+- [x] Suppression automatique des goals poses (supprime de Qdrant apres post)
 
 ### Phase 4 : Raffinement ✅
 
 - [x] Nouveau prompt directif (1 goal, pas de choix, doit poser)
-- [x] Recherche sémantique basée sur le goal (pas sur les messages)
-- [x] Rate limiting configuré (30min cooldown, 5/jour)
+- [x] Recherche semantique basee sur le goal (pas sur les messages)
+- [x] Rate limiting configure (30min cooldown, 5/jour)
 - [x] Bypass rate limit pour triggers manuels (bouton StatusBar)
-- [ ] Métriques avancées (temps de réponse, pertinence perçue)
+- [ ] Metriques avancees (temps de reponse, pertinence percue)
+- [ ] Prompt de reflection plus contextuel (voir ci-dessous)
 
 ---
 

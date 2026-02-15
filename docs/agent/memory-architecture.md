@@ -369,7 +369,118 @@ Rattrapage au démarrage si > 4h depuis le dernier digest.
 
 ---
 
-## Historique des décisions
+## Ameliorations identifiees
+
+### ~~[HIGH] Deduplication des goals~~ ✅
+
+**Corrige** : La dedup existait deja via `storeInCollection()` mais avec deux problemes :
+
+1. **Double appel embedding** : `storeInCollection` generait l'embedding puis appelait `searchInCollection` qui le regenerait. Corrige : reutilisation du meme vecteur.
+2. **Seuil trop haut** : 0.85 ratait les variantes de la meme curiosite ("Qui est Corentin ?" vs "Je me demande qui est Corentin"). Corrige : seuil abaisse a **0.75 pour les goals** (self reste a 0.85).
+
+**Fichier** : `server/src/memory/self.service.ts`
+
+---
+
+### [HIGH] Error recovery du digest
+
+**Probleme** : Si le digest echoue partiellement (certains facts stockes, d'autres non), le live buffer n'est PAS vide. Au prochain digest, les messages deja traites sont re-digestes, creant des doublons.
+
+**Code actuel** (`digest.service.ts`) :
+```typescript
+if (storeFailures > 0) {
+  console.error(`Skipping clear - ${storeFailures}/${totalItems} failed`);
+  return; // Live buffer reste intact
+}
+await clearLiveCollection();
+```
+
+**Solution recommandee** : Best-effort clear + log des echecs pour inspection manuelle.
+
+**Alternative** : Tracker un `digestedAt` par message live pour ne pas re-traiter.
+
+**Fichier** : `server/src/memory/digest.service.ts`
+
+---
+
+### [MEDIUM] Seuil plus strict pour les goals du digest
+
+**Probleme** : Le digest genere trop de curiosites mineures. Un nom mentionne 1 seule fois dans le Lobby genere un goal "Qui est X ?".
+
+**Solution** : Renforcer le prompt du digest :
+
+```
+## GOALS (aspirations emergentes)
+SEUIL ELEVE : ne genere un goal QUE si :
+- Le sujet revient 3+ fois dans les messages
+- C'est un blocage clair pour Eko (capability manquante)
+- Une personne inconnue interagit directement avec Eko
+
+NE PAS generer de goal pour :
+- Mentions uniques de noms/lieux
+- Concepts inferables du contexte
+```
+
+**Fichier** : `server/src/memory/digest.service.ts` (prompt)
+
+---
+
+### [MEDIUM] Compression de session
+
+**Probleme** : Les sessions Claude persistent 15min mais grandissent indefiniment. Pas de sliding window ni summarization. Couts tokens croissants sur longues conversations.
+
+**Solution** : Implementer un cap de turns avec summarization :
+
+```javascript
+const MAX_TURNS_PER_SESSION = 20;
+if (userSession.turnCount > MAX_TURNS_PER_SESSION) {
+  const summary = await summarizePastConversation(userSession.sessionId);
+  userSession.sessionId = null; // Reset session
+  // Injecter le summary dans le system prompt de la nouvelle session
+}
+```
+
+**Fichiers** : `server/src/agent/session.mjs`, `server/src/agent/agent.mjs`
+
+---
+
+### [LOW] Seuil de relevance pour le live context
+
+**Probleme** : `searchLiveContext()` retourne les 10 meilleurs messages par score sans seuil minimum. Meme les messages a faible score (0.3) sont injectes dans le contexte.
+
+**Impact** : Bruit potentiel dans le system prompt, tokens gaspilles.
+
+**Solution** :
+```javascript
+// Dans agent.mjs
+const liveMessages = await searchLiveMessages(userMessage, 10);
+const filtered = liveMessages.filter(m => m.score > 0.5);
+```
+
+**Trade-off** : Risque de rater du contexte pertinent si embeddings peu discriminants. A tester empiriquement.
+
+**Fichier** : `server/src/agent/agent.mjs`
+
+---
+
+### [LOW] Protection overflow du live buffer
+
+**Probleme** : Si le digest echoue pendant une periode prolongee (API down, erreurs), la collection live grossit sans limite.
+
+**Solution** :
+```javascript
+const MAX_LIVE_MESSAGES = 10000;
+const currentCount = await getLiveCollectionInfo();
+if (currentCount.pointsCount >= MAX_LIVE_MESSAGES) {
+  await deleteOldestLiveMessages(1000); // Purge les plus anciens
+}
+```
+
+**Fichier** : `server/src/memory/live.service.ts`
+
+---
+
+## Historique des decisions
 
 | Date | Décision | Raison |
 |------|----------|--------|

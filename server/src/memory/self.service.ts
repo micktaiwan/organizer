@@ -6,6 +6,7 @@ import type { MemoryPayload, MemorySearchResult, SelfMemoryInput, GoalMemoryInpu
 const SELF_COLLECTION = 'organizer_self';
 const GOALS_COLLECTION = 'organizer_goals';
 const DEDUP_THRESHOLD = 0.85;
+const GOALS_DEDUP_THRESHOLD = 0.75; // Lower for goals: same concept in different phrasings should deduplicate
 
 // ============================================================================
 // Collection Setup (call once at startup or via script)
@@ -71,17 +72,28 @@ async function searchInCollection(
 
 async function storeInCollection(
   collection: string,
-  payload: MemoryPayload
+  payload: MemoryPayload,
+  dedupThreshold = DEDUP_THRESHOLD
 ): Promise<void> {
   const vector = await generateEmbedding(payload.content);
 
-  // Check for duplicates
-  const similar = await searchInCollection(collection, payload.content, 1);
-  if (similar.length > 0 && similar[0].score >= DEDUP_THRESHOLD) {
+  // Check for duplicates using the already-computed vector (avoids a second embedding call)
+  const response = await qdrantRequest<{
+    result: { id: string; score: number; payload: MemoryPayload }[];
+  }>(`/collections/${collection}/points/search`, {
+    method: 'POST',
+    body: JSON.stringify({
+      vector,
+      limit: 1,
+      with_payload: true,
+    }),
+  });
+
+  const similar = response.result;
+  if (similar.length > 0 && similar[0].score >= dedupThreshold) {
     console.log(
-      `[Self] Found similar in ${collection} (score ${similar[0].score.toFixed(2)}): "${similar[0].payload.content.slice(0, 50)}..."`
+      `[Self] Dedup in ${collection} (score ${similar[0].score.toFixed(2)}, threshold ${dedupThreshold}): "${similar[0].payload.content.slice(0, 50)}..." → replaced`
     );
-    // Delete the old one
     await qdrantRequest(`/collections/${collection}/points/delete`, {
       method: 'POST',
       body: JSON.stringify({ points: [similar[0].id] }),
@@ -227,7 +239,7 @@ export async function storeGoal(input: GoalMemoryInput): Promise<void> {
     timestamp: new Date().toISOString(),
   };
 
-  await storeInCollection(GOALS_COLLECTION, payload);
+  await storeInCollection(GOALS_COLLECTION, payload, GOALS_DEDUP_THRESHOLD);
   console.log(`[Self] 🎯 Stored goal (${input.category}): "${input.content.slice(0, 50)}..."`);
 }
 
