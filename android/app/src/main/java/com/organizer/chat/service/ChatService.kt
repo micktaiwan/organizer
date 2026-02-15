@@ -95,6 +95,9 @@ class ChatService : Service() {
             socketManager.connect(getVersionName(), getVersionCode())
             observeSocketMessages()
         }
+
+        // Reconnect socket when token is refreshed (e.g. after AuthInterceptor refresh)
+        observeTokenRefresh()
     }
 
     private fun getVersionCode(): Int {
@@ -231,6 +234,15 @@ class ChatService : Service() {
 
     fun getRoomName(roomId: String): String {
         return roomNames[roomId] ?: "Chat"
+    }
+
+    private fun observeTokenRefresh() {
+        serviceScope.launch {
+            tokenManager.tokenRefreshed.collect {
+                Log.d(TAG, "Token refreshed, reconnecting socket with new token...")
+                socketManager.reconnectWithNewToken(getVersionName(), getVersionCode())
+            }
+        }
     }
 
     fun reconnectIfNeeded() {

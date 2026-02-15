@@ -21,6 +21,9 @@ interface ApiService {
     @POST("auth/register")
     suspend fun register(@Body request: RegisterRequest): LoginResponse
 
+    @POST("auth/refresh")
+    suspend fun refreshToken(@Body request: RefreshTokenRequest): RefreshTokenResponse
+
     @GET("auth/me")
     suspend fun getCurrentUser(): UserResponse
 
@@ -271,6 +274,15 @@ data class StatusUser(
     val statusMessage: String?,
     val statusExpiresAt: String?,
     val isMuted: Boolean
+)
+
+data class RefreshTokenRequest(
+    val refreshToken: String
+)
+
+data class RefreshTokenResponse(
+    val token: String,
+    val refreshToken: String
 )
 
 data class MarkMessagesReadRequest(

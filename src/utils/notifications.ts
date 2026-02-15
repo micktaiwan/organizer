@@ -50,9 +50,11 @@ export async function showMessageNotification(
     }
 
     await invoke("plugin:notification|notify", {
-      title: `${senderName} - ${roomName}`,
-      body: preview,
-      sound: "default",
+      options: {
+        title: `${senderName} - ${roomName}`,
+        body: preview,
+        sound: "default",
+      },
     });
   } catch (err) {
     console.error("Failed to send notification:", err);
@@ -69,9 +71,11 @@ export async function showPresenceNotification(displayName: string): Promise<voi
   }
   try {
     await invoke("plugin:notification|notify", {
-      title: `${displayName} is online`,
-      body: `${displayName} just connected`,
-      sound: "default",
+      options: {
+        title: `${displayName} is online`,
+        body: `${displayName} just connected`,
+        sound: "default",
+      },
     });
   } catch (err) {
     console.error("Failed to send presence notification:", err);

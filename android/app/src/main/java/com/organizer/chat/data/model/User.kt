@@ -29,6 +29,7 @@ data class RegisterRequest(
 
 data class LoginResponse(
     val token: String,
+    val refreshToken: String? = null,
     val user: User
 )
 

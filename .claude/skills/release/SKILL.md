@@ -38,7 +38,12 @@ When arguments are provided:
 ### Step 1: Analyze Uncommitted Changes
 
 1. Get list of modified files: `git diff HEAD --name-only` (include untracked files with `git status --short | grep "^??"`)
-2. Get current version from `android/app/build.gradle.kts`
+2. **Determine the next version from git tags (NOT from version files)**:
+   - Run `git tag -l "v*" | sort -V | tail -1` to get the highest existing tag
+   - The next version is this tag's version incremented by patch (e.g., v1.11.0 → 1.11.1)
+   - **NEVER rely on `build.gradle.kts`, `package.json`, or other version files** to determine the next version — these may be out of sync with the actual tags
+   - Verify the chosen version tag does not already exist: `git tag -l "v<chosen-version>"` must return empty
+   - If the user provides a version override (via arguments), still verify it doesn't conflict with existing tags
 3. **Read the diff of ALL modified files** - do not skip any file:
    - Use `git diff HEAD` to get the complete diff
    - Review EVERY file's changes, not just those that seem important
