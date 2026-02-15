@@ -140,7 +140,55 @@ Cycle :
 
 ## Documentation
 
-- [memory-architecture.md](memory-architecture.md) - Architecture mémoire, RAG, stockage de faits, boucle agentique
+- [memory-architecture.md](memory-architecture.md) - Architecture memoire, RAG, stockage de faits, boucle agentique
+- [reactive-eko.md](reactive-eko.md) - Systeme proactif, reflexion, goals, rate limiting
+- [implementation-eko-rooms.md](implementation-eko-rooms.md) - Eko dans les rooms (mention @eko)
+- [roadmap-assistant-collaboratif.md](roadmap-assistant-collaboratif.md) - Vision 7 phases
+
+---
+
+## Ameliorations identifiees
+
+### [LOW] Diversite des expressions
+
+**Probleme** : L'agent utilise "neutral" 90%+ du temps. Le prompt ne guide pas le choix d'expression.
+
+**Solution** : Ajouter des guidelines dans le system prompt :
+
+```
+## Expressions
+Choisis selon ton emotion :
+- neutral : reponse factuelle
+- happy : content, satisfait (ex: "j'ai compris !")
+- laughing : quelque chose de drole dans le message
+- surprised : nouvelle info inattendue
+- sad : message triste ou deception
+- sleepy : question complexe, tu reflechis encore
+- curious : tu poses une question ou demandes des precisions
+
+Varie tes expressions pour etre expressif.
+```
+
+**Fichier** : `server/src/agent/prompt.mjs`
+
+---
+
+### [MEDIUM] Securite du token MCP
+
+**Probleme** : `EKO_MCP_TOKEN` est un token statique sans expiration ni rotation. Si leak, full write access sur notes, messages, memoire.
+
+**Solution** : Implementer une rotation de token :
+
+```typescript
+// Dans McpToken model
+expiresAt: Date         // Expiration 24h
+refreshToken: String    // Pour renouveler
+
+// Nouvel endpoint
+POST /mcp/refresh → { accessToken, expiresAt }
+```
+
+**Fichiers** : `server/src/models/McpToken.ts`, `server/src/mcp/auth.ts`
 
 ---
 
