@@ -382,22 +382,9 @@ Rattrapage au démarrage si > 4h depuis le dernier digest.
 
 ---
 
-### [HIGH] Error recovery du digest
+### ~~[HIGH] Error recovery du digest~~ ✅
 
-**Probleme** : Si le digest echoue partiellement (certains facts stockes, d'autres non), le live buffer n'est PAS vide. Au prochain digest, les messages deja traites sont re-digestes, creant des doublons.
-
-**Code actuel** (`digest.service.ts`) :
-```typescript
-if (storeFailures > 0) {
-  console.error(`Skipping clear - ${storeFailures}/${totalItems} failed`);
-  return; // Live buffer reste intact
-}
-await clearLiveCollection();
-```
-
-**Solution recommandee** : Best-effort clear + log des echecs pour inspection manuelle.
-
-**Alternative** : Tracker un `digestedAt` par message live pour ne pas re-traiter.
+**Corrige** : Le live buffer est maintenant toujours vide apres extraction, meme en cas d'echecs partiels de stockage. Les echecs sont logges pour inspection. L'ancien comportement (garder tout le buffer) causait du re-processing et des doublons potentiels.
 
 **Fichier** : `server/src/memory/digest.service.ts`
 
