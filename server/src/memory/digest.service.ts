@@ -309,10 +309,10 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
 
   const totalItems = facts.length + selfItems.length + goalItems.length;
 
-  // Clear the live collection only if all items were stored
+  // Always clear live buffer after extraction (best-effort)
+  // Keeping it on partial failure causes re-processing and potential duplicates
   if (storeFailures > 0) {
-    console.error(`[Digest] Skipping clear - ${storeFailures}/${totalItems} items failed to store`);
-    return { factsExtracted: totalItems - storeFailures, messagesProcessed: messages.length };
+    console.warn(`[Digest] ${storeFailures}/${totalItems} items failed to store (see errors above). Clearing live buffer anyway to avoid re-processing.`);
   }
 
   const cleared = await clearLiveCollection();
@@ -322,9 +322,9 @@ export async function runDigest(): Promise<{ factsExtracted: number; messagesPro
   await setConfig(DIGEST_CONFIG_KEY, new Date().toISOString());
 
   const duration = Date.now() - startTime;
-  console.log(`[Digest] Completed in ${duration}ms: ${facts.length} facts, ${selfItems.length} self, ${goalItems.length} goals from ${messages.length} messages`);
+  console.log(`[Digest] Completed in ${duration}ms: ${facts.length} facts, ${selfItems.length} self, ${goalItems.length} goals from ${messages.length} messages (${storeFailures} failures)`);
 
-  return { factsExtracted: totalItems, messagesProcessed: messages.length };
+  return { factsExtracted: totalItems - storeFailures, messagesProcessed: messages.length };
 }
 
 /**
