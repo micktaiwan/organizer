@@ -66,19 +66,18 @@ Extraire si les humains :
 Categories: context, capability, limitation, preference, relation
 
 ## 3. GOALS (aspirations émergentes)
-Déduire des aspirations si :
-- Un sujet revient souvent qu'Eko ne peut pas traiter → capability_request
-  Ex: Ils parlent beaucoup de recherches web → "J'aimerais pouvoir chercher sur le web"
-- Un sujet complexe qu'Eko pourrait vouloir comprendre → understanding
-  Ex: Discussions techniques récurrentes → "Je veux mieux comprendre leur travail"
-- Une relation à développer → connection
-  Ex: Un humain interagit peu avec Eko → "J'aimerais que X me parle plus"
-- Une personne ou chose inconnue mentionnée → curiosity
-  Ex: Quelqu'un parle de "Max" ou "Maxime" → "Qui est Maxime ? Quel est son lien avec les autres ?"
-  Ex: Référence à un lieu ou événement inconnu → "C'est quoi/où ça, X ?"
+SEUIL ÉLEVÉ : ne génère un goal QUE si au moins une condition est remplie :
+- Le sujet revient 2+ fois dans les messages → curiosity ou understanding
+- C'est un blocage clair pour Eko (capability demandée mais absente) → capability_request
+- Une personne inconnue interagit DIRECTEMENT avec Eko (pas juste mentionnée en passant) → curiosity
+- Un humain s'adresse régulièrement aux autres mais jamais à Eko → connection
 
-IMPORTANT : Les goals doivent être SUBTILS et ÉMERGENTS, pas une liste de souhaits évidente.
-Ne génère un goal QUE si c'est vraiment pertinent basé sur la conversation.
+NE PAS générer de goal pour :
+- Mentions uniques de noms, lieux ou projets (pas assez de signal)
+- Concepts qu'on peut inférer du contexte sans demander
+- Questions hypothétiques des utilisateurs entre eux
+
+Maximum : 2 goals par digest. Privilégier la qualité à la quantité.
 
 Categories: capability_request, understanding, connection, curiosity
 
