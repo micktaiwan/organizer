@@ -4,6 +4,7 @@ import { qdrantRequest, QDRANT_URL } from './qdrant.service.js';
 
 const COLLECTION_NAME = 'organizer_live';
 const VECTOR_SIZE = 1536; // text-embedding-3-small
+const MAX_LIVE_MESSAGES = 10000; // Purge oldest when exceeded
 
 /**
  * Generate a valid UUID from a string (Qdrant requires UUID or positive integer)
@@ -69,6 +70,19 @@ export async function indexLiveMessage(payload: LiveMessagePayload & { messageId
   // Skip very short messages (likely noise)
   if (payload.content.length < 3) {
     return;
+  }
+
+  // Overflow protection: purge oldest messages if collection exceeds limit
+  try {
+    const { pointsCount } = await getLiveCollectionInfo();
+    if (pointsCount >= MAX_LIVE_MESSAGES) {
+      const excess = pointsCount - MAX_LIVE_MESSAGES + 1000; // Purge 1000 extra to avoid frequent checks
+      console.log(`[Live] Overflow protection: ${pointsCount} messages, purging ${excess} oldest`);
+      await purgeOldestMessages(excess);
+    }
+  } catch (err) {
+    // Don't block indexing if overflow check fails
+    console.error('[Live] Overflow check failed:', err);
   }
 
   const vector = await generateEmbedding(payload.content);
@@ -205,6 +219,62 @@ export async function clearLiveCollection(): Promise<number> {
 
   console.log(`[Live] Cleared ${allIds.length} messages from live collection`);
   return allIds.length;
+}
+
+/**
+ * Purge the oldest N messages from the live collection (overflow protection)
+ */
+async function purgeOldestMessages(count: number): Promise<number> {
+  // Scroll all messages with timestamps to find the oldest
+  const allMessages: { id: string; timestamp: string }[] = [];
+  let offset: string | null = null;
+  const BATCH_SIZE = 1000;
+
+  do {
+    const result: ScrollResponse<{ id: string; payload: LiveMessagePayload }> = await qdrantRequest(
+      `/collections/${COLLECTION_NAME}/points/scroll`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          limit: BATCH_SIZE,
+          offset,
+          with_payload: true,
+          with_vector: false,
+        }),
+      }
+    );
+
+    allMessages.push(...result.result.points.map((p) => ({
+      id: p.id,
+      timestamp: p.payload.timestamp,
+    })));
+    offset = result.result.next_page_offset;
+  } while (offset !== null);
+
+  // Sort by timestamp ascending (oldest first)
+  allMessages.sort((a, b) => {
+    const timeA = new Date(a.timestamp).getTime();
+    const timeB = new Date(b.timestamp).getTime();
+    if (isNaN(timeA)) return -1; // Invalid dates first (to be purged)
+    if (isNaN(timeB)) return 1;
+    return timeA - timeB;
+  });
+
+  // Take the oldest N
+  const toPurge = allMessages.slice(0, count).map((m) => m.id);
+  if (toPurge.length === 0) return 0;
+
+  // Delete in batches
+  for (let i = 0; i < toPurge.length; i += BATCH_SIZE) {
+    const batch = toPurge.slice(i, i + BATCH_SIZE);
+    await qdrantRequest(`/collections/${COLLECTION_NAME}/points/delete`, {
+      method: 'POST',
+      body: JSON.stringify({ points: batch }),
+    });
+  }
+
+  console.log(`[Live] Purged ${toPurge.length} oldest messages`);
+  return toPurge.length;
 }
 
 /**

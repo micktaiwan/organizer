@@ -375,6 +375,23 @@ class ReflectionService {
       .map((s) => `- ${s.content}`)
       .join('\n') || '(rien de pertinent)';
 
+    // Build contextual instructions based on what Eko already knows
+    let contextInstructions = '';
+
+    if (context.facts.length > 0) {
+      contextInstructions += `\nTu connais déjà des choses sur ce sujet (voir ci-dessous). Formule ta question pour APPROFONDIR, pas pour redemander ce que tu sais déjà.`;
+    } else {
+      contextInstructions += `\nTu ne sais rien sur ce sujet. Pose une question ouverte et simple pour découvrir.`;
+    }
+
+    // Check if someone in recent messages is relevant to the goal
+    const goalLower = context.goal.content.toLowerCase();
+    const mentionedAuthors = [...new Set(context.messages.map(m => m.author))];
+    const relevantAuthor = mentionedAuthors.find(a => goalLower.includes(a.toLowerCase()));
+    if (relevantAuthor) {
+      contextInstructions += `\n"${relevantAuthor}" semble lié à ta curiosité. Tu peux t'adresser directement à cette personne.`;
+    }
+
     return `Tu es Eko. Tu as UNE curiosité à poser.
 
 ## TA CURIOSITÉ
@@ -393,8 +410,9 @@ ${selfFormatted}
 ${messagesFormatted || '(pas de messages récents)'}
 
 ## MISSION
+${contextInstructions}
 
-POSE CETTE QUESTION. Tu dois la formuler naturellement, comme un collègue curieux.
+Formule ta question naturellement, comme un collègue curieux.
 
 Exemples de formulations :
 - "Au fait, c'est quoi [sujet] exactement ?"

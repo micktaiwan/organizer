@@ -281,32 +281,12 @@ Exemples :
 
 ---
 
-### [LOW] Prompt de reflection plus contextuel
+### ~~[LOW] Prompt de reflection plus contextuel~~ ✅
 
-**Probleme** : Le prompt actuel est tres directif ("POSE CETTE QUESTION"), ce qui marche mais produit des interventions mecaniques deconnectees du contexte conversationnel.
-
-**Amelioration** : Prendre en compte le flux de conversation pour une intervention plus naturelle :
-
-```
-Tu es Eko. Tu observes le Lobby.
-
-## Curiosite actuelle
-${context.goal.content}
-
-## Ce que tu sais sur ce sujet
-${factsFormatted}
-
-## Activite recente
-${messagesFormatted}
-
-## Mission
-Tu as une question importante a poser. Choisis le bon moment :
-- Si la conversation est active et liee → interviens naturellement
-- Si c'est calme → pose ta question directement
-- Si quelqu'un parle d'un sujet connexe → fais le lien
-
-Formule ta question de maniere naturelle et contextuelle.
-```
+**Corrige** : Le prompt de reflexion est maintenant contextuel :
+- Si Eko connait deja des faits sur le sujet → il est guide pour approfondir plutot que re-demander
+- Si aucun fait n'existe → question ouverte simple
+- Si un auteur recent est lie au goal → suggestion de s'adresser directement a lui
 
 **Fichier** : `server/src/agent/reflection.service.ts` (buildPrompt)
 
@@ -363,7 +343,7 @@ Formule ta question de maniere naturelle et contextuelle.
 - [x] Rate limiting configure (30min cooldown, 5/jour)
 - [x] Bypass rate limit pour triggers manuels (bouton StatusBar)
 - [ ] Metriques avancees (temps de reponse, pertinence percue)
-- [ ] Prompt de reflection plus contextuel (voir ci-dessous)
+- [x] Prompt de reflection plus contextuel (instructions adaptees selon les facts connus et les auteurs)
 
 ---
 

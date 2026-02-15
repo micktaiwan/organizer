@@ -395,7 +395,7 @@ Auth : Bearer token (`McpToken` model, hash SHA-256)
 |---------|----------------------|
 | `qdrant.service.ts` | storeFactMemory, searchFacts, listFacts, deleteFact, deleteExpiredMemories |
 | `self.service.ts` | storeSelf, searchSelf, storeGoal, searchGoals, listSelfWithIds, listGoalsWithIds |
-| `live.service.ts` | storeLiveMessage, getAllLiveMessagesWithIds, clearLiveCollection |
+| `live.service.ts` | storeLiveMessage, getAllLiveMessagesWithIds, clearLiveCollection. Overflow protection: purge oldest si >10K messages |
 | `digest.service.ts` | Cron 4h : extraction LLM des facts depuis le live buffer, stockage, clear |
 | `embedding.service.ts` | generateEmbedding, generateEmbeddings (batch) |
 
