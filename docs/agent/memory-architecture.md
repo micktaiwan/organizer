@@ -406,37 +406,17 @@ Rattrapage au démarrage si > 4h depuis le dernier digest.
 
 ---
 
-### [LOW] Seuil de relevance pour le live context
+### ~~[LOW] Seuil de relevance pour le live context~~ ✅
 
-**Probleme** : `searchLiveContext()` retourne les 10 meilleurs messages par score sans seuil minimum. Meme les messages a faible score (0.3) sont injectes dans le contexte.
+**Corrige** : `searchLiveContext()` filtre maintenant les resultats en dessous de 0.5 de score (`MIN_RELEVANCE_SCORE`). Les messages peu pertinents ne sont plus injectes dans le contexte.
 
-**Impact** : Bruit potentiel dans le system prompt, tokens gaspilles.
-
-**Solution** :
-```javascript
-// Dans agent.mjs
-const liveMessages = await searchLiveMessages(userMessage, 10);
-const filtered = liveMessages.filter(m => m.score > 0.5);
-```
-
-**Trade-off** : Risque de rater du contexte pertinent si embeddings peu discriminants. A tester empiriquement.
-
-**Fichier** : `server/src/agent/agent.mjs`
+**Fichier** : `server/src/agent/memory/live.mjs`
 
 ---
 
-### [LOW] Protection overflow du live buffer
+### ~~[LOW] Protection overflow du live buffer~~ ✅
 
-**Probleme** : Si le digest echoue pendant une periode prolongee (API down, erreurs), la collection live grossit sans limite.
-
-**Solution** :
-```javascript
-const MAX_LIVE_MESSAGES = 10000;
-const currentCount = await getLiveCollectionInfo();
-if (currentCount.pointsCount >= MAX_LIVE_MESSAGES) {
-  await deleteOldestLiveMessages(1000); // Purge les plus anciens
-}
-```
+**Corrige** : `indexLiveMessage()` verifie maintenant la taille de la collection avant chaque insertion. Si elle depasse `MAX_LIVE_MESSAGES` (10 000), les 1 000 messages les plus anciens sont purges automatiquement.
 
 **Fichier** : `server/src/memory/live.service.ts`
 

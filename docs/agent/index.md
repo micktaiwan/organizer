@@ -149,25 +149,9 @@ Cycle :
 
 ## Ameliorations identifiees
 
-### [LOW] Diversite des expressions
+### ~~[LOW] Diversite des expressions~~ ✅
 
-**Probleme** : L'agent utilise "neutral" 90%+ du temps. Le prompt ne guide pas le choix d'expression.
-
-**Solution** : Ajouter des guidelines dans le system prompt :
-
-```
-## Expressions
-Choisis selon ton emotion :
-- neutral : reponse factuelle
-- happy : content, satisfait (ex: "j'ai compris !")
-- laughing : quelque chose de drole dans le message
-- surprised : nouvelle info inattendue
-- sad : message triste ou deception
-- sleepy : question complexe, tu reflechis encore
-- curious : tu poses une question ou demandes des precisions
-
-Varie tes expressions pour etre expressif.
-```
+**Corrige** : Le prompt inclut maintenant des guidelines detaillees pour chaque expression (neutral, happy, laughing, surprised, sad, sleepy, curious) avec des exemples de quand les utiliser, et une incitation a varier.
 
 **Fichier** : `server/src/agent/prompt.mjs`
 

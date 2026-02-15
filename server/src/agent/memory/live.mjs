@@ -33,14 +33,17 @@ async function searchLiveContext(queryText, limit = 10) {
     }
 
     const data = await response.json();
-    const results = data.result.map((item) => ({
-      score: item.score,
-      content: item.payload.content,
-      author: item.payload.author,
-      timestamp: item.payload.timestamp,
-    }));
+    const MIN_RELEVANCE_SCORE = 0.5;
+    const results = data.result
+      .filter((item) => item.score >= MIN_RELEVANCE_SCORE)
+      .map((item) => ({
+        score: item.score,
+        content: item.payload.content,
+        author: item.payload.author,
+        timestamp: item.payload.timestamp,
+      }));
 
-    log('debug', `[Live] Found ${results.length} relevant messages`);
+    log('debug', `[Live] Found ${results.length} relevant messages (filtered from ${data.result.length}, threshold: ${MIN_RELEVANCE_SCORE})`);
     return results;
   } catch (error) {
     log('error', `[Live] Search error: ${error.message}`);
