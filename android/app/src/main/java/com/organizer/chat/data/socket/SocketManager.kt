@@ -800,6 +800,18 @@ class SocketManager(private val tokenManager: TokenManager) {
 
     fun isConnected(): Boolean = socket?.connected() == true
 
+    /**
+     * Reconnect the socket with a fresh token (called after token refresh).
+     * Disconnects the current socket and creates a new one with the updated token.
+     */
+    fun reconnectWithNewToken(versionName: String? = null, versionCode: Int? = null) {
+        Log.d(TAG, "Reconnecting socket with refreshed token...")
+        socket?.off()
+        socket?.disconnect()
+        socket = null
+        connect(versionName, versionCode)
+    }
+
     // WebRTC signaling emit methods
     fun sendWebRTCOffer(to: String, sdp: String) {
         socket?.emit("webrtc:offer", JSONObject().apply {

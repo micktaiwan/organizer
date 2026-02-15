@@ -20,6 +20,7 @@ class TokenManager(private val context: Context) {
 
     companion object {
         private val TOKEN_KEY = stringPreferencesKey("jwt_token")
+        private val REFRESH_TOKEN_KEY = stringPreferencesKey("refresh_token")
         private val USER_ID_KEY = stringPreferencesKey("user_id")
         private val USERNAME_KEY = stringPreferencesKey("username")
         private val DISPLAY_NAME_KEY = stringPreferencesKey("display_name")
@@ -27,6 +28,10 @@ class TokenManager(private val context: Context) {
 
     private val _sessionExpired = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val sessionExpired: SharedFlow<String> = _sessionExpired.asSharedFlow()
+
+    // Emitted after a successful token refresh (new JWT token)
+    private val _tokenRefreshed = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val tokenRefreshed: SharedFlow<String> = _tokenRefreshed.asSharedFlow()
 
     fun notifySessionExpired(reason: String = "Session expirée") {
         _sessionExpired.tryEmit(reason)
@@ -53,22 +58,39 @@ class TokenManager(private val context: Context) {
         context.dataStore.data.first()[TOKEN_KEY]
     }
 
+    fun getRefreshTokenSync(): String? = runBlocking {
+        context.dataStore.data.first()[REFRESH_TOKEN_KEY]
+    }
+
     fun getUserIdSync(): String? = runBlocking {
         context.dataStore.data.first()[USER_ID_KEY]
     }
 
-    suspend fun saveAuthData(token: String, userId: String, username: String, displayName: String) {
+    suspend fun saveAuthData(token: String, refreshToken: String?, userId: String, username: String, displayName: String) {
         context.dataStore.edit { preferences ->
             preferences[TOKEN_KEY] = token
+            if (refreshToken != null) {
+                preferences[REFRESH_TOKEN_KEY] = refreshToken
+            }
             preferences[USER_ID_KEY] = userId
             preferences[USERNAME_KEY] = username
             preferences[DISPLAY_NAME_KEY] = displayName
         }
     }
 
+    // Save new tokens after a refresh (called from AuthInterceptor thread)
+    fun saveTokensSync(token: String, refreshToken: String) = runBlocking {
+        context.dataStore.edit { preferences ->
+            preferences[TOKEN_KEY] = token
+            preferences[REFRESH_TOKEN_KEY] = refreshToken
+        }
+        _tokenRefreshed.tryEmit(token)
+    }
+
     suspend fun clearAuthData() {
         context.dataStore.edit { preferences ->
             preferences.remove(TOKEN_KEY)
+            preferences.remove(REFRESH_TOKEN_KEY)
             preferences.remove(USER_ID_KEY)
             preferences.remove(USERNAME_KEY)
             preferences.remove(DISPLAY_NAME_KEY)

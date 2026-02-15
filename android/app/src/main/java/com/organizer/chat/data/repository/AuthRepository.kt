@@ -15,9 +15,10 @@ class AuthRepository(
         return try {
             val response = api.login(LoginRequest(username, password))
 
-            // Save auth data
+            // Save auth data including refresh token
             tokenManager.saveAuthData(
                 token = response.token,
+                refreshToken = response.refreshToken,
                 userId = response.user.id,
                 username = response.user.username,
                 displayName = response.user.displayName
@@ -40,9 +41,10 @@ class AuthRepository(
                 RegisterRequest(username, displayName, email, password)
             )
 
-            // Save auth data (auto-login after register)
+            // Save auth data including refresh token (auto-login after register)
             tokenManager.saveAuthData(
                 token = response.token,
+                refreshToken = response.refreshToken,
                 userId = response.user.id,
                 username = response.user.username,
                 displayName = response.user.displayName
