@@ -1,6 +1,6 @@
 import cron, { ScheduledTask } from 'node-cron';
 import { getAllLiveMessages, clearLiveCollection, getLiveCollectionInfo } from './live.service.js';
-import { storeFactMemory } from './qdrant.service.js';
+import { storeFactMemory, deleteExpiredMemories } from './qdrant.service.js';
 import { storeSelf, storeGoal } from './self.service.js';
 import { getAnthropicApiKey, getDigestModel } from '../config/agent.js';
 import { getConfig, setConfig } from '../models/index.js';
@@ -370,6 +370,15 @@ export async function scheduleDigest(): Promise<ScheduledTask> {
       await runDigest();
     } catch (error) {
       console.error('[Digest] Scheduled digest failed:', error);
+    }
+    // Cleanup expired facts after each digest
+    try {
+      const deleted = await deleteExpiredMemories();
+      if (deleted > 0) {
+        console.log(`[Digest] Cleaned up ${deleted} expired memories`);
+      }
+    } catch (error) {
+      console.error('[Digest] Expired memory cleanup failed:', error);
     }
   }, {
     timezone: 'Europe/Paris'
