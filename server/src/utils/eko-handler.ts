@@ -1,6 +1,6 @@
 import { Server } from 'socket.io';
 import { agentService } from '../agent/index.js';
-import { Message, Room, User } from '../models/index.js';
+import { Message, Room, User, Reflection } from '../models/index.js';
 
 interface EkoMentionData {
   io: Server;
@@ -43,6 +43,23 @@ export async function handleEkoMention(data: EkoMentionData) {
       })
       .join('\n');
 
+    // Check if Eko recently asked a curiosity question in this room (reflection)
+    let curiosityContext = '';
+    try {
+      const recentReflection = await Reflection.findOne({
+        action: 'message',
+        roomId,
+        createdAt: { $gte: new Date(Date.now() - 2 * 60 * 60 * 1000) }, // Last 2 hours
+      }).sort({ createdAt: -1 }).lean();
+
+      if (recentReflection?.message) {
+        curiosityContext = `\n\nCONTEXTE CURIOSITÉ : Tu avais posé cette question par curiosité : "${recentReflection.message}"
+Si le message actuel y répond (même partiellement), utilise store_memory pour stocker la réponse comme fait durable (ttl: null).`;
+      }
+    } catch (err: any) {
+      console.error('[Eko] Failed to check recent reflection:', err.message);
+    }
+
     // Build prompt for agent
     const clientLabel = clientSource === 'android' ? 'Android' : clientSource === 'desktop' ? 'Desktop' : clientSource || 'inconnu';
     const prompt = `Tu es Eko, un assistant collaboratif dans l'app Organizer.
@@ -57,7 +74,7 @@ IMPORTANT - Analyse le contexte avant de répondre :
 - Si on te PARLE DIRECTEMENT (2ème personne: "Eko, dis-moi...", "Eko peux-tu...") → utilise respond pour répondre
 - Si on PARLE DE TOI (3ème personne: "Eko peut faire ça", "on a amélioré Eko") → N'utilise PAS respond. Tu peux stocker des mémoires (store_memory, store_self, store_goal) si tu apprends quelque chose d'intéressant, mais reste silencieux.
 
-Si tu dois répondre, sois concis et utile.`;
+Si tu dois répondre, sois concis et utile.${curiosityContext}`;
 
     // Ask agent
     console.log(`[Eko] Processing mention from ${authorName} in ${roomName}`);

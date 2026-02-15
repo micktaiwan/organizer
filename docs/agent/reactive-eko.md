@@ -271,41 +271,13 @@ Exemples :
 
 ## Ameliorations identifiees
 
-### [HIGH] Transformation goal → fact quand reponse recue
+### ~~[HIGH] Transformation goal → fact quand reponse recue~~ ✅
 
-**Probleme** : Quand Eko pose une question et recoit une reponse, le goal est supprime mais la reponse n'est pas stockee comme fait. Le cycle curiosite → savoir est incomplet.
+**Corrige** : Quand quelqu'un repond a Eko apres une question de reflection, le prompt de `handleEkoMention()` inclut maintenant le contexte de la curiosite. L'agent utilise `store_memory` pour stocker la reponse comme fait durable.
 
-**Flow actuel** :
-```
-1. Eko poste : "Qui est Corentin ?"
-2. deleteGoal(goalId) ✅
-3. User repond : "Corentin est dev chez lemlist"
-4. Reponse non capturee comme fact ❌
-```
+**Approche retenue** : Injection de contexte dans le prompt (pas de post-processing). L'agent juge lui-meme ce qui merite d'etre stocke et comment le formuler.
 
-**Solution** : Etendre `handleEkoMention()` pour detecter si le message repond a une question de reflection recente :
-
-```typescript
-// Dans eko-handler.ts, apres la reponse de l'agent
-const recentReflection = await Reflection.findOne({
-  action: 'message',
-  roomId: params.roomId,
-  createdAt: { $gte: new Date(Date.now() - 60 * 60 * 1000) } // Derniere heure
-}).sort({ createdAt: -1 });
-
-if (recentReflection) {
-  // Extraire les sujets de la question, stocker la reponse comme fact
-  await storeFactMemory({
-    content: params.messageContent,
-    subjects: extractSubjectsFromQuestion(recentReflection.message),
-    ttl: null
-  });
-}
-```
-
-**Alternative** : Ajouter du contexte au system prompt de l'agent sur les questions pendantes.
-
-**Fichiers** : `server/src/utils/eko-handler.ts`, `server/src/agent/reflection.service.ts`
+**Fichier** : `server/src/utils/eko-handler.ts`
 
 ---
 
@@ -345,7 +317,7 @@ Formule ta question de maniere naturelle et contextuelle.
 ### A implementer
 
 - ~~Deduplication des goals (Phase 3)~~ ✅
-- Transformation curiosite → fact quand reponse recue (Phase 3, voir ci-dessus)
+- ~~Transformation curiosite → fact quand reponse recue (Phase 3)~~ ✅
 - Cooldown adaptatif (plus long si ignore) ?
 
 ---
@@ -381,7 +353,7 @@ Formule ta question de maniere naturelle et contextuelle.
 
 - [x] Fix deduplication des goals a la source (seuil abaisse a 0.75 + optimisation embedding)
 - [ ] Nettoyage des duplicatas pendant reflexion
-- [ ] Transformation curiosite → fait quand reponse recue (voir ci-dessous)
+- [x] Transformation curiosite → fait quand reponse recue (contexte injecte dans le prompt)
 - [x] Suppression automatique des goals poses (supprime de Qdrant apres post)
 
 ### Phase 4 : Raffinement ✅
