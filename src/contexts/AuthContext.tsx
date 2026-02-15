@@ -413,12 +413,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const prevToken = token;
     const prevRefreshToken = refreshTokenState;
 
+    // Disable global auth expiry handler during switch — we handle errors locally
+    const prevOnAuthExpired = api.onAuthExpired;
+    api.onAuthExpired = null;
+
     try {
-      // Set the account's tokens on the api service
+      // Set the account's tokens on the api service (always clear refresh token
+      // to avoid using the current account's refresh token if the target has none)
       api.setToken(account.token);
-      if (account.refreshToken) {
-        api.setRefreshToken(account.refreshToken);
-      }
+      api.setRefreshToken(account.refreshToken || null);
 
       // Validate token with GET /auth/me (will auto-refresh on 401 if refreshToken available)
       const { user: fetchedUser } = await api.getMe();
@@ -443,6 +446,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       socketService.disconnect();
       socketService.connect(currentToken);
 
+      api.onAuthExpired = prevOnAuthExpired;
       return { success: true };
     } catch (error) {
       console.error('[Auth] Token invalid for account:', account.username, error);
@@ -453,6 +457,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (prevRefreshToken) {
         api.setRefreshToken(prevRefreshToken);
       }
+      api.onAuthExpired = prevOnAuthExpired;
       return { success: false, error: 'Session expirée' };
     }
   };
