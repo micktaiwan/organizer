@@ -386,7 +386,7 @@ Auth : Bearer token (`McpToken` model, hash SHA-256)
 |------------|---------|-----|-------|
 | `organizer_memory` | Faits sur les users/monde | 7j/30j/90j/permanent | Oui (seuil 0.85) |
 | `organizer_self` | Identite d'Eko (context, capability, limitation, preference, relation) | Non | Oui (seuil 0.85) |
-| `organizer_goals` | Curiosites d'Eko (curiosity, project, learning, feature) | Non | Non |
+| `organizer_goals` | Curiosites d'Eko (curiosity, project, learning, feature) | Non | Oui (seuil 0.75) |
 | `organizer_live` | Buffer messages Lobby recents | Vide au digest | Non |
 
 ### Services
@@ -418,7 +418,7 @@ AgentService (service.ts)
     │                 │       ├── MCP local : respond tool
     │                 │       └── MCP HTTP : 14 outils Organizer
     │                 │
-    │                 └── Session management (15min timeout par user)
+    │                 └── Session management (15min timeout, reset apres 10 queries)
     │
     └── Reflection Service (reflection.service.ts)
             │
@@ -452,7 +452,7 @@ Outil MCP local (pas HTTP) qui capture la reponse finale de l'agent. Retourne un
 
 - **Access token** : JWT, 1h d'expiration
 - **Refresh token** : 64 bytes random, hash SHA-256, 30 jours, rotation a chaque refresh
-- **MCP token** : statique, scopes read/write, allowedTools[]
+- **MCP token** : expiration 90 jours par defaut, scopes read/write, allowedTools[], warning 7 jours avant expiration
 
 ### MCP Auth (`mcp/auth.ts`)
 
