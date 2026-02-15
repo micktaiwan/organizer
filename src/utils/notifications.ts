@@ -1,8 +1,8 @@
 import {
   isPermissionGranted,
   requestPermission,
+  sendNotification,
 } from "@tauri-apps/plugin-notification";
-import { invoke } from "@tauri-apps/api/core";
 
 let permissionGranted = false;
 
@@ -49,12 +49,10 @@ export async function showMessageNotification(
       localStorage.setItem(PENDING_NOTIFICATION_KEY, roomId);
     }
 
-    await invoke("plugin:notification|notify", {
-      options: {
-        title: `${senderName} - ${roomName}`,
-        body: preview,
-        sound: "default",
-      },
+    sendNotification({
+      title: `${senderName} - ${roomName}`,
+      body: preview,
+      sound: "default",
     });
   } catch (err) {
     console.error("Failed to send notification:", err);
@@ -70,12 +68,10 @@ export async function showPresenceNotification(displayName: string): Promise<voi
     if (!permissionGranted) return;
   }
   try {
-    await invoke("plugin:notification|notify", {
-      options: {
-        title: `${displayName} is online`,
-        body: `${displayName} just connected`,
-        sound: "default",
-      },
+    sendNotification({
+      title: `${displayName} is online`,
+      body: `${displayName} just connected`,
+      sound: "default",
     });
   } catch (err) {
     console.error("Failed to send presence notification:", err);
