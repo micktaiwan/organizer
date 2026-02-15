@@ -173,22 +173,11 @@ Varie tes expressions pour etre expressif.
 
 ---
 
-### [MEDIUM] Securite du token MCP
+### ~~[MEDIUM] Securite du token MCP~~ ✅
 
-**Probleme** : `EKO_MCP_TOKEN` est un token statique sans expiration ni rotation. Si leak, full write access sur notes, messages, memoire.
+**Corrige** : Les tokens MCP expirent maintenant par defaut apres 90 jours (configurable via `expiresIn`, desactivable via `noExpiry: true`). Le middleware logge un warning quand un token expire dans les 7 jours.
 
-**Solution** : Implementer une rotation de token :
-
-```typescript
-// Dans McpToken model
-expiresAt: Date         // Expiration 24h
-refreshToken: String    // Pour renouveler
-
-// Nouvel endpoint
-POST /mcp/refresh → { accessToken, expiresAt }
-```
-
-**Fichiers** : `server/src/models/McpToken.ts`, `server/src/mcp/auth.ts`
+**Fichiers** : `server/src/routes/mcp-admin.ts`, `server/src/mcp/auth.ts`
 
 ---
 

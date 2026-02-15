@@ -65,13 +65,21 @@ export async function mcpAuthMiddleware(
       return;
     }
 
-    if (mcpToken.expiresAt && mcpToken.expiresAt < new Date()) {
-      res.status(401).json({
-        jsonrpc: '2.0',
-        error: { code: -32001, message: 'Token has expired' },
-        id: null,
-      });
-      return;
+    if (mcpToken.expiresAt) {
+      const now = new Date();
+      if (mcpToken.expiresAt < now) {
+        res.status(401).json({
+          jsonrpc: '2.0',
+          error: { code: -32001, message: 'Token has expired' },
+          id: null,
+        });
+        return;
+      }
+      // Warn if token expires within 7 days
+      const daysUntilExpiry = (mcpToken.expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysUntilExpiry <= 7) {
+        console.warn(`[MCP] Token "${mcpToken.name}" expires in ${Math.ceil(daysUntilExpiry)} day(s)`);
+      }
     }
 
     const user = await User.findById(mcpToken.userId).select('-passwordHash');

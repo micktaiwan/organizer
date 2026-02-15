@@ -2,7 +2,7 @@
 import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { log } from './logger.mjs';
 import { PET_SYSTEM_PROMPT } from './prompt.mjs';
-import { userSessions } from './session.mjs';
+import { userSessions, MAX_QUERIES_PER_SESSION } from './session.mjs';
 import { searchLiveContext, formatLiveContext } from './memory/live.mjs';
 import { respondTool, setRequestContext } from './tools/respond-tool.mjs';
 
@@ -109,7 +109,15 @@ async function runQuery(params) {
     : PET_SYSTEM_PROMPT;
 
   // Get or create session for this user
-  const userSession = userSessions.get(userId) || { sessionId: null, lastActivity: Date.now() };
+  const userSession = userSessions.get(userId) || { sessionId: null, lastActivity: Date.now(), queryCount: 0 };
+
+  // Reset session if too many queries (prevents unbounded context growth)
+  if (userSession.queryCount >= MAX_QUERIES_PER_SESSION) {
+    log('info', `[Agent] 🔄 Session reset for ${userId} after ${userSession.queryCount} queries`);
+    userSession.sessionId = null;
+    userSession.queryCount = 0;
+  }
+  userSession.queryCount++;
 
   try {
     // Build MCP servers config

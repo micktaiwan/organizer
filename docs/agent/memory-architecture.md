@@ -390,42 +390,17 @@ Rattrapage au démarrage si > 4h depuis le dernier digest.
 
 ---
 
-### [MEDIUM] Seuil plus strict pour les goals du digest
+### ~~[MEDIUM] Seuil plus strict pour les goals du digest~~ ✅
 
-**Probleme** : Le digest genere trop de curiosites mineures. Un nom mentionne 1 seule fois dans le Lobby genere un goal "Qui est X ?".
-
-**Solution** : Renforcer le prompt du digest :
-
-```
-## GOALS (aspirations emergentes)
-SEUIL ELEVE : ne genere un goal QUE si :
-- Le sujet revient 3+ fois dans les messages
-- C'est un blocage clair pour Eko (capability manquante)
-- Une personne inconnue interagit directement avec Eko
-
-NE PAS generer de goal pour :
-- Mentions uniques de noms/lieux
-- Concepts inferables du contexte
-```
+**Corrige** : Le prompt du digest impose maintenant un seuil eleve : sujet mentionne 2+ fois, blocage clair, ou interaction directe. Maximum 2 goals par digest. Elimine les curiosites mineures (mention unique de nom).
 
 **Fichier** : `server/src/memory/digest.service.ts` (prompt)
 
 ---
 
-### [MEDIUM] Compression de session
+### ~~[MEDIUM] Compression de session~~ ✅
 
-**Probleme** : Les sessions Claude persistent 15min mais grandissent indefiniment. Pas de sliding window ni summarization. Couts tokens croissants sur longues conversations.
-
-**Solution** : Implementer un cap de turns avec summarization :
-
-```javascript
-const MAX_TURNS_PER_SESSION = 20;
-if (userSession.turnCount > MAX_TURNS_PER_SESSION) {
-  const summary = await summarizePastConversation(userSession.sessionId);
-  userSession.sessionId = null; // Reset session
-  // Injecter le summary dans le system prompt de la nouvelle session
-}
-```
+**Corrige** : Les sessions sont maintenant resetees apres 10 queries (`MAX_QUERIES_PER_SESSION`). L'agent a ses tools memoire pour retrouver le contexte passe. Pas de summarization (over-engineering pour le cas d'usage actuel).
 
 **Fichiers** : `server/src/agent/session.mjs`, `server/src/agent/agent.mjs`
 

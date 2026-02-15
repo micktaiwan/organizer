@@ -14,7 +14,8 @@ const createTokenSchema = z.object({
   scopes: z.array(z.enum(['read', 'write'])).default(['read']),
   allowedTools: z.array(z.string()).default(['*']),
   rateLimit: z.number().min(1).max(1000).default(60),
-  expiresIn: z.number().optional(),
+  expiresIn: z.number().default(90), // Days until expiration (default 90 days)
+  noExpiry: z.boolean().default(false), // Set to true for permanent tokens
 });
 
 router.post('/tokens', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -23,9 +24,9 @@ router.post('/tokens', async (req: AuthRequest, res: Response): Promise<void> =>
 
     const { token, prefix, hash } = generateMcpToken();
 
-    const expiresAt = data.expiresIn
-      ? new Date(Date.now() + data.expiresIn * 24 * 60 * 60 * 1000)
-      : null;
+    const expiresAt = data.noExpiry
+      ? null
+      : new Date(Date.now() + data.expiresIn * 24 * 60 * 60 * 1000);
 
     const mcpToken = new McpToken({
       token: hash,
