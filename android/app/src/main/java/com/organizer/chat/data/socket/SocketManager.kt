@@ -1,6 +1,7 @@
 package com.organizer.chat.data.socket
 
 import android.util.Log
+import com.organizer.chat.data.api.TokenRefresher
 import com.organizer.chat.data.model.AppVersion
 import com.organizer.chat.util.TokenManager
 import io.socket.client.IO
@@ -19,6 +20,8 @@ class SocketManager(private val tokenManager: TokenManager) {
     }
 
     private var socket: Socket? = null
+    private var lastVersionName: String? = null
+    private var lastVersionCode: Int? = null
 
     // Events as SharedFlows
     private val _connectionState = MutableSharedFlow<ConnectionState>(replay = 1)
@@ -141,6 +144,10 @@ class SocketManager(private val tokenManager: TokenManager) {
             return
         }
 
+        // Store for reconnection after token refresh
+        if (versionName != null) lastVersionName = versionName
+        if (versionCode != null) lastVersionCode = versionCode
+
         // Clean up existing socket if not connected
         socket?.let {
             Log.d(TAG, "Cleaning up existing disconnected socket")
@@ -157,18 +164,17 @@ class SocketManager(private val tokenManager: TokenManager) {
         try {
             val authMap = mutableMapOf("token" to token)
 
-            // Ajouter la version de l'app si fournie
-            if (versionName != null && versionCode != null) {
-                authMap["appVersionName"] = versionName
-                authMap["appVersionCode"] = versionCode.toString()
-                Log.d(TAG, "Connecting with app version: $versionName ($versionCode)")
+            if (lastVersionName != null && lastVersionCode != null) {
+                authMap["appVersionName"] = lastVersionName!!
+                authMap["appVersionCode"] = lastVersionCode.toString()
+                Log.d(TAG, "Connecting with app version: $lastVersionName ($lastVersionCode)")
             }
 
             val options = IO.Options().apply {
                 auth = authMap
-                reconnection = true
-                reconnectionAttempts = 5
-                reconnectionDelay = 1000
+                // Disable Socket.IO auto-reconnect — we handle it ourselves
+                // to refresh the token before reconnecting
+                reconnection = false
             }
 
             socket = IO.socket(SERVER_URL, options)
@@ -189,15 +195,44 @@ class SocketManager(private val tokenManager: TokenManager) {
                 _connectionState.tryEmit(ConnectionState.Connected)
             }
 
-            on(Socket.EVENT_DISCONNECT) {
-                Log.d(TAG, "Socket disconnected")
+            on(Socket.EVENT_DISCONNECT) { args ->
+                val reason = args.firstOrNull()?.toString() ?: "unknown"
+                Log.d(TAG, "Socket disconnected: $reason")
                 _connectionState.tryEmit(ConnectionState.Disconnected)
+
+                // Auto-reconnect after server or network disconnect
+                // Skip if client explicitly called disconnect() (reason = "io client disconnect")
+                if (reason != "io client disconnect") {
+                    Log.d(TAG, "Scheduling reconnect in 2s...")
+                    Thread {
+                        Thread.sleep(2000)
+                        if (socket?.connected() != true && tokenManager.getTokenSync() != null) {
+                            Log.d(TAG, "Auto-reconnecting after disconnect...")
+                            connect(lastVersionName, lastVersionCode)
+                        }
+                    }.start()
+                }
             }
 
             on(Socket.EVENT_CONNECT_ERROR) { args ->
                 val error = args.firstOrNull()?.toString() ?: "Unknown error"
                 Log.e(TAG, "Socket connection error: $error")
                 _connectionState.tryEmit(ConnectionState.Error(error))
+
+                // If token is expired/invalid, refresh and reconnect
+                if (error.contains("Token invalide") || error.contains("Token expiré")) {
+                    Log.d(TAG, "Token error on socket, attempting refresh...")
+                    Thread {
+                        val newToken = TokenRefresher.tryRefresh(tokenManager)
+                        if (newToken != null) {
+                            Log.d(TAG, "Token refreshed, reconnecting socket...")
+                            reconnectWithNewToken(lastVersionName, lastVersionCode)
+                        } else {
+                            Log.e(TAG, "Token refresh failed, notifying session expired")
+                            tokenManager.notifySessionExpired("Session expirée, reconnecte-toi")
+                        }
+                    }.start()
+                }
             }
 
             on("message:new") { args ->
