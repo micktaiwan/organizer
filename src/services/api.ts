@@ -284,7 +284,9 @@ class ApiService {
           return this.request<T>(endpoint, options, true);
         }
         this.onAuthExpired?.();
-        throw new Error('Session expirée');
+        const err = new Error('Session expirée');
+        (err as Error & { status: number }).status = 401;
+        throw err;
       }
 
       const data = await response.json();

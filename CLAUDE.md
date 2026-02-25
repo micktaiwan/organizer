@@ -65,12 +65,18 @@ ssh ubuntu@51.210.150.25 "docker logs organizer-api --tail 50"
 # MongoDB (container name: organizer-mongodb)
 ssh ubuntu@51.210.150.25 "docker exec organizer-mongodb mongosh organizer --quiet --eval '<query>'"
 
-# Build Android
+# Build Android (macOS)
 JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
 
-# ADB
+# Build Android (WSL/Windows) - must use PowerShell, SDK is on Windows side
+powershell.exe -Command "cd 'C:\Users\dfm76\Desktop\organizer\organizer\android'; $env:ANDROID_HOME='C:\Users\dfm76\AppData\Local\Android\Sdk'; .\gradlew.bat assembleDebug"
+
+# ADB (macOS)
 ~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 ~/Library/Android/sdk/platform-tools/adb logcat -s "ChatService" "SocketManager" "ChatViewModel"
+
+# ADB (WSL/Windows) - adb.exe needs Windows paths, not /mnt/c paths
+powershell.exe -Command "& 'C:\Users\dfm76\AppData\Local\Android\Sdk\platform-tools\adb.exe' install -r 'C:\Users\dfm76\Desktop\organizer\organizer\android\app\build\outputs\apk\debug\app-debug.apk'"
 
 # Scripts (absolute paths)
 /Users/mickaelfm/projects/perso/organizer/server/deploy.sh
