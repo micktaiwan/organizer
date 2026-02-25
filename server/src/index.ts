@@ -178,6 +178,11 @@ app.get('/health/detailed', async (_req, res) => {
   res.json(result);
 });
 
+// Serve standalone call page (WebRTC via browser for platforms without native WebRTC)
+app.get('/call', (_req, res) => {
+  res.sendFile('call.html', { root: path.join(process.cwd(), 'public') });
+});
+
 // 404 handler
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route non trouvée' });

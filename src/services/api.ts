@@ -290,7 +290,9 @@ class ApiService {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error((data as ApiError).error || 'Une erreur est survenue');
+        const err = new Error((data as ApiError).error || 'Une erreur est survenue');
+        (err as Error & { status: number }).status = response.status;
+        throw err;
       }
 
       return data as T;

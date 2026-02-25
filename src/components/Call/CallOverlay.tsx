@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Phone, Headphones, Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Minimize2, Maximize2 } from "lucide-react";
+import { Phone, Headphones, Mic, MicOff, Video, VideoOff, Monitor, MonitorOff, Minimize2, Maximize2, ExternalLink } from "lucide-react";
 import { CallState } from "../../types";
 
 interface CallOverlayProps {
@@ -18,6 +18,7 @@ interface CallOverlayProps {
   onStartScreenShare: () => void;
   onStopScreenShare: () => void;
   onEndCall: () => void;
+  onEndBrowserCall?: () => void;
 }
 
 export const CallOverlay: React.FC<CallOverlayProps> = ({
@@ -35,7 +36,8 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   onToggleCamera,
   onStartScreenShare,
   onStopScreenShare,
-  onEndCall
+  onEndCall,
+  onEndBrowserCall
 }) => {
   const [callDuration, setCallDuration] = useState(0);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -49,7 +51,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const dragStartRef = useRef({ x: 0, y: 0 });
   const pipStartRef = useRef({ x: 0, y: 0 });
 
-  const isActive = callState === 'calling' || callState === 'connected' || callState === 'reconnecting';
+  const isActive = callState === 'calling' || callState === 'connected' || callState === 'reconnecting' || callState === 'browser-call';
 
   useEffect(() => {
     if (intervalRef.current) {
@@ -186,6 +188,24 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             <p>{remoteUsername || "En attente de réponse"}</p>
             <button className="end-call-btn" onClick={onEndCall}>
               Raccrocher
+            </button>
+          </div>
+        </div>
+      )}
+
+      {callState === 'browser-call' && (
+        <div className="call-overlay">
+          <div className="calling-info">
+            <div className="caller-avatar" style={{ fontSize: '3rem' }}>
+              <ExternalLink size={48} />
+            </div>
+            <h3>Appel ouvert dans le navigateur</h3>
+            <p>{remoteUsername || "Appel en cours"}</p>
+            <p style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '8px' }}>
+              L'appel se poursuit dans votre navigateur web.
+            </p>
+            <button className="end-call-btn" onClick={onEndBrowserCall} style={{ marginTop: '16px' }}>
+              Fermer
             </button>
           </div>
         </div>

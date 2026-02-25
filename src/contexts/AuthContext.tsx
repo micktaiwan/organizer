@@ -281,14 +281,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Update the account in switcher with fresh data
             await saveAccountToSwitcher(fetchedUser, currentToken, savedRefreshToken || undefined);
           } catch (error) {
-            console.error('Token invalid, clearing auth:', error);
-            await store.delete(tokenKey);
-            await store.delete(refreshTokenKey);
-            api.setToken(null);
-            api.setRefreshToken(null);
-            setToken(null);
-            setRefreshTokenState(null);
-            setUser(null);
+            const status = (error as Error & { status?: number }).status;
+            if (status === 401) {
+              // Token truly expired or invalid — clear auth
+              console.error('Token expired/invalid (401), clearing auth:', (error as Error).message);
+              await store.delete(tokenKey);
+              await store.delete(refreshTokenKey);
+              api.setToken(null);
+              api.setRefreshToken(null);
+              setToken(null);
+              setRefreshTokenState(null);
+              setUser(null);
+            } else {
+              // Network error or server error — keep token, retry on next init
+              console.warn('Auth check failed (network/server error), keeping token:', (error as Error).message);
+              const currentToken = api.getToken() || savedToken;
+              socketService.connect(currentToken);
+            }
           }
         }
       } catch (error) {

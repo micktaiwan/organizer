@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { CallState } from '../types';
 import { socketService } from '../services/socket';
 import { playRingtone, stopRingtone, playRingback, stopRingback } from '../utils/audio';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 // ICE servers configuration (STUN + TURN)
 const ICE_SERVERS: RTCConfiguration = {
@@ -21,13 +22,20 @@ interface UseWebRTCCallOptions {
   addSystemMessage: (type: 'missed-call' | 'rejected-call' | 'ended-call') => void;
   selectedMicrophoneId?: string | null;
   selectedCameraId?: string | null;
+  serverUrl?: string | null;
+  authToken?: string | null;
 }
+
+// Check if WebRTC is natively available
+const hasNativeWebRTC = () => typeof RTCPeerConnection !== 'undefined';
 
 export const useWebRTCCall = ({
   pcRef,
   addSystemMessage,
   selectedMicrophoneId,
   selectedCameraId,
+  serverUrl,
+  authToken,
 }: UseWebRTCCallOptions) => {
   // Target user for the current call (caller or callee)
   const [targetUserId, setTargetUserId] = useState<string | null>(null);
@@ -79,6 +87,10 @@ export const useWebRTCCall = ({
   // Create RTCPeerConnection
   const createPeerConnection = useCallback((targetUser: string, username?: string) => {
     console.log('[WebRTC][PC] Creating RTCPeerConnection for', targetUser, username ? `(${username})` : '');
+
+    if (typeof RTCPeerConnection === 'undefined') {
+      throw new Error('WebRTC non supporté sur cette plateforme (WebKitGTK sans WebRTC). Utilisez un navigateur (Chrome/Firefox) pour les appels.');
+    }
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
@@ -331,6 +343,38 @@ export const useWebRTCCall = ({
   callStateRef.current = callState;
   addSystemMessageRef.current = addSystemMessage;
 
+  // Open call in external browser (for platforms without native WebRTC, e.g. Linux/WebKitGTK)
+  const openCallInBrowser = useCallback(async (params: {
+    mode: 'caller' | 'receiver';
+    target: string;
+    camera: boolean;
+  }) => {
+    if (!serverUrl || !authToken) {
+      console.error('[WebRTC] Cannot open browser call: missing serverUrl or authToken');
+      alert("Impossible d'ouvrir l'appel dans le navigateur: configuration manquante.");
+      return;
+    }
+    const hashParams = `token=${encodeURIComponent(authToken)}&${params.mode === 'caller' ? 'target' : 'from'}=${encodeURIComponent(params.target)}&camera=${params.camera}&mode=${params.mode}`;
+    const callUrl = `${serverUrl}/call#${hashParams}`;
+    console.log('[WebRTC] Opening call in browser:', callUrl.replace(authToken, '***'));
+    try {
+      await openUrl(callUrl);
+      setCallState('browser-call');
+      setTargetUserId(params.target);
+    } catch (err) {
+      console.error('[WebRTC] Failed to open browser:', err);
+      alert("Impossible d'ouvrir le navigateur.");
+    }
+  }, [serverUrl, authToken]);
+
+  // End a browser-delegated call (just resets local state)
+  const endBrowserCall = useCallback(() => {
+    setCallState('idle');
+    setTargetUserId(null);
+    setRemoteUsername(null);
+    setIncomingCallFrom(null);
+  }, []);
+
   // Process pending ICE candidates
   const processPendingIceCandidates = useCallback(async () => {
     const pc = pcRef.current;
@@ -357,6 +401,13 @@ export const useWebRTCCall = ({
   const startCall = useCallback(async (targetUser: string, withCamera: boolean) => {
     if (!targetUser) {
       console.error('[WebRTC] Cannot start call: no target user');
+      return;
+    }
+
+    // If WebRTC is not available (e.g. Linux/WebKitGTK), open call in browser
+    if (!hasNativeWebRTC()) {
+      console.log('[WebRTC] No native WebRTC, delegating to browser');
+      await openCallInBrowser({ mode: 'caller', target: targetUser, camera: withCamera });
       return;
     }
 
@@ -409,9 +460,14 @@ export const useWebRTCCall = ({
     } catch (err) {
       console.error('[WebRTC][CALLER] Failed to start call:', err);
       closePeerConnection();
-      alert("Impossible d'accéder au micro ou à la caméra. Vérifiez les permissions système.");
+      const msg = (err as Error).message;
+      if (msg.includes('WebRTC non supporté')) {
+        alert(msg);
+      } else {
+        alert("Impossible d'accéder au micro ou à la caméra. Vérifiez les permissions système.");
+      }
     }
-  }, [createPeerConnection, closePeerConnection, selectedMicrophoneId, selectedCameraId]);
+  }, [createPeerConnection, closePeerConnection, selectedMicrophoneId, selectedCameraId, openCallInBrowser]);
 
   // Accept an incoming call
   const acceptCall = useCallback(async (withCamera: boolean) => {
@@ -422,6 +478,14 @@ export const useWebRTCCall = ({
     const callerUsername = incomingCallFrom?.username;
     if (!callTarget) {
       console.error('[WebRTC][RECEIVER] Cannot accept call: incomingCallFrom is null');
+      return;
+    }
+
+    // If WebRTC is not available, open call in browser
+    if (!hasNativeWebRTC()) {
+      console.log('[WebRTC] No native WebRTC, delegating accept to browser');
+      setRemoteUsername(callerUsername || null);
+      await openCallInBrowser({ mode: 'receiver', target: callTarget, camera: withCamera });
       return;
     }
 
@@ -474,9 +538,14 @@ export const useWebRTCCall = ({
     } catch (err) {
       console.error('[WebRTC][RECEIVER] Failed to accept call:', err);
       closePeerConnection();
-      alert('Erreur micro/caméra: ' + (err as Error).message);
+      const msg = (err as Error).message;
+      if (msg.includes('WebRTC non supporté')) {
+        alert(msg);
+      } else {
+        alert('Erreur micro/caméra: ' + msg);
+      }
     }
-  }, [incomingCallFrom, createPeerConnection, closePeerConnection, selectedMicrophoneId, selectedCameraId]);
+  }, [incomingCallFrom, createPeerConnection, closePeerConnection, selectedMicrophoneId, selectedCameraId, openCallInBrowser]);
 
   // Reject an incoming call
   const rejectCall = useCallback(() => {
@@ -879,5 +948,6 @@ export const useWebRTCCall = ({
     startScreenShare,
     stopScreenShare,
     targetUserId,
+    endBrowserCall,
   };
 };
