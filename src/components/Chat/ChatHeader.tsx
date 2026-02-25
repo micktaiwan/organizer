@@ -5,7 +5,7 @@ import { UserStatus } from "../../types";
 interface ChatHeaderProps {
   connected: boolean;
   remoteUsername: string;
-  callState: 'idle' | 'calling' | 'incoming' | 'connected';
+  callState: 'idle' | 'calling' | 'incoming' | 'connected' | 'browser-call';
   onStartCall: (video: boolean) => void;
   isSaved: boolean;
   onSaveContact: () => void;

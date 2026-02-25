@@ -72,7 +72,7 @@ export interface Contact {
   createdAt: Date;
 }
 
-export type CallState = 'idle' | 'calling' | 'incoming' | 'connected' | 'reconnecting';
+export type CallState = 'idle' | 'calling' | 'incoming' | 'connected' | 'reconnecting' | 'browser-call';
 
 export type UserStatus = 'available' | 'busy' | 'away' | 'dnd';
 

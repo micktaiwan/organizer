@@ -59,7 +59,7 @@ function App() {
   // Desktop notifications when a non-bot user comes online
   usePresenceNotifications();
 
-  const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
+  const { user, token, isLoading: authLoading, isAuthenticated, logout } = useAuth();
   const { isLoading: serverLoading, isConfigured, resetConfig, selectedServer } = useServerConfig();
   const { selectedMicrophoneId, selectedCameraId } = useMediaDevices();
   const [inputMessage, setInputMessage] = useState("");
@@ -225,7 +225,8 @@ function App() {
     toggleCamera,
     startScreenShare,
     stopScreenShare,
-  } = useWebRTCCall({ pcRef, addSystemMessage: addCallSystemMessage, selectedMicrophoneId, selectedCameraId });
+    endBrowserCall,
+  } = useWebRTCCall({ pcRef, addSystemMessage: addCallSystemMessage, selectedMicrophoneId, selectedCameraId, serverUrl: selectedServer?.url, authToken: token });
 
   // TODO: Implement contact management in room context
   // const {
@@ -651,6 +652,7 @@ function App() {
         onStartScreenShare={startScreenShare}
         onStopScreenShare={stopScreenShare}
         onEndCall={endCall}
+        onEndBrowserCall={endBrowserCall}
       />
 
       {/* TODO: Implement contact management in room context */}
