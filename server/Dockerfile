@@ -38,6 +38,9 @@ RUN npm ci --omit=dev --legacy-peer-deps
 # Copier seulement le build
 COPY --from=builder /app/dist ./dist
 
+# Copy standalone call page for browser-based WebRTC
+COPY public/call.html ./public/call.html
+
 # Create upload directories, logs directory, and set ownership
 RUN mkdir -p /app/public/uploads/images /app/public/uploads/files /app/public/uploads/videos /app/public/apk /app/logs && \
     chown -R appuser:appgroup /app
