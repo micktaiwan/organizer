@@ -77,6 +77,7 @@ class WebRTCClient(
             rtcConfig,
             object : PeerConnection.Observer {
                 override fun onSignalingChange(state: PeerConnection.SignalingState?) {
+                    Log.d(TAG, "[WebRTC] signalingState: $state")
                 }
 
                 override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
@@ -314,6 +315,8 @@ class WebRTCClient(
     }
 
     fun getLocalVideoTrack(): VideoTrack? = localVideoTrack
+
+    fun getSignalingState(): PeerConnection.SignalingState? = peerConnection?.signalingState()
 
     fun close() {
 

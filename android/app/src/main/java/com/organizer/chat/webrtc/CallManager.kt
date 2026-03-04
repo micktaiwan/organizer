@@ -68,6 +68,7 @@ class CallManager(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var webRTCClient: WebRTCClient? = null
     private var isCleaningUp = false
+    private var isInitiator = false
 
     // Audio manager
     private val audioManager = CallAudioManager(context)
@@ -131,7 +132,8 @@ class CallManager(
     }
 
     fun startCall(targetUserId: String, targetUsername: String, withCamera: Boolean) {
-
+        isInitiator = true
+        Log.d(TAG, "[RACE] startCall: isInitiator=true, target=$targetUserId")
         _callState.value = CallState.Calling(targetUserId, targetUsername, withCamera)
 
         // Setup audio
@@ -175,6 +177,8 @@ class CallManager(
 
     fun acceptCall(withCamera: Boolean, fromBackground: Boolean = false) {
         val incomingState = _callState.value as? CallState.Incoming ?: return
+        isInitiator = false
+        Log.d(TAG, "[RACE] acceptCall: isInitiator=false, from=${incomingState.fromUserId}")
 
         // Cancel incoming timeout
         cancelIncomingCallTimeout()
@@ -241,15 +245,19 @@ class CallManager(
     private fun processOfferWithPendingCandidates(from: String, offer: String) {
         scope.launch {
             try {
+                Log.d(TAG, "[RACE] processOffer: before setRemoteDescription, signalingState=${webRTCClient?.getSignalingState()}")
                 webRTCClient?.setRemoteDescription(offer, SessionDescription.Type.OFFER)
                 isRemoteDescriptionSet = true
+                Log.d(TAG, "[RACE] processOffer: after setRemoteDescription, signalingState=${webRTCClient?.getSignalingState()}")
 
                 // Now process pending ICE candidates
                 processPendingIceCandidates()
 
                 // Create and send answer
+                Log.d(TAG, "[RACE] processOffer: creating answer...")
                 val answer = webRTCClient?.createAnswer()
                 answer?.let {
+                    Log.d(TAG, "[RACE] processOffer: answer created, sending to $from, signalingState=${webRTCClient?.getSignalingState()}")
                     socketManager.sendWebRTCAnswer(from, it)
                 }
             } catch (e: Exception) {
@@ -391,9 +399,17 @@ class CallManager(
     }
 
     fun handleWebRTCOffer(from: String, offer: String) {
+        Log.d(TAG, "[RACE] handleWebRTCOffer: from=$from, isInitiator=$isInitiator, signalingState=${webRTCClient?.getSignalingState()}")
+
+        // Glare resolution: if we're the initiator and already sent an offer, ignore incoming offer
+        if (isInitiator && webRTCClient?.getSignalingState() == PeerConnection.SignalingState.HAVE_LOCAL_OFFER) {
+            Log.d(TAG, "[RACE] Ignoring offer - we are initiator with pending local offer (glare)")
+            return
+        }
 
         // If WebRTC not initialized yet, buffer the offer
         if (webRTCClient == null) {
+            Log.d(TAG, "[RACE] handleWebRTCOffer: WebRTC not initialized, buffering offer")
             pendingOffer = offer
             pendingOfferFrom = from
             return
@@ -403,11 +419,14 @@ class CallManager(
     }
 
     fun handleWebRTCAnswer(from: String, answer: String) {
+        Log.d(TAG, "[RACE] handleWebRTCAnswer: from=$from, signalingState=${webRTCClient?.getSignalingState()}")
 
         scope.launch {
             try {
+                Log.d(TAG, "[RACE] handleWebRTCAnswer: before setRemoteDescription, signalingState=${webRTCClient?.getSignalingState()}")
                 webRTCClient?.setRemoteDescription(answer, SessionDescription.Type.ANSWER)
                 isRemoteDescriptionSet = true
+                Log.d(TAG, "[RACE] handleWebRTCAnswer: after setRemoteDescription, signalingState=${webRTCClient?.getSignalingState()}")
 
                 // Process any pending ICE candidates from remote
                 processPendingIceCandidates()
@@ -620,6 +639,7 @@ class CallManager(
         pendingOfferFrom = null
         isRemoteDescriptionSet = false
         pendingRenegotiation = false
+        isInitiator = false
         synchronized(candidatesLock) {
             pendingIceCandidates.clear()
         }

@@ -21,6 +21,10 @@ const TYPING_TIMEOUT_MS = 3000;
 // Track active calls: userId -> remoteUserId
 const activeCalls = new Map<string, string>();
 
+// Track which socket is in the active call: userId -> socketId
+// Used for targeted WebRTC signaling (avoid broadcasting to all user devices)
+const activeCallSockets = new Map<string, string>();
+
 export function setupSocket(httpServer: HttpServer): Server {
   const io = new Server(httpServer, {
     cors: {
@@ -236,6 +240,23 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     // ===== WebRTC Signaling Events =====
 
+    // Helper: send to the specific call socket if known, otherwise broadcast to user room
+    const emitToCallSocket = (targetUserId: string, event: string, payload: unknown) => {
+      const targetSocketId = activeCallSockets.get(targetUserId);
+      if (targetSocketId) {
+        // Skip verbose logging for high-frequency ICE candidates
+        if (event !== 'webrtc:ice-candidate') {
+          console.log(`[WebRTC] ${event} -> socket ${targetSocketId} (targeted)`);
+        }
+        io.to(targetSocketId).emit(event, payload);
+      } else {
+        if (event !== 'webrtc:ice-candidate') {
+          console.log(`[WebRTC] ${event} -> user:${targetUserId} (broadcast, no active socket)`);
+        }
+        io.to(`user:${targetUserId}`).emit(event, payload);
+      }
+    };
+
     // Relayer l'offre WebRTC (SDP)
     socket.on('webrtc:offer', async (data: { to: string; offer: unknown }) => {
       const canCall = await canCommunicate(userId, data.to);
@@ -243,7 +264,10 @@ export function setupSocket(httpServer: HttpServer): Server {
         socket.emit('webrtc:error', { error: 'unauthorized', message: 'You cannot call this user' });
         return;
       }
-      io.to(`user:${data.to}`).emit('webrtc:offer', {
+      // Store sender's socket for targeted signaling
+      activeCallSockets.set(userId, socket.id);
+      console.log(`[WebRTC] webrtc:offer from ${socket.username} (${socket.id}) to ${data.to}`);
+      emitToCallSocket(data.to, 'webrtc:offer', {
         from: userId,
         fromUsername: socket.username,
         offer: data.offer,
@@ -257,7 +281,8 @@ export function setupSocket(httpServer: HttpServer): Server {
         socket.emit('webrtc:error', { error: 'unauthorized', message: 'You cannot call this user' });
         return;
       }
-      io.to(`user:${data.to}`).emit('webrtc:answer', {
+      console.log(`[WebRTC] webrtc:answer from ${socket.username} (${socket.id}) to ${data.to}`);
+      emitToCallSocket(data.to, 'webrtc:answer', {
         from: userId,
         answer: data.answer,
       });
@@ -270,7 +295,7 @@ export function setupSocket(httpServer: HttpServer): Server {
         // Silently ignore - auth should have failed at offer/answer stage
         return;
       }
-      io.to(`user:${data.to}`).emit('webrtc:ice-candidate', {
+      emitToCallSocket(data.to, 'webrtc:ice-candidate', {
         from: userId,
         candidate: data.candidate,
       });
@@ -280,11 +305,15 @@ export function setupSocket(httpServer: HttpServer): Server {
     socket.on('webrtc:close', async (data: { to: string }) => {
       const canCall = await canCommunicate(userId, data.to);
       if (!canCall) return;
-      activeCalls.delete(userId);
-      activeCalls.delete(data.to);
-      io.to(`user:${data.to}`).emit('webrtc:close', {
+      console.log(`[WebRTC] webrtc:close from ${socket.username} to ${data.to}`);
+      emitToCallSocket(data.to, 'webrtc:close', {
         from: userId,
       });
+      // Clean up after emitting (so targeted delivery works)
+      activeCalls.delete(userId);
+      activeCalls.delete(data.to);
+      activeCallSockets.delete(userId);
+      activeCallSockets.delete(data.to);
     });
 
     // ===== Call Signaling Events =====
@@ -312,6 +341,9 @@ export function setupSocket(httpServer: HttpServer): Server {
       }
       activeCalls.set(userId, data.to);
       activeCalls.set(data.to, userId);
+      // Store this socket as the active call socket for targeted signaling
+      activeCallSockets.set(userId, socket.id);
+      console.log(`[WebRTC] call:accept from ${socket.username} (${socket.id}), storing call sockets`);
       // Notify the caller
       io.to(`user:${data.to}`).emit('call:accept', {
         from: userId,
@@ -336,6 +368,8 @@ export function setupSocket(httpServer: HttpServer): Server {
     socket.on('call:end', (data: { to: string }) => {
       activeCalls.delete(userId);
       activeCalls.delete(data.to);
+      activeCallSockets.delete(userId);
+      activeCallSockets.delete(data.to);
       io.to(`user:${data.to}`).emit('call:end', {
         from: userId,
       });
@@ -418,12 +452,16 @@ export function setupSocket(httpServer: HttpServer): Server {
         });
       }
 
+      // Always clean up this user's call socket (may have been set by webrtc:offer/answer before call:accept)
+      activeCallSockets.delete(userId);
+
       // Notify call partner if user had an active call
       const callPartner = activeCalls.get(userId);
       if (callPartner) {
         io.to(`user:${callPartner}`).emit('call:end', { from: userId });
         activeCalls.delete(callPartner);
         activeCalls.delete(userId);
+        activeCallSockets.delete(callPartner);
       }
 
       // Clean up typing timeouts for this user
