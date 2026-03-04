@@ -71,6 +71,12 @@ export const useWebRTCCall = ({
   // Ref to hold latest stopScreenShareInternal (avoids stale closure in onended)
   const stopScreenShareInternalRef = useRef<() => void>(() => {});
 
+  // Guard against duplicate answer creation (race between acceptCall and handleWebRTCOffer)
+  const answerSentRef = useRef(false);
+
+  // Guard against duplicate offers during ICE restart (restartIce triggers onnegotiationneeded)
+  const iceRestartInProgressRef = useRef(false);
+
   // Guard against concurrent endCallInternal calls
   const isCleaningUpRef = useRef(false);
 
@@ -167,13 +173,23 @@ export const useWebRTCCall = ({
 
         // Only the initiator sends the restart offer (avoids glare conflicts)
         if (isInitiatorRef.current) {
-          pc.restartIce();
+          iceRestartInProgressRef.current = true;
+          try {
+            pc.restartIce();
+          } catch (err) {
+            console.error('[WebRTC][ICE-RESTART] restartIce() failed:', err);
+            iceRestartInProgressRef.current = false;
+            endCallInternalRef.current();
+            return;
+          }
           pc.createOffer({ iceRestart: true }).then(async (offer) => {
             await pc.setLocalDescription(offer);
             socketService.sendOffer(targetUser, offer);
             console.log('[WebRTC][ICE-RESTART] Restart offer sent to', targetUser);
+            iceRestartInProgressRef.current = false;
           }).catch((err) => {
             console.error('[WebRTC][ICE-RESTART] Failed to create restart offer:', err);
+            iceRestartInProgressRef.current = false;
             endCallInternalRef.current();
           });
         }
@@ -203,7 +219,12 @@ export const useWebRTCCall = ({
 
     // Handle renegotiation (triggered when tracks are added/removed mid-call)
     pc.onnegotiationneeded = async () => {
-      console.log('[WebRTC][PC] negotiationneeded, signalingState:', pc.signalingState, 'connectionState:', pc.connectionState);
+      console.log('[WebRTC][PC] negotiationneeded, signalingState:', pc.signalingState, 'connectionState:', pc.connectionState, 'iceRestart:', iceRestartInProgressRef.current);
+      // Skip if ICE restart is already sending an offer
+      if (iceRestartInProgressRef.current) {
+        console.log('[WebRTC][PC] Skipping renegotiation - ICE restart in progress');
+        return;
+      }
       // Only renegotiate if already connected (skip during initial setup)
       if (pc.connectionState !== 'connected') {
         console.log('[WebRTC][PC] Skipping renegotiation - not connected yet');
@@ -336,6 +357,8 @@ export const useWebRTCCall = ({
     setTargetUserId(null);
     setRemoteUsername(null);
     isInitiatorRef.current = false;
+    answerSentRef.current = false;
+    iceRestartInProgressRef.current = false;
     isCleaningUpRef.current = false;
   }, [stopLocalStream, removeTracksFromPC, closePeerConnection]);
 
@@ -520,12 +543,18 @@ export const useWebRTCCall = ({
       console.log('[WebRTC][RECEIVER] Step 3: Added', stream.getTracks().length, 'tracks to PC');
 
       // 4. Create and send answer (if we have remote description from offer)
-      if (pc.remoteDescription) {
-        console.log('[WebRTC][RECEIVER] Step 4: Creating answer (remoteDescription exists)');
+      console.log('[WebRTC][RACE] acceptCall: remoteDescription?', !!pc.remoteDescription, 'answerSent?', answerSentRef.current, 'signalingState:', pc.signalingState);
+      if (pc.remoteDescription && !answerSentRef.current) {
+        answerSentRef.current = true;
+        console.log('[WebRTC][RACE] acceptCall: Creating answer (remoteDescription exists, first answer)');
         const answer = await pc.createAnswer();
+        console.log('[WebRTC][RACE] acceptCall: Answer created, signalingState:', pc.signalingState);
         await pc.setLocalDescription(answer);
+        console.log('[WebRTC][RACE] acceptCall: setLocalDescription done, signalingState:', pc.signalingState);
         socketService.sendAnswer(callTarget, answer);
         console.log('[WebRTC][RECEIVER] Step 4: Answer sent to', callTarget);
+      } else if (answerSentRef.current) {
+        console.log('[WebRTC][RACE] acceptCall: Answer already sent, skipping');
       } else {
         console.log('[WebRTC][RECEIVER] Step 4: Answer will be created when offer arrives.');
       }
@@ -820,19 +849,33 @@ export const useWebRTCCall = ({
       }
 
       try {
+        // Renegotiation offer (already connected) — reset answerSent to allow new answer
+        const isRenegotiation = pc.connectionState === 'connected';
+        if (isRenegotiation) {
+          console.log('[WebRTC][RACE] handleWebRTCOffer: Renegotiation offer, resetting answerSent');
+          answerSentRef.current = false;
+        }
+
+        console.log('[WebRTC][RACE] handleWebRTCOffer: before setRemoteDescription, signalingState:', pc.signalingState);
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        console.log('[WebRTC][SIGNAL] Remote description set from offer. Pending ICE:', pendingIceCandidatesRef.current.length);
+        console.log('[WebRTC][RACE] handleWebRTCOffer: after setRemoteDescription, signalingState:', pc.signalingState, 'Pending ICE:', pendingIceCandidatesRef.current.length);
 
         // Process any pending ICE candidates
         await processPendingIceCandidates();
 
         // If we already have local stream (call already accepted), create answer
-        if (localStreamRef.current) {
-          console.log('[WebRTC][SIGNAL] Local stream exists (call already accepted), creating answer...');
+        console.log('[WebRTC][RACE] handleWebRTCOffer: localStream?', !!localStreamRef.current, 'answerSent?', answerSentRef.current);
+        if (localStreamRef.current && !answerSentRef.current) {
+          answerSentRef.current = true;
+          console.log('[WebRTC][RACE] handleWebRTCOffer: Creating answer (local stream exists, first answer)');
           const answer = await pc.createAnswer();
+          console.log('[WebRTC][RACE] handleWebRTCOffer: Answer created, signalingState:', pc.signalingState);
           await pc.setLocalDescription(answer);
+          console.log('[WebRTC][RACE] handleWebRTCOffer: setLocalDescription done, signalingState:', pc.signalingState);
           socketService.sendAnswer(data.from, answer);
           console.log('[WebRTC][SIGNAL] Answer created & sent (late offer scenario)');
+        } else if (answerSentRef.current) {
+          console.log('[WebRTC][RACE] handleWebRTCOffer: Answer already sent, skipping');
         } else {
           console.log('[WebRTC][SIGNAL] No local stream yet, answer will be created in acceptCall()');
         }
