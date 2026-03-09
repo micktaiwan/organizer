@@ -3,12 +3,13 @@ import { createMessage, getBotUser } from '../../services/messages.service.js';
 import { getRoomById, ensureUserInRoom, updateRoomLastMessage } from '../../services/rooms.service.js';
 import { IMcpToken } from '../../models/McpToken.js';
 import { IUser } from '../../models/User.js';
+import { User } from '../../models/index.js';
 import { McpToolDefinition, McpToolResult } from '../types.js';
 import { emitNewMessage } from '../../utils/socketEmit.js';
 
 export const sendMessageDefinition: McpToolDefinition = {
   name: 'send_message',
-  description: 'Send a text message to a chat room. Can send as yourself (admin) or as the bot account.',
+  description: 'Send a text message to a chat room. Can send as yourself (admin), as the bot account, or as any user by username.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -23,6 +24,10 @@ export const sendMessageDefinition: McpToolDefinition = {
       asBot: {
         type: 'boolean',
         description: 'If true, send as the bot account instead of as yourself. Default: false',
+      },
+      sendAs: {
+        type: 'string',
+        description: 'Username to send as (e.g. "pincer"). Overrides asBot. The user must exist.',
       },
     },
     required: ['roomId', 'content'],
@@ -39,6 +44,7 @@ export async function sendMessageHandler(
     const roomId = args.roomId as string;
     const content = args.content as string;
     const asBot = args.asBot as boolean || false;
+    const sendAs = args.sendAs as string | undefined;
 
     if (!roomId) {
       return {
@@ -72,7 +78,18 @@ export async function sendMessageHandler(
     let senderId = user._id;
     let senderName = user.displayName;
 
-    if (asBot) {
+    if (sendAs) {
+      const targetUser = await User.findOne({ username: sendAs });
+      if (!targetUser) {
+        return {
+          content: [{ type: 'text', text: `User "${sendAs}" not found` }],
+          isError: true,
+        };
+      }
+      senderId = targetUser._id as any;
+      senderName = targetUser.displayName;
+      await ensureUserInRoom(roomId, targetUser._id as any);
+    } else if (asBot) {
       const botUser = await getBotUser();
       if (!botUser) {
         return {
