@@ -35,6 +35,8 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 ## Authentification
 
 - La connexion accepte un nom d'utilisateur ou une adresse email
+- Server : les nouveaux comptes reçoivent automatiquement une clé API (token MCP) à l'inscription
+- Server : création de comptes utilisateur via l'API MCP (admin uniquement)
 
 ## Mises à jour
 
@@ -61,6 +63,7 @@ Les specs sans préfixe s'appliquent aux deux clients (Android + Desktop).
 - Desktop : indicateur visuel "Écran de [nom]" quand on reçoit un partage d'écran
 - Desktop : placeholder visible quand la caméra locale est désactivée
 - Desktop : la barre minimisée change de couleur (orange) pendant la reconnexion
+- Desktop : état "Connexion..." visible entre l'acceptation d'un appel et l'établissement de la connexion WebRTC
 
 ## User Switcher
 

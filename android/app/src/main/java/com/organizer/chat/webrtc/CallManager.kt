@@ -710,7 +710,7 @@ class CallManager(
             }
 
             PeerConnection.IceConnectionState.DISCONNECTED -> {
-                // Attempt ICE restart
+                // Attempt ICE restart (only initiator sends restart to avoid glare)
                 val currentState = _callState.value
                 when (currentState) {
                     is CallState.Connected -> {
@@ -719,7 +719,9 @@ class CallManager(
                             remoteUsername = currentState.remoteUsername,
                             withCamera = currentState.withCamera
                         )
-                        webRTCClient?.restartIce()
+                        if (isInitiator) {
+                            webRTCClient?.restartIce()
+                        }
                         startReconnectTimeout()
                     }
                     is CallState.Connecting -> {
@@ -729,7 +731,9 @@ class CallManager(
                             remoteUsername = currentState.remoteUsername,
                             withCamera = currentState.withCamera
                         )
-                        webRTCClient?.restartIce()
+                        if (isInitiator) {
+                            webRTCClient?.restartIce()
+                        }
                         startReconnectTimeout()
                     }
                     else -> {}
@@ -770,8 +774,10 @@ class CallManager(
 
         when (track) {
             is VideoTrack -> {
-                // If we already have a camera track, any new video track is the screen share
-                if (_remoteVideoTrack.value != null) {
+                // Use the signaled screen share track ID if available, otherwise fall back to heuristic
+                val isScreenShare = (remoteScreenTrackId != null && track.id() == remoteScreenTrackId) ||
+                    (remoteScreenTrackId == null && _remoteVideoTrack.value != null)
+                if (isScreenShare) {
                     _remoteScreenTrack.value = track
                     _isRemoteScreenSharing.value = true
                 } else {
