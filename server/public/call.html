@@ -224,6 +224,7 @@
   let callDuration = 0;
   let durationInterval = null;
   const pendingCandidates = [];
+  let iceRestartTimeout = null;
 
   // --- DOM ---
   const stateText = document.getElementById('state-text');
@@ -394,12 +395,45 @@
       if (pc.iceConnectionState === 'disconnected') {
         stateText.textContent = 'Reconnexion...';
         stateText.className = 'state';
+        // Only the caller initiates ICE restart (avoids glare)
+        if (mode === 'caller') {
+          try {
+            pc.restartIce();
+            pc.createOffer({ iceRestart: true }).then(async (offer) => {
+              await pc.setLocalDescription(offer);
+              socket.emit('webrtc:offer', { to: targetUserId, offer });
+              console.log('[BrowserCall] ICE restart offer sent');
+            }).catch((err) => {
+              console.error('[BrowserCall] ICE restart offer failed:', err);
+            });
+          } catch (err) {
+            console.error('[BrowserCall] restartIce() failed:', err);
+          }
+        }
+        // Timeout: end call if not reconnected within 10s
+        if (iceRestartTimeout) clearTimeout(iceRestartTimeout);
+        iceRestartTimeout = setTimeout(() => {
+          console.log('[BrowserCall] ICE restart timeout (10s)');
+          iceRestartTimeout = null;
+          stateText.textContent = 'Connexion perdue';
+          stateText.className = 'state error';
+          cleanup();
+        }, 10000);
       } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        // Clear ICE restart timeout on reconnection
+        if (iceRestartTimeout) {
+          clearTimeout(iceRestartTimeout);
+          iceRestartTimeout = null;
+        }
         if (callConnected) {
           stateText.textContent = 'Connecté';
           stateText.className = 'state connected';
         }
       } else if (pc.iceConnectionState === 'failed') {
+        if (iceRestartTimeout) {
+          clearTimeout(iceRestartTimeout);
+          iceRestartTimeout = null;
+        }
         stateText.textContent = 'Connexion échouée';
         stateText.className = 'state error';
       }
@@ -482,6 +516,7 @@
   }
 
   function cleanup() {
+    if (iceRestartTimeout) { clearTimeout(iceRestartTimeout); iceRestartTimeout = null; }
     if (durationInterval) clearInterval(durationInterval);
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());

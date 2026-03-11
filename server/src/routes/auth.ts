@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
-import { User } from '../models/index.js';
+import { User, McpToken } from '../models/index.js';
 import { generateToken, generateRefreshToken, verifyRefreshToken, revokeRefreshToken, authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { generateMcpToken } from '../mcp/auth.js';
 
 const router = Router();
 
@@ -55,13 +56,28 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
     await user.save();
 
-    // Générer les tokens
+    // Generate auth tokens
     const token = generateToken(user._id.toString(), user.username);
     const refreshToken = await generateRefreshToken(user._id.toString());
+
+    // Generate a personal MCP token
+    const { token: mcpRawToken, prefix, hash } = generateMcpToken();
+    const mcpToken = new McpToken({
+      token: hash,
+      tokenPrefix: prefix,
+      name: `auto-${user.username}`,
+      userId: user._id,
+      scopes: ['read', 'write'],
+      allowedTools: ['*'],
+      rateLimit: 60,
+      expiresAt: null,
+    });
+    await mcpToken.save();
 
     res.status(201).json({
       token,
       refreshToken,
+      apiKey: mcpRawToken,
       user: {
         id: user._id,
         username: user.username,

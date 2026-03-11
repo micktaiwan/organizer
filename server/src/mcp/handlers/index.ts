@@ -27,6 +27,8 @@ import { deleteSelfHandler, deleteSelfDefinition } from './delete-self.js';
 import { searchGoalsHandler, searchGoalsDefinition } from './search-goals.js';
 import { storeGoalHandler, storeGoalDefinition } from './store-goal.js';
 import { deleteGoalHandler, deleteGoalDefinition } from './delete-goal.js';
+// User handlers
+import { createUserHandler, createUserDefinition } from './create-user.js';
 
 type ToolHandler = (
   args: Record<string, unknown>,
@@ -60,6 +62,8 @@ const handlers: Record<string, ToolHandler> = {
   search_goals: searchGoalsHandler,
   store_goal: storeGoalHandler,
   delete_goal: deleteGoalHandler,
+  // User
+  create_user: createUserHandler,
 };
 
 const definitions: Record<string, McpToolDefinition> = {
@@ -87,6 +91,8 @@ const definitions: Record<string, McpToolDefinition> = {
   search_goals: searchGoalsDefinition,
   store_goal: storeGoalDefinition,
   delete_goal: deleteGoalDefinition,
+  // User
+  create_user: createUserDefinition,
 };
 
 const WRITE_TOOLS = [
@@ -94,6 +100,7 @@ const WRITE_TOOLS = [
   'store_memory', 'delete_memory',
   'store_self', 'delete_self',
   'store_goal', 'delete_goal',
+  'create_user',
 ];
 
 export function getToolDefinitions(token: IMcpToken): McpToolDefinition[] {

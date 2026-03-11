@@ -51,7 +51,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const dragStartRef = useRef({ x: 0, y: 0 });
   const pipStartRef = useRef({ x: 0, y: 0 });
 
-  const isActive = callState === 'calling' || callState === 'connected' || callState === 'reconnecting' || callState === 'browser-call';
+  const isActive = callState === 'calling' || callState === 'connecting' || callState === 'connected' || callState === 'reconnecting' || callState === 'browser-call';
 
   useEffect(() => {
     if (intervalRef.current) {
@@ -142,6 +142,8 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             <span className="call-minimized-username">{remoteUsername}</span>
             {callState === 'calling' ? (
               <span className="call-minimized-status">Appel...</span>
+            ) : callState === 'connecting' ? (
+              <span className="call-minimized-status">Connexion...</span>
             ) : callState === 'reconnecting' ? (
               <span className="call-minimized-status reconnecting">Reconnexion...{reconnectCountdown !== null ? ` (${reconnectCountdown}s)` : ''}</span>
             ) : (
@@ -171,7 +173,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       )}
 
       {/* Full overlay - always rendered (hidden when minimized to preserve video srcObject) */}
-      {callState === 'calling' && (
+      {(callState === 'calling' || callState === 'connecting') && (
         <div className="call-overlay" style={{ display: isMinimized ? 'none' : undefined }}>
           <div className="calling-info">
             <button
@@ -184,7 +186,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             <div className="caller-avatar pulse" style={{ fontSize: '3rem' }}>
               <Phone size={48} />
             </div>
-            <h3>Appel en cours...</h3>
+            <h3>{callState === 'connecting' ? 'Connexion...' : 'Appel en cours...'}</h3>
             <p>{remoteUsername || "En attente de réponse"}</p>
             <button className="end-call-btn" onClick={onEndCall}>
               Raccrocher

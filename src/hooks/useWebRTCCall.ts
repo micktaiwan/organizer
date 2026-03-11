@@ -276,7 +276,7 @@ export const useWebRTCCall = ({
 
   // Sync local video when camera is enabled
   useEffect(() => {
-    if ((callState === 'connected' || callState === 'calling') && localVideoRef.current && localStreamRef.current && isCameraEnabled) {
+    if ((callState === 'connected' || callState === 'connecting' || callState === 'calling') && localVideoRef.current && localStreamRef.current && isCameraEnabled) {
       localVideoRef.current.srcObject = localStreamRef.current;
     }
   }, [callState, isCameraEnabled]);
@@ -563,7 +563,7 @@ export const useWebRTCCall = ({
       socketService.acceptCall(callTarget, withCamera);
       console.log('[WebRTC][RECEIVER] Step 5: call:accept sent');
       setRemoteHasCamera(incomingCallWithCamera);
-      setCallState('connected');
+      setCallState('connecting');
     } catch (err) {
       console.error('[WebRTC][RECEIVER] Failed to accept call:', err);
       closePeerConnection();

@@ -14,8 +14,8 @@ android {
         applicationId = "com.organizer.chat"
         minSdk = 34
         targetSdk = 35
-        versionCode = 71
-        versionName = "1.11.3"
+        versionCode = 72
+        versionName = "1.11.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
