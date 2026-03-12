@@ -1090,6 +1090,30 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // On Linux, enable media stream and auto-approve media permissions in WebKitGTK
+            #[cfg(target_os = "linux")]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.with_webview(|webview| {
+                        use webkit2gtk::{WebViewExt, SettingsExt, PermissionRequestExt};
+
+                        let wv = webview.inner();
+
+                        // Enable media stream in settings
+                        if let Some(settings) = wv.settings() {
+                            settings.set_enable_media_stream(true);
+                            settings.set_enable_mediasource(true);
+                        }
+
+                        // Auto-approve all permission requests (media, notifications, etc.)
+                        wv.connect_permission_request(|_, request: &webkit2gtk::PermissionRequest| {
+                            request.allow();
+                            true
+                        });
+                    }).ok();
+                }
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {

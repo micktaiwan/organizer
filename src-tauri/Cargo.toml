@@ -30,3 +30,6 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-shell = "2"
 sysinfo = { version = "0.32", default-features = false, features = ["disk", "system"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
