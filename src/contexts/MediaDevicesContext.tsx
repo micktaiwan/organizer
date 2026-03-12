@@ -4,6 +4,9 @@ import { load } from '@tauri-apps/plugin-store';
 // Check if running in Tauri environment
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
+// Check if mediaDevices API is available (WebKitGTK on Linux doesn't support it)
+const hasMediaDevices = () => !!navigator.mediaDevices?.getUserMedia;
+
 interface MediaDevicePreferences {
   microphoneId: string | null;
   microphoneLabel: string | null;
@@ -99,6 +102,7 @@ export const MediaDevicesProvider: React.FC<MediaDevicesProviderProps> = ({ chil
 
   // Enumerate devices
   const refreshDevices = useCallback(async () => {
+    if (!hasMediaDevices()) return;
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
 
@@ -153,6 +157,11 @@ export const MediaDevicesProvider: React.FC<MediaDevicesProviderProps> = ({ chil
 
   // Request permission (needed to get device labels)
   const requestPermission = useCallback(async (): Promise<boolean> => {
+    if (!hasMediaDevices()) {
+      console.warn('[MediaDevices] mediaDevices API not available (WebKitGTK)');
+      setPermissionStatus('denied');
+      return false;
+    }
     try {
       // Request both audio and video to get all labels
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
@@ -176,6 +185,7 @@ export const MediaDevicesProvider: React.FC<MediaDevicesProviderProps> = ({ chil
 
   // Listen for device changes
   useEffect(() => {
+    if (!hasMediaDevices()) return;
     const handleDeviceChange = () => {
       console.log('[MediaDevices] Device change detected');
       refreshDevices();

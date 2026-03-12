@@ -3,6 +3,7 @@ import { CallState } from '../types';
 import { socketService } from '../services/socket';
 import { playRingtone, stopRingtone, playRingback, stopRingback } from '../utils/audio';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { Command } from '@tauri-apps/plugin-shell';
 
 // ICE servers configuration (STUN + TURN)
 const ICE_SERVERS: RTCConfiguration = {
@@ -26,8 +27,8 @@ interface UseWebRTCCallOptions {
   authToken?: string | null;
 }
 
-// Check if WebRTC is natively available
-const hasNativeWebRTC = () => typeof RTCPeerConnection !== 'undefined';
+// Check if WebRTC is natively available (WebKitGTK on Linux lacks both RTCPeerConnection and mediaDevices)
+const hasNativeWebRTC = () => typeof RTCPeerConnection !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
 export const useWebRTCCall = ({
   pcRef,
@@ -381,12 +382,23 @@ export const useWebRTCCall = ({
     const callUrl = `${serverUrl}/call#${hashParams}`;
     console.log('[WebRTC] Opening call in browser:', callUrl.replace(authToken, '***'));
     try {
-      await openUrl(callUrl);
+      // On Linux, Chrome blocks mediaDevices on HTTP origins. Launch with --unsafely-treat-insecure-origin-as-secure flag.
+      // Use a separate user-data-dir so the flag applies even if Chrome is already running.
+      const origin = new URL(serverUrl).origin;
+      const cmd = Command.create('exec-sh', ['-c', `google-chrome --user-data-dir=/tmp/organizer-call --unsafely-treat-insecure-origin-as-secure="${origin}" "${callUrl}"`]);
+      await cmd.spawn();
       setCallState('browser-call');
       setTargetUserId(params.target);
     } catch (err) {
-      console.error('[WebRTC] Failed to open browser:', err);
-      alert("Impossible d'ouvrir le navigateur.");
+      console.error('[WebRTC] Failed to open browser with shell, falling back to openUrl:', err);
+      try {
+        await openUrl(callUrl);
+        setCallState('browser-call');
+        setTargetUserId(params.target);
+      } catch (err2) {
+        console.error('[WebRTC] Failed to open browser:', err2);
+        alert("Impossible d'ouvrir le navigateur.");
+      }
     }
   }, [serverUrl, authToken]);
 
