@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { User, IUser, RefreshToken } from '../models/index.js';
+import { User, IUser, RefreshToken, McpToken } from '../models/index.js';
 
 export interface JwtPayload {
   userId: string;
@@ -46,6 +46,35 @@ export async function authMiddleware(
     }
 
     const token = authHeader.split(' ')[1];
+
+    // MCP token fallback: tokens starting with mcp_ are looked up in McpToken collection
+    if (token.startsWith('mcp_')) {
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const mcpToken = await McpToken.findOne({ token: tokenHash, isRevoked: false });
+
+      if (!mcpToken) {
+        res.status(401).json({ error: 'Token MCP invalide ou révoqué' });
+        return;
+      }
+
+      if (mcpToken.expiresAt && mcpToken.expiresAt < new Date()) {
+        res.status(401).json({ error: 'Token MCP expiré' });
+        return;
+      }
+
+      const user = await User.findById(mcpToken.userId).select('-passwordHash');
+      if (!user) {
+        res.status(401).json({ error: 'Utilisateur non trouvé' });
+        return;
+      }
+
+      req.user = user;
+      req.userId = user._id.toString();
+      next();
+      return;
+    }
+
+    // Standard JWT auth
     const secret = process.env.JWT_SECRET;
 
     if (!secret) {

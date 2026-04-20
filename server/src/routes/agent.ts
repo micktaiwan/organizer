@@ -25,7 +25,7 @@ router.get('/health', authMiddleware, async (_req: AuthRequest, res: Response): 
 });
 
 const askSchema = z.object({
-  question: z.string().min(1).max(500),
+  question: z.string().min(1),
 });
 
 // Build context JSON for the pet
