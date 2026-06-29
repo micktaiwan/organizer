@@ -1,5 +1,13 @@
 # Release Notes
 
+## 2026-06-29
+
+### Fix: in-app sound on every incoming message
+- `playNotificationSound()` (Web Audio beep) was dead code, never called
+- Notification sound relied on the OS server via `sendNotification({ sound: "default" })`, which GNOME/Linux ignores
+- Now plays an in-app beep on every received `message:new` (except own), regardless of window focus or desktop notification settings
+- File: `src/hooks/useRooms.ts`
+
 ## 2026-02-25
 
 ### WebRTC calls via external browser on Linux
