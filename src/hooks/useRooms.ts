@@ -6,6 +6,7 @@ import { Message, Reaction } from '../types';
 import { api } from '../services/api';
 import { socketService } from '../services/socket';
 import { showMessageNotification } from '../utils/notifications';
+import { playNotificationSound } from '../utils/audio';
 
 // Check if running in Tauri environment
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -378,7 +379,11 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       // Don't notify for own messages
       if (data.from === userId) return;
 
-      // Only notify when window is not focused (Tauri only)
+      // Always play an in-app sound for incoming messages (works regardless of
+      // the OS notification server, which ignores sounds on Linux/GNOME).
+      playNotificationSound();
+
+      // Only show a desktop notification when window is not focused (Tauri only)
       if (isTauri()) {
         const isFocused = await getCurrentWindow().isFocused();
         if (!isFocused && data.fromName && data.preview) {
