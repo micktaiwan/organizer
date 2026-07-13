@@ -7,6 +7,7 @@ import { Message } from '../../types';
 import { VideoRecorderState, VideoSource } from '../../hooks/useVideoRecorder';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
+import { compressImage, blobToDataUrl } from '../../utils/imageCompression';
 
 interface PendingFile {
   file: File;
@@ -28,6 +29,8 @@ interface RoomMessagingProps {
   cancelPendingImage: () => void;
   pendingFile: PendingFile | null;
   setPendingFile: (file: PendingFile | null) => void;
+  setPendingImage: (image: string | null) => void;
+  setPendingImageBlob: (blob: Blob | null) => void;
   isRecording: boolean;
   recordingDuration: number;
   startRecording: () => void;
@@ -76,6 +79,8 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
   cancelPendingImage,
   pendingFile,
   setPendingFile,
+  setPendingImage,
+  setPendingImageBlob,
   isRecording,
   recordingDuration,
   startRecording,
@@ -144,10 +149,22 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
           const mimeTypes: Record<string, string> = {
             'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
             'gif': 'image/gif', 'webp': 'image/webp', 'svg': 'image/svg+xml',
+            'heic': 'image/heic', 'heif': 'image/heif', 'bmp': 'image/bmp',
             'pdf': 'application/pdf', 'mp3': 'audio/mpeg', 'mp4': 'video/mp4',
             'wav': 'audio/wav', 'txt': 'text/plain', 'json': 'application/json',
           };
           const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+          // Images go through the image path (compress + preview), like paste/picker,
+          // so they render as an inline image instead of a generic file attachment.
+          if (mimeType.startsWith('image/')) {
+            const originalBlob = new Blob([data], { type: mimeType });
+            const { compressedFile } = await compressImage(originalBlob);
+            const dataUrl = await blobToDataUrl(compressedFile);
+            setPendingImage(dataUrl);
+            setPendingImageBlob(compressedFile);
+            return;
+          }
 
           const blob = new Blob([data], { type: mimeType });
           const file = new File([blob], fileName, { type: mimeType });
@@ -161,7 +178,7 @@ export const RoomMessaging: React.FC<RoomMessagingProps> = ({
     return () => {
       unlisten.then(fn => fn());
     };
-  }, [setPendingFile]);
+  }, [setPendingFile, setPendingImage, setPendingImageBlob]);
 
   // Use refs to avoid re-triggering effects when callbacks change reference
   const onTypingStartRef = useRef(onTypingStart);

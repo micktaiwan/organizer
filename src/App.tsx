@@ -524,6 +524,8 @@ function App() {
             }}
             pendingFile={pendingFile}
             setPendingFile={setPendingFile}
+            setPendingImage={setPendingImage}
+            setPendingImageBlob={setPendingImageBlob}
             isRecording={isRecording}
             recordingDuration={recordingDuration}
             startRecording={startRecording}
