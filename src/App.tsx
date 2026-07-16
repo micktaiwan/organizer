@@ -364,6 +364,12 @@ function App() {
           setActiveTab('chat');
           selectRoom(pendingRoomId);
         }
+        // Put the cursor directly in the room's message input on focus,
+        // so typing can start immediately without a manual click.
+        setTimeout(() => {
+          const el = document.querySelector<HTMLTextAreaElement>('.message-input-textarea');
+          el?.focus();
+        }, 0);
       }
     });
 

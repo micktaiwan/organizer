@@ -197,6 +197,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             </button>
             <textarea
               ref={textareaRef}
+              className="message-input-textarea"
               value={inputMessage}
               onChange={onInputChange}
               onKeyDown={handleKeyDown}
