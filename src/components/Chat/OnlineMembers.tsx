@@ -1,6 +1,7 @@
 import React from 'react';
 import { Room } from '../../services/api';
 import { useUserStatus } from '../../contexts/UserStatusContext';
+import { getMemberUser, getMemberUserId } from '../../utils/roomMembers';
 import './OnlineMembers.css';
 
 interface OnlineMembersProps {
@@ -13,9 +14,9 @@ export const OnlineMembers: React.FC<OnlineMembersProps> = ({ room, currentUserI
 
   const onlineHumans = room.members
     .map(member => {
-      const userId = typeof member.userId === 'object' ? member.userId.id || (member.userId as any)._id : member.userId;
-      const user = typeof member.userId === 'object' ? member.userId : null;
-      if (!user || userId === currentUserId || user.isBot) return null;
+      const userId = getMemberUserId(member.userId);
+      const user = getMemberUser(member.userId);
+      if (!user || !userId || userId === currentUserId || user.isBot) return null;
       const statusData = getStatus(userId);
       if (!statusData?.isOnline) return null;
       return {

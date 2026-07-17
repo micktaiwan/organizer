@@ -3,6 +3,7 @@ import { Phone, Video, Users, VolumeX, Clock } from 'lucide-react';
 import { Room } from '../../services/api';
 import { useUserStatus } from '../../contexts/UserStatusContext';
 import { UserStatus } from '../../types';
+import { getMemberUser, getMemberUserId } from '../../utils/roomMembers';
 
 const STATUS_LABELS: Record<UserStatus, string> = {
   available: 'Disponible',
@@ -63,8 +64,8 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
   }
 
   const otherMembers = room.members.filter(member => {
-    const userId = typeof member.userId === 'object' ? member.userId.id : member.userId;
-    return userId !== currentUserId;
+    const userId = getMemberUserId(member.userId);
+    return userId !== null && userId !== currentUserId;
   });
 
   if (otherMembers.length === 0) {
@@ -87,7 +88,7 @@ export const RoomMembers: React.FC<RoomMembersProps> = ({
           <div className="room-members-header">Appeler un membre</div>
           <div className="room-members-list">
             {otherMembers.map(member => {
-              const user = typeof member.userId === 'object' ? member.userId : null;
+              const user = getMemberUser(member.userId);
               if (!user) return null;
 
               // Get status from global cache instead of room data

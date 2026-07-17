@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { User, Contact, Message } from '../models/index.js';
+import { User, Contact, Message, Room } from '../models/index.js';
 import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth.js';
 import { runDigest } from '../memory/index.js';
 
@@ -156,10 +156,13 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    // Supprimer les données associées
+    // Supprimer les données associées.
+    // Les rooms doivent perdre le membre : un membre orphelin est renvoyé
+    // populé à null au client, qui plante au rendu.
     await Promise.all([
       Contact.deleteMany({ $or: [{ userId: user._id }, { contactId: user._id }] }),
       Message.deleteMany({ $or: [{ senderId: user._id }, { receiverId: user._id }] }),
+      Room.updateMany({ 'members.userId': user._id }, { $pull: { members: { userId: user._id } } }),
       user.deleteOne(),
     ]);
 
