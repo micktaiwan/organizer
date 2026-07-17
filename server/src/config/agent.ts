@@ -5,6 +5,7 @@ interface AgentConfig {
   anthropicApiKey: string;
   openaiApiKey?: string;
   agentModel?: string;
+  agentEffort?: string;
   digestModel?: string;
 }
 
@@ -47,11 +48,20 @@ export function getOpenAIApiKey(): string {
   return key;
 }
 
-const DEFAULT_AGENT_MODEL = 'claude-sonnet-4-5';
+const DEFAULT_AGENT_MODEL = 'claude-sonnet-5';
 const DEFAULT_DIGEST_MODEL = 'claude-sonnet-4-5-20250929';
+const DEFAULT_AGENT_EFFORT = 'medium';
 
 export function getAgentModel(): string {
   return getAgentConfig().agentModel || DEFAULT_AGENT_MODEL;
+}
+
+/**
+ * Reasoning effort for the agent, passed to the Agent SDK query options.
+ * Values: low | medium | high | xhigh | max (model-dependent).
+ */
+export function getAgentEffort(): string {
+  return getAgentConfig().agentEffort || DEFAULT_AGENT_EFFORT;
 }
 
 export function getDigestModel(): string {

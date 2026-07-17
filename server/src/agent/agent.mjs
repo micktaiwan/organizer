@@ -1,7 +1,7 @@
 // Main agent query logic
 import { query, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { log } from './logger.mjs';
-import { PET_SYSTEM_PROMPT } from './prompt.mjs';
+import { PET_SYSTEM_PROMPT, buildMetaKnowledge } from './prompt.mjs';
 import { userSessions, MAX_QUERIES_PER_SESSION } from './session.mjs';
 import { searchLiveContext, formatLiveContext } from './memory/live.mjs';
 import { respondTool, setRequestContext } from './tools/respond-tool.mjs';
@@ -103,10 +103,13 @@ async function runQuery(params) {
     log('info', `[Agent] 📡 Live context: ${liveMessages.length} relevant messages`);
   }
 
-  // Build system prompt with live context if available
-  const systemPromptWithContext = liveContext
-    ? `${PET_SYSTEM_PROMPT}\n\n${liveContext}`
-    : PET_SYSTEM_PROMPT;
+  // Build system prompt: persona + meta-knowledge + live context if available
+  const agentModel = process.env.AGENT_MODEL || 'claude-sonnet-5';
+  const agentEffort = process.env.AGENT_EFFORT || 'medium';
+  const metaKnowledge = buildMetaKnowledge({ model: agentModel, effort: agentEffort });
+  const systemPromptWithContext = [PET_SYSTEM_PROMPT, metaKnowledge, liveContext]
+    .filter(Boolean)
+    .join('\n\n');
 
   // Get or create session for this user
   const userSession = userSessions.get(userId) || { sessionId: null, lastActivity: Date.now(), queryCount: 0 };
@@ -139,7 +142,11 @@ async function runQuery(params) {
     }
 
     const options = {
-      model: process.env.AGENT_MODEL || 'claude-sonnet-4-5',
+      model: agentModel,
+      // Adaptive thinking + effort: the modern controls. maxThinkingTokens is
+      // deprecated and rejected by Sonnet 5.
+      thinking: { type: 'adaptive' },
+      effort: agentEffort,
       systemPrompt: systemPromptWithContext,
       maxTurns: 10,
       mcpServers,
