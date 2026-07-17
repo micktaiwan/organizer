@@ -20,9 +20,6 @@ services:
       - apk_data:/app/public/apk
       - logs_data:/app/logs
       - ./agent-config.json:/app/agent-config.json:ro
-    depends_on:
-      mongodb:
-        condition: service_started
     networks:
       - organizer-network
     healthcheck:
@@ -36,38 +33,11 @@ services:
         max-size: "100m"
         max-file: "3"
 
-  mongodb:
-    image: mongo:5
-    container_name: organizer-mongodb
-    restart: unless-stopped
-    volumes:
-      - mongodb_data:/data/db
-    networks:
-      - organizer-network
-    logging:
-      driver: json-file
-      options:
-        max-size: "100m"
-        max-file: "3"
-
-  qdrant:
-    image: qdrant/qdrant:v1.16.3
-    container_name: organizer-qdrant
-    restart: unless-stopped
-    security_opt:
-      - seccomp:unconfined
-    volumes:
-      - qdrant_data:/qdrant/storage
-    networks:
-      - organizer-network
-    environment:
-      - QDRANT__SERVICE__GRPC_PORT=6334
-      - QDRANT__SERVICE__HTTP_PORT=6333
-    logging:
-      driver: json-file
-      options:
-        max-size: "100m"
-        max-file: "3"
+# mongodb & qdrant are NOT declared here: their containers are managed by the
+# separate `infra` project (/opt/infra/docker-compose.yml) with the real config
+# (mongo replSet + TLS + keyfile). This project stays the owner of the network
+# and the volumes below, which infra references as external. Declaring the
+# containers here too caused a name conflict that silently aborted every deploy.
 
 networks:
   organizer-network:

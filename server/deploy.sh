@@ -34,7 +34,11 @@ rsync -avz --exclude 'node_modules' --exclude 'dist' --exclude '.env' \
 
 # 2. Commandes sur le serveur
 echo "🐳 Build et restart des containers..."
+# set -e : tout échec côté serveur (dont le build/up de l'api) fait sortir le
+# heredoc en erreur, et ssh renvoie ce code non-nul — on ne veut plus d'un
+# "Déploiement terminé" affiché alors que rien n'a été déployé.
 ssh $SERVER << 'EOF'
+  set -e
   cd /var/www/organizer/server
 
   # Créer .env si n'existe pas
@@ -44,8 +48,19 @@ ssh $SERVER << 'EOF'
     echo "📝 Fichier .env créé"
   fi
 
-  # Build et restart (sudo pour docker)
-  sudo docker compose -f docker-compose.prod.yml up -d --build
+  # Build et (re)start uniquement l'api. mongo/qdrant sont gérés par le projet
+  # infra (/opt/infra) ; --no-deps empêche compose de tenter de recréer leurs
+  # conteneurs, ce qui échouait sur un conflit de nom.
+  sudo docker compose -f docker-compose.prod.yml up -d --build --no-deps api
+
+  # Vérifier que l'api est bien "up" (le build peut réussir mais le conteneur
+  # crasher au démarrage — on veut le savoir ici, pas dans l'app).
+  sleep 5
+  if ! sudo docker compose -f docker-compose.prod.yml ps api | grep -q "Up"; then
+    echo "❌ Le conteneur api n'est pas Up après le déploiement :"
+    sudo docker compose -f docker-compose.prod.yml logs --tail 30 api
+    exit 1
+  fi
 
   # Status
   sudo docker compose -f docker-compose.prod.yml ps
@@ -55,6 +70,20 @@ ssh $SERVER << 'EOF'
   sudo docker image prune -f
   sudo docker builder prune -f
 EOF
+SSH_RC=$?
 
-echo "✅ Déploiement terminé!"
-echo "🔗 API: http://51.210.150.25:3001/health"
+# Propager l'échec distant : ne pas annoncer un succès si le heredoc a échoué.
+if [ "$SSH_RC" -ne 0 ]; then
+  echo "❌ Déploiement échoué (code $SSH_RC, voir les logs ci-dessus)."
+  exit 1
+fi
+
+# Sanity check depuis la machine locale : l'API répond-elle vraiment ?
+echo "🔎 Vérification de /health..."
+if curl -fsS --max-time 15 http://51.210.150.25:3001/health > /dev/null; then
+  echo "✅ Déploiement terminé!"
+  echo "🔗 API: http://51.210.150.25:3001/health"
+else
+  echo "❌ /health ne répond pas après le déploiement."
+  exit 1
+fi
