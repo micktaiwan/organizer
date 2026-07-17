@@ -20,6 +20,7 @@ public/uploads/images/
 
 # Credentials
 .credentials
+.credentials-*
 agent-config.json
 
 # MacOS

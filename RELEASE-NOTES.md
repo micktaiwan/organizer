@@ -1,5 +1,13 @@
 # Release Notes
 
+## 2026-07-17
+
+### Fix: gitignore des fichiers credentials du serveur
+- Le pattern `.credentials` ne couvrait pas `.credentials-bot` / `.credentials-bot2` (fichiers de secrets du bot) → risque de commit accidentel
+- Ajout de `.credentials-*` dans `server/.gitignore`
+- Fichier : `server/.gitignore`
+- Contexte : création d'un compte bot (`davidfmbot`) via `POST /auth/register` pour envoyer des messages par API (l'ancien compte `testbot` renvoie une 500 au login en prod)
+
 ## 2026-06-29
 
 ### Fix: in-app sound on every incoming message
