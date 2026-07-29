@@ -1004,9 +1004,20 @@ pub fn run() {
                 ],
             )?;
 
+            // On Linux the tray icon is passed to the panel as a file path. The default
+            // dir is the shared `$XDG_RUNTIME_DIR/tray-icon`, and the file name only
+            // contains a process-local counter, so two Tauri apps running at the same time
+            // write to the very same path and the panel renders one app's icon for both.
+            // Use an app-specific dir to keep the paths distinct.
+            let tray_temp_dir = std::env::var_os("XDG_RUNTIME_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir)
+                .join("organizer-tray-icon");
+
             // Create tray icon with ID "main"
             let _tray = TrayIconBuilder::with_id("main")
                 .icon(icon)
+                .temp_dir_path(&tray_temp_dir)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
