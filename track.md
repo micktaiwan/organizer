@@ -4,7 +4,7 @@
 |--------|-------|------------------|
 | 🔄 En cours | Skill `/eko` — parler à Eko depuis Claude Code | Créer le skill `~/.claude/skills/eko/`, récupérer/créer un token MCP, tester le flow |
 | 🔄 En cours | Token MCP auto au signup | Décider si on relaxe le check admin dans `mcpAuthMiddleware` (auth.ts:86) pour que les tokens non-admin fonctionnent |
-| ⏸️ En attente | `deploy.sh` échoue en silence | Conflit de nom `organizer-mongodb` (mongo/qdrant sous le projet compose `infra`, redéclarés dans `docker-compose.prod.yml`) fait planter le `compose up` ; le `tail` masque l'erreur → l'api n'est jamais recréée. Contournement : `up -d --build --no-deps api`. Fix → tâche Panorama (Vibe Coding Ideas) |
+| ✅ Terminé | `deploy.sh` échoue en silence | Réglé (commit 330c6a1) : mongo/qdrant retirés du compose `server` (gérés par `/opt/infra`), `up --no-deps api`, `set -e` + check `/health` avant d'annoncer le succès. Vérifié end-to-end |
 
 ## Détails
 

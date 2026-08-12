@@ -12,8 +12,9 @@ This project is a "vibe coding" experiment: building a real-time chat applicatio
 |-----------|------------|-----------|
 | Framework | **Tauri 2.0** | Lightweight (~5MB), fast, secure. Uses native OS webview instead of bundling Chromium. |
 | Frontend | React + TypeScript | Modern, widely supported by AI coding tools |
-| Backend | Rust (Tauri core) | Memory-safe, high performance |
-| Real-time | Firebase / Supabase | Zero backend to maintain, built-in real-time sync |
+| Desktop core | Rust (Tauri core) | Memory-safe, high performance |
+| Server | Node.js + Express + MongoDB (Mongoose) | Self-hosted API, full control over data and logic |
+| Real-time | Socket.io | Bidirectional real-time sync over WebSockets |
 
 ### Why Tauri over Electron?
 
