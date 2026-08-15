@@ -5,7 +5,7 @@ import { useEkoAuth } from '../../hooks/useEkoAuth';
 import './LogPanel.css';
 
 const LOCAL_SERVER_URL = 'http://localhost:3001';
-const PROD_SERVER_URL = 'http://51.210.150.25:3001';
+const PROD_SERVER_URL = 'https://organizer.mickaelfm.me';
 
 interface LogEntry {
   id: string;

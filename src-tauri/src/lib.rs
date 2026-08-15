@@ -669,7 +669,7 @@ async fn stream_server_status(app: tauri::AppHandle) -> Result<(), String> {
 
     // Spawn SSH process
     let child = Command::new("ssh")
-        .args(["-o", "ConnectTimeout=10", "ubuntu@51.210.150.25", "/home/ubuntu/server-status.sh"])
+        .args(["-o", "ConnectTimeout=10", "ubuntu@51.178.29.205", "/home/ubuntu/server-status.sh"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

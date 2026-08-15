@@ -11,7 +11,7 @@ const ICE_SERVERS: RTCConfiguration = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     {
-      urls: 'turn:51.210.150.25:3478',
+      urls: 'turn:51.178.29.205:3478',
       username: 'organizer',
       credential: 'SecurePassword123!',
     },

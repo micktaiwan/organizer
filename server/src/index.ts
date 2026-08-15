@@ -183,6 +183,11 @@ app.get('/call', (_req, res) => {
   res.sendFile('call.html', { root: path.join(process.cwd(), 'public') });
 });
 
+// Landing page: Organizer has no web front-end, this host is the API only
+app.get('/', (_req, res) => {
+  res.sendFile('index.html', { root: path.join(process.cwd(), 'public') });
+});
+
 // 404 handler
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route non trouvée' });

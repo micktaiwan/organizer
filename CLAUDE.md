@@ -23,6 +23,16 @@ Working directory may be a subfolder. Use absolute paths for scripts:
 ### Android versioning
 **DO NOT** increment `versionCode`/`versionName` unless explicitly requested for a release.
 
+### Server static files - CRITICAL
+
+`server/Dockerfile` copies files from `server/public/` **one by one** (`COPY public/call.html`,
+`COPY public/index.html`), it never copies the whole directory: the rest of `public/` is runtime
+data (uploads, apk) mounted as volumes. Adding a new static page therefore means editing the
+Dockerfile too, otherwise the file exists locally, the route is deployed, and it 404s in prod.
+
+`GET /` serves `public/index.html`, a landing page stating that Organizer has no web front-end.
+It sits just before the catch-all 404 in `server/src/index.ts`.
+
 ### Bash commands (macOS)
 
 **Chain commands with `&&` or `;`** - never use newlines to separate commands:
@@ -60,10 +70,10 @@ ps aux | grep "organizer/server.*tsx"
 
 ```bash
 # SSH server
-ssh ubuntu@51.210.150.25 "docker logs organizer-api --tail 50"
+ssh ubuntu@51.178.29.205 "docker logs organizer-api --tail 50"
 
 # MongoDB (container name: organizer-mongodb)
-ssh ubuntu@51.210.150.25 "docker exec organizer-mongodb mongosh organizer --quiet --eval '<query>'"
+ssh ubuntu@51.178.29.205 "docker exec organizer-mongodb mongosh organizer --quiet --eval '<query>'"
 
 # Build Android (macOS)
 JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
@@ -90,7 +100,7 @@ powershell.exe -Command "& 'C:\Users\dfm76\AppData\Local\Android\Sdk\platform-to
 **Two independent server connections** - do NOT confuse them:
 
 1. **Main app connection** (`AuthContext` + `socketService`)
-   - Always connected to PROD (`51.210.150.25:3001`)
+   - Always connected to PROD (`51.178.29.205:3001`)
    - Used for: chat, rooms, notes, user status
    - Controlled by: `ServerConfigContext.selectedServer`
 

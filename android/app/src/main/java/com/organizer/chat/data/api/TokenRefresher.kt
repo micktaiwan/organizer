@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 object TokenRefresher {
 
     private const val TAG = "TokenRefresher"
-    private const val BASE_URL = "http://51.210.150.25:3001/"
+    private const val BASE_URL = "https://organizer.mickaelfm.me/"
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)

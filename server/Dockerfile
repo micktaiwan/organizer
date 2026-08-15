@@ -41,6 +41,9 @@ COPY --from=builder /app/dist ./dist
 # Copy standalone call page for browser-based WebRTC
 COPY public/call.html ./public/call.html
 
+# Copy the landing page served on / (Organizer has no web front-end)
+COPY public/index.html ./public/index.html
+
 # Create upload directories, logs directory, and set ownership
 RUN mkdir -p /app/public/uploads/images /app/public/uploads/files /app/public/uploads/videos /app/public/apk /app/logs && \
     chown -R appuser:appgroup /app

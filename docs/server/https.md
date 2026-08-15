@@ -2,7 +2,7 @@
 
 ## État actuel
 
-Le serveur prod (`51.210.150.25:3001`) utilise **HTTP** (non chiffré).
+Le serveur prod (`51.178.29.205:3001`) utilise **HTTP** (non chiffré).
 
 Pour que l'app desktop macOS puisse se connecter, une exception ATS (App Transport Security) est configurée dans `src-tauri/Info.plist` :
 
@@ -25,7 +25,7 @@ Pour que l'app desktop macOS puisse se connecter, une exception ATS (App Transpo
 ### 1. Installer Certbot sur le VPS
 
 ```bash
-ssh ubuntu@51.210.150.25
+ssh ubuntu@51.178.29.205
 sudo apt update
 sudo apt install certbot
 ```

@@ -17,7 +17,7 @@ class WebRTCClient(
         private val ICE_SERVERS = listOf(
             PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
             PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
-            PeerConnection.IceServer.builder("turn:51.210.150.25:3478")
+            PeerConnection.IceServer.builder("turn:51.178.29.205:3478")
                 .setUsername("organizer")
                 .setPassword("SecurePassword123!")
                 .createIceServer()

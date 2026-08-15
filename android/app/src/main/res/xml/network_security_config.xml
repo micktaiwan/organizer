@@ -2,6 +2,6 @@
 <network-security-config>
     <!-- Allow cleartext (HTTP) traffic to the chat server -->
     <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">51.210.150.25</domain>
+        <domain includeSubdomains="true">51.178.29.205</domain>
     </domain-config>
 </network-security-config>

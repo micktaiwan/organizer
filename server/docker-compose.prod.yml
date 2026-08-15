@@ -6,6 +6,14 @@ services:
     ports:
       - "3001:3001"
     environment:
+      # Derriere le proxy partage, en plus du port publie. Les deux chemins
+      # coexistent volontairement : les clients deja installes portent
+      # l'IP:3001 en dur, ils continuent de marcher pendant qu'ils migrent
+      # vers https://organizer.mickaelfm.me un par un.
+      - VIRTUAL_HOST=organizer.mickaelfm.me
+      - VIRTUAL_PORT=3001
+      - LETSENCRYPT_HOST=organizer.mickaelfm.me
+      - LETSENCRYPT_EMAIL=faivrem@gmail.com
       - NODE_ENV=production
       - PORT=3001
       - MONGODB_URI=mongodb://organizer:73dbed3c1c89dd83ff8a057619681c69@mongodb:27017/organizer?authSource=admin&directConnection=true

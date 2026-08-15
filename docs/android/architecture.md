@@ -228,7 +228,7 @@ Le `ChatService` est passé en paramètre au NavGraph pour être accessible dans
 L'URL du serveur est hardcodée dans `SocketManager.kt` et `ApiClient.kt`:
 
 ```kotlin
-private const val SERVER_URL = "http://51.210.150.25:3001"
+private const val SERVER_URL = "https://organizer.mickaelfm.me"
 ```
 
 Pour le développement local, modifier cette valeur et s'assurer que `network_security_config.xml` autorise le trafic HTTP en clair.

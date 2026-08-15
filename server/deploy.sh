@@ -4,7 +4,7 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Configuration
-SERVER="ubuntu@51.210.150.25"
+SERVER="ubuntu@51.178.29.205"
 REMOTE_PATH="/var/www/organizer"
 COMPOSE_FILE="docker-compose.prod.yml"
 
@@ -80,9 +80,9 @@ fi
 
 # Sanity check depuis la machine locale : l'API répond-elle vraiment ?
 echo "🔎 Vérification de /health..."
-if curl -fsS --max-time 15 http://51.210.150.25:3001/health > /dev/null; then
+if curl -fsS --max-time 15 https://organizer.mickaelfm.me/health > /dev/null; then
   echo "✅ Déploiement terminé!"
-  echo "🔗 API: http://51.210.150.25:3001/health"
+  echo "🔗 API: https://organizer.mickaelfm.me/health"
 else
   echo "❌ /health ne répond pas après le déploiement."
   exit 1

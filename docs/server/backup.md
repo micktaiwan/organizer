@@ -7,7 +7,7 @@
 - **Données** : base `organizer` (chats, users, rooms, notes, etc.)
 - **Non inclus** : Qdrant (embeddings, reconstituables), fichiers uploadés
 
-## Fichiers sur le serveur (51.210.150.25)
+## Fichiers sur le serveur (51.178.29.205)
 
 | Fichier | Rôle |
 |---------|------|
@@ -51,7 +51,7 @@ echo "Backup done: ${FILENAME} ($(du -h "${BACKUP_DIR}/${FILENAME}" | cut -f1))"
 
 ```bash
 # Copier le backup en local
-scp ubuntu@51.210.150.25:/opt/backups/mongodump_organizer_YYYY-MM-DD.gz .
+scp ubuntu@51.178.29.205:/opt/backups/mongodump_organizer_YYYY-MM-DD.gz .
 
 # Restaurer dans le container
 cat mongodump_organizer_YYYY-MM-DD.gz | docker exec -i organizer-mongodb mongorestore --gzip --archive --drop
@@ -61,8 +61,8 @@ cat mongodump_organizer_YYYY-MM-DD.gz | docker exec -i organizer-mongodb mongore
 
 ```bash
 # Dernier backup
-ssh ubuntu@51.210.150.25 "ls -lh /opt/backups/"
+ssh ubuntu@51.178.29.205 "ls -lh /opt/backups/"
 
 # Log
-ssh ubuntu@51.210.150.25 "tail -5 /var/log/backup-organizer.log"
+ssh ubuntu@51.178.29.205 "tail -5 /var/log/backup-organizer.log"
 ```

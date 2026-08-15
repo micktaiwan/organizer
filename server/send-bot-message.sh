@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/.credentials-bot"
 
-SERVER_URL="http://51.210.150.25:3001"
+SERVER_URL="https://organizer.mickaelfm.me"
 ROOM_NAME="$1"
 MESSAGE="$2"
 

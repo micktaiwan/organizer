@@ -18,7 +18,7 @@ module.exports = {
     production: {
       // Connexion SSH
       user: 'root',
-      host: '51.210.150.25',
+      host: '51.178.29.205',
       ref: 'origin/main',
 
       // Repo Git

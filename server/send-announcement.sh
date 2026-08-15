@@ -7,7 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/.credentials"
 
-SERVER_URL="http://51.210.150.25:3001"
+SERVER_URL="https://organizer.mickaelfm.me"
 MESSAGE="$1"
 
 if [ -z "$MESSAGE" ]; then

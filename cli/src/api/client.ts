@@ -1,6 +1,6 @@
 import { AuthResponse, Message, Room, User } from '../types.js';
 
-const DEFAULT_SERVER = 'http://51.210.150.25:3001';
+const DEFAULT_SERVER = 'https://organizer.mickaelfm.me';
 
 class ApiClient {
   private baseUrl: string;

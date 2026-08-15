@@ -72,7 +72,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Auth
   user: null,
   token: null,
-  server: 'http://51.210.150.25:3001',
+  server: 'https://organizer.mickaelfm.me',
 
   // View state
   view: 'login',

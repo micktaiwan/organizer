@@ -371,7 +371,7 @@ if (sender.username == "eko") {
 
 1. **Migration DB** : Créer user Eko sur le serveur prod
    ```bash
-   ssh ubuntu@51.210.150.25
+   ssh ubuntu@51.178.29.205
    cd /var/www/organizer/server
    npx tsx src/scripts/create-eko-user.ts
    ```

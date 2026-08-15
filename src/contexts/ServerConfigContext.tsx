@@ -52,7 +52,7 @@ const ServerConfigContext = createContext<ServerConfigContextType | null>(null);
 
 const DEFAULT_SERVERS: ServerConfig[] = [
   { id: 'local', name: 'Local', url: 'http://localhost:3001' },
-  { id: 'production', name: 'Production', url: 'http://51.210.150.25:3001' },
+  { id: 'production', name: 'Production', url: 'https://organizer.mickaelfm.me' },
 ];
 
 type StoreInterface = Store | BrowserStore;

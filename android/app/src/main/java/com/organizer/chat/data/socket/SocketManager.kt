@@ -16,7 +16,7 @@ class SocketManager(private val tokenManager: TokenManager) {
 
     companion object {
         private const val TAG = "SocketManager"
-        private const val SERVER_URL = "http://51.210.150.25:3001"
+        private const val SERVER_URL = "https://organizer.mickaelfm.me"
     }
 
     private var socket: Socket? = null

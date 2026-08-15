@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 object ApiClient {
 
-    private const val BASE_URL = "http://51.210.150.25:3001/"
+    private const val BASE_URL = "https://organizer.mickaelfm.me/"
 
     private var retrofit: Retrofit? = null
     private var apiService: ApiService? = null

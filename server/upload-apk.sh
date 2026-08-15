@@ -13,7 +13,7 @@ if [ -f "$(dirname "$0")/.credentials" ]; then
 fi
 
 # Configuration
-SERVER_URL="${APK_SERVER_URL:-http://51.210.150.25:3001}"
+SERVER_URL="${APK_SERVER_URL:-https://organizer.mickaelfm.me}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -32,7 +32,7 @@ usage() {
     echo "  release-notes Optional release notes (string)"
     echo ""
     echo "Environment variables:"
-    echo "  APK_SERVER_URL   Server URL (default: http://51.210.150.25:3001)"
+    echo "  APK_SERVER_URL   Server URL (default: https://organizer.mickaelfm.me)"
     echo ""
     echo "Requires .credentials file with ADMIN_USERNAME and ADMIN_PASSWORD"
     exit 1

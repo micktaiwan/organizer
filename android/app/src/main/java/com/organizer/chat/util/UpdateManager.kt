@@ -23,7 +23,7 @@ class UpdateManager(private val context: Context) {
 
     companion object {
         private const val TAG = "UpdateManager"
-        private const val BASE_URL = "http://51.210.150.25:3001"
+        private const val BASE_URL = "https://organizer.mickaelfm.me"
         private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
     }
 
