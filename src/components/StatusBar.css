@@ -33,13 +33,19 @@
   color: #4CAF50;
 }
 
-.status-bar-item.connection.disconnected,
+.status-bar-item.connection.reconnecting,
 .status-bar-item.connection.connecting {
   color: #FF9800;
 }
 
+.status-bar-item.connection.disconnected,
 .status-bar-item.connection.error {
   color: #f44336;
+  font-weight: 600;
+}
+
+.status-bar-item.connection.clickable {
+  cursor: pointer;
 }
 
 .status-bar-item.ping {
@@ -1320,11 +1326,12 @@ button.rate-limit-item.ready {
     color: #66BB6A;
   }
 
-[data-theme="dark"] .status-bar-item.connection.disconnected,
+[data-theme="dark"] .status-bar-item.connection.reconnecting,
 [data-theme="dark"] .status-bar-item.connection.connecting {
     color: #FFA726;
   }
 
+[data-theme="dark"] .status-bar-item.connection.disconnected,
 [data-theme="dark"] .status-bar-item.connection.error {
     color: #EF5350;
   }

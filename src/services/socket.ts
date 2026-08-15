@@ -3,13 +3,30 @@ import { getApiBaseUrl } from './api';
 
 type SocketEventHandler = (...args: unknown[]) => void;
 
+// Watchdog: les timers JS sont gelés pendant la veille système, le backoff de
+// socket.io peut donc ne jamais se redéclencher au réveil. On re-vérifie l'état
+// réel à intervalle fixe (l'interval repart immédiatement au réveil).
+const WATCHDOG_INTERVAL_MS = 15000;
+
 class SocketService {
   private socket: Socket | null = null;
   private eventHandlers: Map<string, Set<SocketEventHandler>> = new Map();
+  private token: string | null = null;
+  private watchdogId: ReturnType<typeof setInterval> | null = null;
+  private lifecycleBound = false;
 
   connect(token: string) {
-    if (this.socket?.connected) {
-      console.log('Socket already connected, skipping');
+    this.token = token;
+
+    // Socket déjà créé : on réutilise l'instance (pas de doublon de handlers)
+    if (this.socket) {
+      this.socket.auth = { token, clientType: 'desktop' };
+      if (this.socket.connected) {
+        console.log('Socket already connected, skipping');
+        return;
+      }
+      console.log('Socket exists but disconnected, reconnecting');
+      this.socket.connect();
       return;
     }
 
@@ -20,7 +37,10 @@ class SocketService {
       auth: { token, clientType: 'desktop' },
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 10,
+      reconnectionDelayMax: 10000,
+      // Jamais d'abandon définitif : une coupure de plus de ~40 s laissait
+      // l'app muette jusqu'au redémarrage (10 tentatives puis silence).
+      reconnectionAttempts: Infinity,
       // Force polling first to diagnose WebSocket issues
       transports: ['polling', 'websocket'],
     });
@@ -34,6 +54,11 @@ class SocketService {
     this.socket.on('disconnect', (reason) => {
       console.log('Socket disconnected:', reason);
       this.emit('internal:disconnected', reason);
+      // 'io server disconnect' (déconnexion forcée par le serveur, ex. redéploiement)
+      // ne déclenche PAS de reconnexion automatique : on la relance nous-mêmes.
+      if (reason === 'io server disconnect') {
+        this.forceReconnect();
+      }
     });
 
     this.socket.on('connect_error', (error) => {
@@ -43,6 +68,20 @@ class SocketService {
       }
       this.emit('internal:error', error.message);
     });
+
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      this.emit('internal:reconnecting', attempt);
+    });
+
+    this.socket.io.on('reconnect_failed', () => {
+      console.error('Socket reconnection gave up');
+      this.emit('internal:reconnect-failed');
+      // Filet de sécurité : le watchdog reprendra la main.
+      this.forceReconnect();
+    });
+
+    this.bindLifecycle();
+    this.startWatchdog();
 
     // Re-emit events to registered handlers
     const events = [
@@ -99,15 +138,73 @@ class SocketService {
   }
 
   disconnect() {
+    this.stopWatchdog();
+    // Sans ça, les listeners online/focus relanceraient une connexion avec
+    // l'ancien token après un logout.
+    this.token = null;
     if (this.socket) {
+      this.socket.removeAllListeners();
+      this.socket.io.removeAllListeners();
       this.socket.disconnect();
       this.socket = null;
     }
   }
 
   updateAuth(token: string) {
+    this.token = token;
     if (this.socket) {
       this.socket.auth = { token, clientType: 'desktop' };
+    }
+  }
+
+  /**
+   * Relance une tentative immédiate sans attendre le backoff en cours.
+   * Idempotent : sans effet si le socket est déjà connecté ou en cours d'ouverture.
+   */
+  forceReconnect() {
+    if (!this.token) return;
+    if (!this.socket) {
+      this.connect(this.token);
+      return;
+    }
+    if (this.socket.connected) return;
+    this.socket.connect();
+  }
+
+  /**
+   * Reconnexion proactive sur les signaux OS/navigateur : retour du réseau,
+   * fenêtre remise au premier plan, sortie de veille.
+   */
+  private bindLifecycle() {
+    if (this.lifecycleBound) return;
+    this.lifecycleBound = true;
+
+    const wake = (source: string) => {
+      if (this.socket?.connected) return;
+      console.log(`Socket wake-up (${source}), forcing reconnect`);
+      this.forceReconnect();
+    };
+
+    window.addEventListener('online', () => wake('online'));
+    window.addEventListener('focus', () => wake('focus'));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') wake('visible');
+    });
+  }
+
+  private startWatchdog() {
+    if (this.watchdogId !== null) return;
+    this.watchdogId = setInterval(() => {
+      if (this.socket && !this.socket.connected) {
+        this.forceReconnect();
+      }
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
+  private stopWatchdog() {
+    if (this.watchdogId !== null) {
+      clearInterval(this.watchdogId);
+      this.watchdogId = null;
     }
   }
 

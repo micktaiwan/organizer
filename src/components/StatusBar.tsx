@@ -91,7 +91,7 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
   const [nextRunMinutes, setNextRunMinutes] = useState<number | null>(null);
   const [showDisabledToast, setShowDisabledToast] = useState(false);
   const [togglingEko, setTogglingEko] = useState(false);
-  const { isConnected, status } = useSocketConnection();
+  const { isConnected, status, reconnectAttempt, reconnect } = useSocketConnection();
   const { statuses } = useUserStatus();
   const { user, token } = useAuth();
   const pingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -521,10 +521,24 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
         </span>
       </Tooltip>
 
-      <Tooltip content="État de la connexion au serveur" position="top">
-        <span className={`status-bar-item connection ${status}`}>
+      <Tooltip
+        content={isConnected ? "État de la connexion au serveur" : "Cliquer pour forcer une reconnexion"}
+        position="top"
+      >
+        <span
+          className={`status-bar-item connection ${status}${isConnected ? '' : ' clickable'}`}
+          onClick={isConnected ? undefined : reconnect}
+        >
           {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-          {status === 'connected' ? 'Connecté' : status === 'error' ? 'Erreur' : 'Reconnexion...'}
+          {status === 'connected'
+            ? 'Connecté'
+            : status === 'error'
+            ? 'Erreur'
+            : status === 'reconnecting'
+            ? `Reconnexion... (${reconnectAttempt})`
+            : status === 'connecting'
+            ? 'Connexion...'
+            : 'Déconnecté'}
         </span>
       </Tooltip>
 

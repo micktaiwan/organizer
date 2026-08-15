@@ -46,6 +46,7 @@ import { PetDebugScreen } from "./components/PetDebug";
 import { LogPanel } from "./components/LogPanel";
 import { SettingsScreen } from "./components/Settings";
 import { ErrorIndicator } from "./components/ErrorIndicator";
+import { ConnectionBanner } from "./components/Connection/ConnectionBanner";
 import { StatusBar } from "./components/StatusBar";
 import { ConfirmModal } from "./components/ui/ConfirmModal";
 import { SourceSelectorModal, VideoPreviewModal } from "./components/Chat/VideoRecorder";
@@ -466,6 +467,7 @@ function App() {
   return (
     <div className={`app-root ${showLogPanel ? 'with-log-panel' : ''}`}>
     <main className="chat-container">
+      <ConnectionBanner />
       <ErrorIndicator />
 
       {isCompressing && (

@@ -195,7 +195,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [selectedServer]);
 
   // Handle socket auth errors by attempting refresh
+  // Throttlé : la reconnexion socket est illimitée, un token durablement refusé
+  // enchaînerait sinon les refresh en boucle serrée.
+  const lastAuthRefreshRef = useRef(0);
   const handleSocketAuthError = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastAuthRefreshRef.current < 10000) {
+      console.log('[Auth] Socket auth error ignored (refresh throttled)');
+      return;
+    }
+    lastAuthRefreshRef.current = now;
     console.log('[Auth] Socket auth error, attempting token refresh...');
     const refreshed = await api.tryRefresh();
     if (refreshed) {
