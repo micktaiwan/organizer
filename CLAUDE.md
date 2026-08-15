@@ -23,6 +23,28 @@ Working directory may be a subfolder. Use absolute paths for scripts:
 ### Android versioning
 **DO NOT** increment `versionCode`/`versionName` unless explicitly requested for a release.
 
+### Anthropic API key and deploy - CRITICAL
+
+The Eko agent's key lives in `server/agent-config.json` (`anthropicApiKey`), bind-mounted
+read-only into the container. Two things bite:
+
+- **`deploy.sh` rsyncs it.** The rsync only excludes `node_modules`, `dist` and `.env`, so
+  the LOCAL `agent-config.json` overwrites the server's on every deploy. Fixing the key on
+  the VPS alone is undone by the next deploy, silently. Change both, or change the local one
+  and deploy.
+- **A dead key shows up as a 401 in the digest, not as a crash.** On 13/08/2026 the key was
+  revoked; the memory digest kept firing every 4 hours and failing with
+  `Anthropic API failed: 401 ... API key is invalid`, so the agent's memory silently stopped
+  growing for two days while everything else looked healthy. Replaced 15/08/2026 with the key
+  the other projects already use. When Eko stops learning, read the container log first:
+  `docker logs organizer-api 2>&1 | grep '\[Digest\]'`.
+
+### Eko reflection is OFF on purpose
+
+`reflection.enabled` is `false` in Mongo (`systemconfigs`), set by hand on 27/01/2026 and
+confirmed as wanted on 15/08/2026. The cron still fires every 3 hours and returns immediately.
+Do not "fix" it. The memory digest is a separate service and must keep running.
+
 ### Server static files - CRITICAL
 
 `server/Dockerfile` copies files from `server/public/` **one by one** (`COPY public/call.html`,
