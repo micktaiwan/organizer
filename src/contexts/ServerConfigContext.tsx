@@ -50,10 +50,31 @@ interface ServerConfigContextType {
 
 const ServerConfigContext = createContext<ServerConfigContextType | null>(null);
 
+const LEGACY_PROD_URL = 'http://51.210.150.25:3001';
+const PROD_URL = 'https://organizer.mickaelfm.me';
+
 const DEFAULT_SERVERS: ServerConfig[] = [
   { id: 'local', name: 'Local', url: 'http://localhost:3001' },
-  { id: 'production', name: 'Production', url: 'https://organizer.mickaelfm.me' },
+  { id: 'production', name: 'Production', url: PROD_URL },
 ];
+
+/**
+ * Migration VPS (15 août 2026) : l'API est passée derrière un nom de domaine,
+ * en HTTPS et sans port explicite.
+ *
+ * DEFAULT_SERVERS ne sert qu'au tout premier lancement : sur une installation
+ * existante la liste vient de settings.json, qui garde l'ancienne IP tant
+ * qu'on ne la réécrit pas ici. Sans cette migration, les clients déjà
+ * installés restent silencieusement sur l'ancien serveur.
+ *
+ * L'id est conservé : les JWT sont stockés sous `auth_token_<serverId>`, donc
+ * garder l'id préserve la session si le nouveau serveur signe avec le même
+ * secret. Sinon le token est rejeté et onAuthExpired gère déjà le logout.
+ */
+const migrateServers = (list: ServerConfig[]): ServerConfig[] | null => {
+  if (!list.some(s => s.url === LEGACY_PROD_URL)) return null;
+  return list.map(s => (s.url === LEGACY_PROD_URL ? { ...s, url: PROD_URL } : s));
+};
 
 type StoreInterface = Store | BrowserStore;
 
@@ -84,6 +105,14 @@ export function ServerConfigProvider({ children }: { children: ReactNode }) {
           savedServers = DEFAULT_SERVERS;
           await store.set(SERVER_CONFIGS_KEY, savedServers);
           await store.save();
+        } else {
+          const migrated = migrateServers(savedServers);
+          if (migrated) {
+            console.log('[ServerConfig] Migration VPS:', LEGACY_PROD_URL, '->', PROD_URL);
+            savedServers = migrated;
+            await store.set(SERVER_CONFIGS_KEY, savedServers);
+            await store.save();
+          }
         }
         setServers(savedServers);
 
