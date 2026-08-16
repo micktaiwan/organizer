@@ -208,6 +208,10 @@ setupLogStreamer(io);
 
 // Start server
 const PORT = process.env.PORT || 3001;
+// `listen(PORT)` alone binds every interface, so on a laptop this was reachable
+// from whatever Wi-Fi was around. The container needs the opposite, since the
+// proxy reaches it over the Docker network — hence the production branch.
+const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 
 async function ensureLobby() {
   try {
@@ -291,8 +295,8 @@ async function start() {
     // Start the digest cron (fixed hours: 2h, 6h, 10h, 14h, 18h, 22h + catch-up on startup)
     const digestTask = await scheduleDigest();
 
-    httpServer.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+    httpServer.listen(PORT, HOST, () => {
+      console.log(`Server running on http://${HOST}:${PORT}`);
       console.log(`Socket.io ready`);
 
       // Cleanup on shutdown
