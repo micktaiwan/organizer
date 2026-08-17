@@ -26,7 +26,7 @@ const respondTool = tool(
     if (currentRequest.hasResponded) {
       log('warn', `[Tool] ⚠️ respond called again, ignoring (already responded)`);
       return {
-        content: [{ type: 'text', text: 'ERREUR: Tu as déjà répondu. N\'appelle respond qu\'UNE SEULE FOIS par conversation.' }]
+        content: [{ type: 'text', text: 'ERREUR: Tu as déjà répondu à CE message. N\'appelle respond qu\'une seule fois par message reçu ; au message suivant, tu devras l\'appeler à nouveau.' }]
       };
     }
 
@@ -42,7 +42,7 @@ const respondTool = tool(
     };
     send({ type: 'text', text: args.message, requestId: currentRequest.requestId });
     return {
-      content: [{ type: 'text', text: `Réponse envoyée (${args.expression}). STOP - n'appelle plus aucun outil.` }]
+      content: [{ type: 'text', text: `Réponse envoyée (${args.expression}). STOP pour ce message : n'appelle plus aucun outil maintenant. Au prochain message reçu, tu recommences et tu termines par respond().` }]
     };
   }
 );

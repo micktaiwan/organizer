@@ -88,6 +88,36 @@ ps aux | grep "tsx.*index"
 ps aux | grep "organizer/server.*tsx"
 ```
 
+## Eko agent - CRITICAL
+
+**The agent only speaks through `respond()`.** Free text it writes is discarded by design
+(`agent.mjs:212`, "Only capture text if agent hasn't used respond tool"), so an agent that
+forgets the tool returns `{"response": "", "expression": "neutral"}` with a 200 — it looks
+mute from outside while it is answering perfectly well inside.
+
+**Sessions are resumed per user** (`Resuming session for mickael`, same session id across
+requests). So **whatever a tool returns stays in the transcript and is read again at every
+later message**. That is not an acknowledgement, it is a standing instruction.
+
+That combination broke it on 16/08/2026: `respond()` answered `STOP - n'appelle plus aucun
+outil`, and the system prompt said `UNE SEULE FOIS par conversation`. After its first answer
+of a session the agent concluded it had already spoken, and every following question came
+back empty — five in a row. Both strings are now scoped to the current message
+(`respond-tool.mjs`, `prompt.mjs`), and five questions in a row answer again, keeping the
+thread. **Rule that outlives this bug: a tool's return text is permanent instruction, so
+anything true only of this message must say so.**
+
+Where to look when it goes quiet, in this order: `sudo docker logs organizer-api | grep
+'\[Agent\]'` shows `💭 Text output (not sent unless respond tool used)` when the tool was
+skipped, and `🔧 Tool call` for what it did instead. The HTTP answer says nothing — it is a
+200 with an empty string.
+
+**The container runs on UTC and the agent claims otherwise.** `buildMessageContext` sends
+`"time": "dim. 16 août 2026, 20:07"` when it is 22:07 in Paris, and asked point blank the
+agent answered « 19h31 précises, heure de Paris — donc CEST, UTC+2 ». Callers that need a
+correct clock currently pass it in the question themselves (Eko the robot does). Fixing it
+properly means giving the container a timezone.
+
 ## Specific Commands
 
 ```bash

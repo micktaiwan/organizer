@@ -207,7 +207,10 @@ app.set('io', io);
 setupLogStreamer(io);
 
 // Start server
-const PORT = process.env.PORT || 3001;
+// Number() rather than the bare variable: with a host as second argument,
+// listen() only takes a numeric port, and `process.env.PORT || 3001` is a
+// string|number — which is what broke the build on 16/08/2026.
+const PORT = Number(process.env.PORT) || 3001;
 // `listen(PORT)` alone binds every interface, so on a laptop this was reachable
 // from whatever Wi-Fi was around. The container needs the opposite, since the
 // proxy reaches it over the Docker network — hence the production branch.
