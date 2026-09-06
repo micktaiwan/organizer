@@ -2,7 +2,7 @@
 
 | Statut | Sujet | Prochaine action |
 |--------|-------|------------------|
-| 🔄 En cours | Skill `/eko` — parler à Eko depuis Claude Code | Créer le skill `~/.claude/skills/eko/`, récupérer/créer un token MCP, tester le flow |
+| 🔄 En cours | Skill pour parler à l'agent Eko depuis Claude Code | Choisir un autre nom : `~/.claude/skills/eko/` existe déjà et porte le robot physique. Serveur déjà déployé, reste le token MCP et le skill |
 | 🔄 En cours | Token MCP auto au signup | Décider si on relaxe le check admin dans `mcpAuthMiddleware` (auth.ts:86) pour que les tokens non-admin fonctionnent |
 | ✅ Terminé | `deploy.sh` échoue en silence | Réglé (commit 330c6a1) : mongo/qdrant retirés du compose `server` (gérés par `/opt/infra`), `up --no-deps api`, `set -e` + check `/health` avant d'annoncer le succès. Vérifié end-to-end |
 
@@ -16,8 +16,8 @@
   - `server/src/middleware/auth.ts` — ajouté fallback token MCP dans `authMiddleware` : si le token commence par `mcp_`, lookup dans `McpToken` au lieu de vérifier un JWT. Pas de check `isAdmin` (contrairement à `mcpAuthMiddleware`).
 - **Reste à faire** :
   1. Récupérer ou créer un token MCP pour Mickael
-  2. Créer le skill `~/.claude/skills/eko/skill.md` (mode interactif, proxy transparent vers `/agent/ask`)
-  4. Tester le flow end-to-end
+  2. Créer le skill sous un nom libre — `~/.claude/skills/eko/` est déjà pris par le robot physique (M5StackChan), collision constatée le 06/09/2026
+  3. Tester le flow end-to-end
 
 ### Token MCP auto au signup
 - **Fichiers modifies** (commites) :
