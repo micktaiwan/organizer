@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Globe } from "lucide-react";
 import { AppTabsNavigation, AppTab } from "./components/AppTabsNavigation";
+import { AccountSession } from "./components/AccountSession";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // Check if running in Tauri environment
@@ -53,10 +54,7 @@ import { SourceSelectorModal, VideoPreviewModal } from "./components/Chat/VideoR
 
 import "./App.css";
 
-function App() {
-  // Persist and restore window position/size
-  useWindowState();
-
+function AppContent() {
   // Desktop notifications when a non-bot user comes online
   usePresenceNotifications();
 
@@ -569,8 +567,8 @@ function App() {
       )}
 
       {/* Notes Tab Content */}
-      {activeTab === 'notes' && (
         <NotesTabContent
+          isActive={activeTab === 'notes'}
           notes={notes}
           labels={labels}
           selectedNote={selectedNote}
@@ -592,7 +590,6 @@ function App() {
           updateLabel={updateLabel}
           deleteLabel={deleteLabel}
         />
-      )}
 
       {/* Gallery Tab Content */}
       {activeTab === 'gallery' && (
@@ -747,6 +744,12 @@ function App() {
     {showLogPanel && <LogPanel useLocalServer={debugUseLocalServer} onClose={() => setShowLogPanel(false)} />}
     </div>
   );
+}
+
+function App() {
+  // Window geometry belongs to the app, not to an authenticated session.
+  useWindowState();
+  return <AccountSession><AppContent /></AccountSession>;
 }
 
 export default App;

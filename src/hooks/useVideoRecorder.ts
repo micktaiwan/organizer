@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { tempDir } from "@tauri-apps/api/path";
 import { writeFile, remove, exists } from "@tauri-apps/plugin-fs";
 
@@ -88,6 +88,7 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
   const mimeTypeRef = useRef<string>('video/webm');
   const cancelledRef = useRef<boolean>(false);
   const tempFilePathRef = useRef<string | null>(null);
+  const generationRef = useRef(0);
 
   const cleanup = useCallback((cancelled = false) => {
     // Mark as cancelled to prevent onstop from creating preview
@@ -115,6 +116,15 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
     // Clear chunks
     chunksRef.current = [];
   }, []);
+
+  useEffect(() => () => {
+    ++generationRef.current;
+    cleanup(true);
+  }, [cleanup]);
+
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   const cleanupPreview = useCallback(async () => {
     if (previewUrl) {
@@ -148,6 +158,7 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
   }, [cleanup, cleanupPreview]);
 
   const selectSource = useCallback(async (selectedSource: VideoSource): Promise<boolean> => {
+    const generation = generationRef.current;
     setError(null);
     cleanupPreview();
 
@@ -190,6 +201,11 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
         });
       }
 
+      if (generation !== generationRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return false;
+      }
+
       // Handle stream ended (user clicked "Stop sharing" in browser UI)
       // Use mediaRecorderRef.state directly to avoid stale closure on React state
       stream.getVideoTracks()[0]?.addEventListener('ended', () => {
@@ -220,6 +236,7 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
   }, [cleanupPreview, quality]);
 
   const startRecording = useCallback(() => {
+    const generation = generationRef.current;
     if (!streamRef.current) {
       setError('Aucune source sélectionnée');
       return;
@@ -269,6 +286,10 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
         }
       }
 
+      if (generation !== generationRef.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
       setVideoBlob(blob);
       setPreviewUrl(url);
       setState('previewing');

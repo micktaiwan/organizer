@@ -88,6 +88,13 @@ struct MemoryInfo {
 
 // macOS: use host_statistics64 for accurate memory info like Activity Monitor
 #[cfg(target_os = "macos")]
+extern "C" {
+    fn mach_host_self() -> u32;
+    // vm_size_t is uintptr_t on 64-bit macOS, not natural_t (u32).
+    fn host_page_size(host: u32, page_size: *mut usize) -> i32;
+}
+
+#[cfg(target_os = "macos")]
 #[tauri::command]
 fn get_memory_info() -> MemoryInfo {
     use std::mem;
@@ -122,21 +129,19 @@ fn get_memory_info() -> MemoryInfo {
     }
 
     extern "C" {
-        fn mach_host_self() -> u32;
         fn host_statistics64(
             host: u32,
             flavor: i32,
             info: *mut VmStatistics64,
             count: *mut u32,
         ) -> i32;
-        fn host_page_size(host: u32, page_size: *mut u32) -> i32;
     }
 
     const HOST_VM_INFO64: i32 = 4;
 
     let mut vm_stat: VmStatistics64 = unsafe { mem::zeroed() };
     let mut count = (mem::size_of::<VmStatistics64>() / mem::size_of::<u32>()) as u32;
-    let mut page_size: u32 = 4096;
+    let mut page_size: usize = 4096;
 
     let host = unsafe { mach_host_self() };
     unsafe { host_page_size(host, &mut page_size) };
@@ -219,6 +224,29 @@ fn get_memory_info_fallback() -> MemoryInfo {
         cached_gb: 0.0,
         swap_total_gb: to_gb(sys.total_swap()),
         swap_used_gb: to_gb(sys.used_swap()),
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod memory_tests {
+    use super::{host_page_size, mach_host_self};
+
+    #[test]
+    fn native_page_size_does_not_overwrite_adjacent_memory() {
+        #[repr(C)]
+        struct GuardedSize {
+            page_size: usize,
+            sentinel: usize,
+        }
+        let mut buffer = GuardedSize {
+            page_size: 0,
+            sentinel: usize::MAX,
+        };
+        let result = unsafe { host_page_size(mach_host_self(), &mut buffer.page_size) };
+        assert_eq!(result, 0);
+        assert!(buffer.page_size.is_power_of_two());
+        assert!(buffer.page_size >= 4096);
+        assert_eq!(buffer.sentinel, usize::MAX);
     }
 }
 

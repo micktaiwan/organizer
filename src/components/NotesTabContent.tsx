@@ -4,6 +4,7 @@ import { Note, Label } from "../types";
 import { UpdateNoteRequest, CreateNoteRequest } from "../services/api";
 
 interface NotesTabContentProps {
+  isActive?: boolean;
   notes: Note[];
   labels: Label[];
   selectedNote: Note | null;
@@ -27,6 +28,7 @@ interface NotesTabContentProps {
 }
 
 export function NotesTabContent({
+  isActive = true,
   notes,
   labels,
   selectedNote,
@@ -66,25 +68,22 @@ export function NotesTabContent({
 
   const handleSaveNote = useCallback(async (noteId: string | null, data: UpdateNoteRequest) => {
     if (noteId) {
-      await updateNote(noteId, data);
+      return updateNote(noteId, data);
     } else {
-      const newNote = await createNote({
+      return createNote({
         type: data.type || creatingNoteType,
         title: data.title,
         content: data.content,
         color: data.color,
         labels: data.labels,
         assignedTo: data.assignedTo,
+        items: data.items,
       });
-      if (newNote) {
-        selectNote(newNote._id);
-      }
     }
-  }, [updateNote, createNote, creatingNoteType, selectNote]);
+  }, [updateNote, createNote, creatingNoteType]);
 
   const handleDeleteNoteFromEditor = useCallback(async (noteId: string) => {
-    await deleteNote(noteId);
-    setNotesView('list');
+    if (await deleteNote(noteId)) setNotesView('list');
   }, [deleteNote]);
 
   const handleCloseNoteEditor = useCallback(() => {
@@ -93,7 +92,7 @@ export function NotesTabContent({
   }, [selectNote]);
 
   return (
-    <div className="notes-tab-content">
+    <div className="notes-tab-content" style={isActive ? undefined : { display: 'none' }}>
       {notesView === 'list' && (
         <NotesList
           notes={notes}
@@ -113,6 +112,7 @@ export function NotesTabContent({
       )}
       {notesView === 'editor' && (
         <NoteEditor
+          key={selectedNote?._id || 'new'}
           note={selectedNote}
           labels={labels}
           isCreating={!selectedNote}

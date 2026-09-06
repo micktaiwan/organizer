@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ArrowLeft,
   Trash2,
@@ -14,18 +14,6 @@ import {
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { Note, Label, UpdateNoteRequest } from '../../services/api';
 import { LabelChip } from './LabelChip';
-
-// Debounce helper
-function debounce<T extends (...args: Parameters<T>) => void>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  return (...args: Parameters<T>) => {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}
 
 // Color palette similar to Android
 const NOTE_COLORS = [
@@ -44,7 +32,7 @@ interface NoteEditorProps {
   labels: Label[];
   isCreating: boolean;
   initialType?: 'note' | 'checklist';
-  onSave: (noteId: string | null, data: UpdateNoteRequest) => void;
+  onSave: (noteId: string | null, data: UpdateNoteRequest) => Promise<Note | null>;
   onDelete: (noteId: string) => void;
   onClose: () => void;
   onAddChecklistItem: (noteId: string, text: string) => Promise<boolean>;
@@ -66,58 +54,73 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   onToggleChecklistItem,
   onDeleteChecklistItem,
 }) => {
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [type, setType] = useState<'note' | 'checklist'>(initialType);
-  const [color, setColor] = useState(NOTE_COLORS[0]);
-  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
-  const [isPinned, setIsPinned] = useState(false);
+  // Only locally edited fields override the server snapshot. Checklist/socket
+  // responses can update untouched fields without replacing the user's draft.
+  // NotesTabContent keys this editor by note ID to start a new draft on selection.
+  const [draft, setDraft] = useState<UpdateNoteRequest>({});
+  const title = draft.title ?? note?.title ?? '';
+  const content = draft.content ?? note?.content ?? '';
+  const type = draft.type ?? note?.type ?? initialType;
+  const color = draft.color ?? note?.color ?? NOTE_COLORS[0];
+  const selectedLabels = draft.labels ?? note?.labels.map(l => l._id) ?? [];
+  const isPinned = draft.isPinned ?? note?.isPinned ?? false;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const [newItemText, setNewItemText] = useState('');
-  const [hasChanges, setHasChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   // Local state for checklist item texts (to handle debouncing)
   const [localItemTexts, setLocalItemTexts] = useState<Record<string, string>>({});
   // Pending items for type conversion (note → checklist)
   const [pendingItems, setPendingItems] = useState<{ text: string; checked: boolean; order: number }[] | null>(null);
+  const hasChanges = Object.keys(draft).length > 0 || pendingItems !== null;
   // Copy success feedback
   const [showCopySuccess, setShowCopySuccess] = useState(false);
 
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  // Debounced update function for checklist items (500ms delay)
-  const debouncedUpdateItem = useMemo(
-    () => debounce((noteId: string, itemId: string, text: string) => {
-      onUpdateChecklistItemText(noteId, itemId, text);
-    }, 500),
-    [onUpdateChecklistItemText]
-  );
+  const itemTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const pendingItemSavesRef = useRef(new Map<string, () => Promise<boolean>>());
+  const itemRequestsRef = useRef(new Map<string, Promise<boolean>>());
+  const activeItemSavesRef = useRef(new Map<string, () => Promise<boolean>>());
+  const savingRef = useRef(false);
 
-  // Initialize form with note data
+  const saveItem = useCallback((itemId: string) => {
+    const save = pendingItemSavesRef.current.get(itemId);
+    clearTimeout(itemTimersRef.current.get(itemId));
+    itemTimersRef.current.delete(itemId);
+    if (!save) return itemRequestsRef.current.get(itemId) ?? Promise.resolve(true);
+    if (activeItemSavesRef.current.get(itemId) === save) return itemRequestsRef.current.get(itemId)!;
+    // Serialize edits of the same item so an older request cannot win last.
+    const previous = itemRequestsRef.current.get(itemId) ?? Promise.resolve(true);
+    const request = previous.then(save).catch(() => false).then(success => {
+      if (activeItemSavesRef.current.get(itemId) === save) activeItemSavesRef.current.delete(itemId);
+      if (pendingItemSavesRef.current.get(itemId) === save) {
+        if (success) pendingItemSavesRef.current.delete(itemId);
+        else setSaveError('Impossible d’enregistrer la checklist. Réessayez avant de fermer.');
+      }
+      return success;
+    });
+    itemRequestsRef.current.set(itemId, request);
+    activeItemSavesRef.current.set(itemId, save);
+    return request;
+  }, []);
+
+  const flushItemSaves = useCallback(async () => {
+    const results = await Promise.all(Array.from(pendingItemSavesRef.current.keys(), saveItem));
+    return results.every(Boolean);
+  }, [saveItem]);
+
   useEffect(() => {
-    if (note) {
-      setTitle(note.title);
-      setContent(note.content);
-      setType(note.type);
-      setColor(note.color);
-      setSelectedLabels(note.labels.map(l => l._id));
-      setIsPinned(note.isPinned);
-      setHasChanges(false);
-      // Reset local item texts when note changes
-      setLocalItemTexts({});
-    } else {
-      setTitle('');
-      setContent('');
-      setType(initialType);
-      setColor(NOTE_COLORS[0]);
-      setSelectedLabels([]);
-      setIsPinned(false);
-      setHasChanges(false);
-      setLocalItemTexts({});
-      setPendingItems(null);
-    }
-  }, [note, initialType]);
+    const timers = itemTimersRef.current;
+    const pending = pendingItemSavesRef.current;
+    return () => {
+      timers.forEach(clearTimeout);
+      timers.clear();
+      pending.clear();
+    };
+  }, []);
 
   // Focus title on create
   useEffect(() => {
@@ -126,14 +129,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     }
   }, [isCreating]);
 
-  // Mark as changed when fields change
-  useEffect(() => {
-    if (!note && !isCreating) return;
-    setHasChanges(true);
-  }, [title, content, type, color, selectedLabels, isPinned, pendingItems]);
-
   // Handle save
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     const data: UpdateNoteRequest = {
       title,
       content,
@@ -146,79 +143,78 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     if (pendingItems) {
       data.items = pendingItems;
     }
-    onSave(note?._id || null, data);
-    setPendingItems(null);
+    return onSave(note?._id || null, data);
   }, [note, title, content, type, color, selectedLabels, isPinned, pendingItems, onSave]);
 
   // Auto-save on close
-  const handleClose = useCallback(() => {
-    if (hasChanges && (title.trim() || content.trim() || (note && note.items.length > 0) || (pendingItems && pendingItems.length > 0))) {
-      handleSave();
+  const handleClose = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      if (!await flushItemSaves()) return;
+      if (hasChanges && (note || title.trim() || content.trim() || pendingItems?.length)) {
+        if (!await handleSave()) {
+          setSaveError('Impossible d’enregistrer la note. Votre brouillon est conservé.');
+          return;
+        }
+      }
+      onClose();
+    } catch {
+      setSaveError('Impossible d’enregistrer la note. Votre brouillon est conservé.');
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
     }
-    onClose();
-  }, [hasChanges, title, content, note, pendingItems, handleSave, onClose]);
+  };
 
   // Handle type toggle with data conversion and immediate save
-  const handleTypeToggle = () => {
-    if (type === 'checklist') {
-      // Converting checklist → note: join items into content
-      const newContent = note && note.items.length > 0
-        ? note.items.map(item => item.text).join('\n')
-        : content;
-
-      setContent(newContent);
-      setType('note');
-      setPendingItems(null);
-
-      // Save immediately for real-time sync
-      if (note) {
-        onSave(note._id, {
-          title,
-          content: newContent,
-          type: 'note',
-          color,
-          labels: selectedLabels,
-          isPinned,
-        });
-        setHasChanges(false);
+  const handleTypeToggle = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      if (!await flushItemSaves()) return;
+      let data: UpdateNoteRequest;
+      if (type === 'checklist') {
+        const newContent = pendingItems
+          ? pendingItems.map(item => item.text).join('\n')
+          : note?.items.map(item => localItemTexts[item._id] ?? item.text).join('\n') ?? content;
+        data = { title, content: newContent, type: 'note', color, labels: selectedLabels, isPinned };
+        setPendingItems(null);
+      } else {
+        const items = content.split('\n').filter(line => line.trim()).map((line, order) => ({
+          text: line.trim(), checked: false, order,
+        }));
+        data = { title, content: '', type: 'checklist', color, labels: selectedLabels, isPinned, items };
+        setPendingItems(items);
       }
-    } else {
-      // Converting note → checklist: split content into items
-      const items = content.trim()
-        ? content.split('\n').filter(line => line.trim()).map((line, index) => ({
-            text: line.trim(),
-            checked: false,
-            order: index,
-          }))
-        : [];
-
-      setPendingItems(items);
-      setType('checklist');
-
-      // Save immediately for real-time sync
+      setDraft(data);
       if (note) {
-        onSave(note._id, {
-          title,
-          content: '',
-          type: 'checklist',
-          color,
-          labels: selectedLabels,
-          isPinned,
-          items,
-        });
-        setPendingItems(null); // Clear pending since we saved
-        setHasChanges(false);
+        const saved = await onSave(note._id, data);
+        if (saved) {
+          setDraft({});
+          setPendingItems(null);
+          setLocalItemTexts({});
+        } else {
+          setSaveError('Impossible d’enregistrer la note. Votre brouillon est conservé.');
+        }
       }
+    } catch {
+      setSaveError('Impossible d’enregistrer la note. Votre brouillon est conservé.');
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
     }
   };
 
   // Handle label toggle
   const toggleLabel = (labelId: string) => {
-    setSelectedLabels(prev =>
-      prev.includes(labelId)
-        ? prev.filter(id => id !== labelId)
-        : [...prev, labelId]
-    );
+    setDraft(prev => ({ ...prev, labels: selectedLabels.includes(labelId)
+      ? selectedLabels.filter(id => id !== labelId)
+      : [...selectedLabels, labelId] }));
   };
 
   // Handle add checklist item
@@ -237,13 +233,26 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     if (!note) return;
     // Update local state immediately for responsive UI
     setLocalItemTexts(prev => ({ ...prev, [itemId]: text }));
-    // Debounce the API call
-    debouncedUpdateItem(note._id, itemId, text);
+    // Each row owns its timer; editing another row must not cancel this save.
+    clearTimeout(itemTimersRef.current.get(itemId));
+    pendingItemSavesRef.current.set(itemId, () => onUpdateChecklistItemText(note._id, itemId, text));
+    itemTimersRef.current.set(itemId, setTimeout(() => { void saveItem(itemId); }, 500));
   };
 
   // Get item text (local if being edited, otherwise from note)
   const getItemText = (itemId: string, originalText: string): string => {
     return localItemTexts[itemId] !== undefined ? localItemTexts[itemId] : originalText;
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    if (!note) return;
+    // Discard a queued edit of the row being deleted. Wait for an already sent
+    // edit so it cannot race the deletion or leave a failed save blocking close.
+    clearTimeout(itemTimersRef.current.get(itemId));
+    itemTimersRef.current.delete(itemId);
+    pendingItemSavesRef.current.delete(itemId);
+    await itemRequestsRef.current.get(itemId);
+    await onDeleteChecklistItem(note._id, itemId);
   };
 
   // Handle delete confirmation
@@ -290,7 +299,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   };
 
   return (
-    <div className="note-editor" style={{ backgroundColor: color }}>
+    <div className="note-editor" style={{ backgroundColor: color }} inert={isSaving} aria-busy={isSaving}>
+      {saveError && <p role="alert">{saveError}</p>}
       {/* Header */}
       <div className="note-editor-header">
         <button className="note-editor-back" onClick={handleClose}>
@@ -299,7 +309,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         <div className="note-editor-header-actions">
           <button
             className={`note-editor-pin-btn ${isPinned ? 'active' : ''}`}
-            onClick={() => setIsPinned(!isPinned)}
+            onClick={() => setDraft(prev => ({ ...prev, isPinned: !isPinned }))}
           >
             <Pin size={18} />
           </button>
@@ -335,7 +345,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         className="note-editor-title"
         placeholder="Titre"
         value={title}
-        onChange={(e) => setTitle(e.target.value)}
+        onChange={(e) => setDraft(prev => ({ ...prev, title: e.target.value }))}
       />
 
       {/* Content for note type */}
@@ -344,7 +354,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           className="note-editor-content"
           placeholder="Commencez à écrire..."
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={(e) => setDraft(prev => ({ ...prev, content: e.target.value }))}
         />
       )}
 
@@ -374,7 +384,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               />
               <button
                 className="checklist-item-delete"
-                onClick={() => onDeleteChecklistItem(note._id, item._id)}
+                onClick={() => handleDeleteItem(item._id)}
               >
                 <X size={16} />
               </button>
@@ -495,7 +505,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               key={c}
               className={`note-editor-color ${color === c ? 'selected' : ''}`}
               style={{ backgroundColor: c }}
-              onClick={() => setColor(c)}
+              onClick={() => setDraft(prev => ({ ...prev, color: c }))}
             />
           ))}
         </div>

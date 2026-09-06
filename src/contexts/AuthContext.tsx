@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { load, Store } from '@tauri-apps/plugin-store';
-import { api, User, setApiBaseUrl } from '../services/api';
+import { api, ApiService, User, setApiBaseUrl } from '../services/api';
 import { socketService } from '../services/socket';
 import { useServerConfig } from './ServerConfigContext';
 
@@ -162,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           username: userObj.username,
           displayName: userObj.displayName,
           token: authToken,
-          ...(authRefreshToken && { refreshToken: authRefreshToken }),
+          refreshToken: authRefreshToken,
           lastUsed: now,
         };
       } else {
@@ -190,8 +190,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const persistTokens = useCallback(async (newToken: string, newRefreshToken: string) => {
     if (!selectedServer) return;
     const store = await getStore();
+    const previousToken = await store.get<string>(getAuthTokenKey(selectedServer.id));
     await store.set(getAuthTokenKey(selectedServer.id), newToken);
     await store.set(getRefreshTokenKey(selectedServer.id), newRefreshToken);
+    // Keep inactive-account restoration in sync with refresh-token rotation.
+    const key = getSavedAccountsKey(selectedServer.id);
+    const accounts = await store.get<SavedAccount[]>(key) || [];
+    const updated = accounts.map(account => account.token === previousToken
+      ? { ...account, token: newToken, refreshToken: newRefreshToken }
+      : account);
+    await store.set(key, updated);
+    setSavedAccounts(updated);
   }, [selectedServer]);
 
   // Handle socket auth errors by attempting refresh
@@ -288,7 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const currentToken = api.getToken() || savedToken;
             socketService.connect(currentToken);
             // Update the account in switcher with fresh data
-            await saveAccountToSwitcher(fetchedUser, currentToken, savedRefreshToken || undefined);
+            await saveAccountToSwitcher(fetchedUser, currentToken, api.getRefreshToken() || undefined);
           } catch (error) {
             const status = (error as Error & { status?: number }).status;
             if (status === 401) {
@@ -427,55 +436,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     }
 
-    // Save current tokens to restore on failure
-    const prevToken = token;
-    const prevRefreshToken = refreshTokenState;
-
-    // Disable global auth expiry handler during switch — we handle errors locally
-    const prevOnAuthExpired = api.onAuthExpired;
-    api.onAuthExpired = null;
-
     try {
-      // Set the account's tokens on the api service (always clear refresh token
-      // to avoid using the current account's refresh token if the target has none)
-      api.setToken(account.token);
-      api.setRefreshToken(account.refreshToken || null);
+      // Validate separately: background requests must keep using the current
+      // account, and a failed switch must not change its tokens or callbacks.
+      const candidate = new ApiService();
+      candidate.setToken(account.token);
+      candidate.setRefreshToken(account.refreshToken || null);
 
       // Validate token with GET /auth/me (will auto-refresh on 401 if refreshToken available)
-      const { user: fetchedUser } = await api.getMe();
+      const { user: fetchedUser } = await candidate.getMe();
 
       // Get the potentially refreshed token
-      const currentToken = api.getToken()!;
+      const currentToken = candidate.getToken()!;
 
       // Persist tokens
       const store = await getStore();
       await store.set(getAuthTokenKey(selectedServer.id), currentToken);
-      const currentRefreshToken = account.refreshToken;
+      const currentRefreshToken = candidate.getRefreshToken();
       if (currentRefreshToken) {
         await store.set(getRefreshTokenKey(selectedServer.id), currentRefreshToken);
-        setRefreshTokenState(currentRefreshToken);
+      } else {
+        await store.delete(getRefreshTokenKey(selectedServer.id));
       }
+      setRefreshTokenState(currentRefreshToken);
 
       // Update the account's lastUsed
-      await saveAccountToSwitcher(fetchedUser, currentToken, currentRefreshToken);
+      await saveAccountToSwitcher(fetchedUser, currentToken, currentRefreshToken || undefined);
 
+      api.setToken(currentToken);
+      api.setRefreshToken(currentRefreshToken);
       setToken(currentToken);
       setUser(fetchedUser);
       socketService.disconnect();
       socketService.connect(currentToken);
 
-      api.onAuthExpired = prevOnAuthExpired;
       return { success: true };
     } catch (error) {
       console.error('[Auth] Token invalid for account:', account.username, error);
-      // Reset to previous tokens
-      if (prevToken) {
-        api.setToken(prevToken);
-      }
-      if (prevRefreshToken) {
-        api.setRefreshToken(prevRefreshToken);
-      }
-      api.onAuthExpired = prevOnAuthExpired;
       return { success: false, error: 'Session expirée' };
     }
   };

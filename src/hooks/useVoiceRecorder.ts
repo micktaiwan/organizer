@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 export const useVoiceRecorder = (onSend: (base64Audio: string) => void) => {
   const [isRecording, setIsRecording] = useState(false);
@@ -9,11 +9,29 @@ export const useVoiceRecorder = (onSend: (base64Audio: string) => void) => {
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const isCancelledRef = useRef(false);
+  const generationRef = useRef(0);
+
+  useEffect(() => () => {
+    ++generationRef.current;
+    isCancelledRef.current = true;
+    const recorder = mediaRecorderRef.current;
+    if (recorder) {
+      recorder.onstop = null;
+      if (recorder.state !== 'inactive') recorder.stop();
+    }
+    recordingStreamRef.current?.getTracks().forEach(track => track.stop());
+    if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+  }, []);
 
   const startRecording = async () => {
+    const generation = generationRef.current;
     try {
       isCancelledRef.current = false;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (generation !== generationRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       recordingStreamRef.current = stream;
 
       const mediaRecorder = new MediaRecorder(stream, {
@@ -36,6 +54,7 @@ export const useVoiceRecorder = (onSend: (base64Audio: string) => void) => {
           const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
           const reader = new FileReader();
           reader.onloadend = () => {
+            if (generation !== generationRef.current || isCancelledRef.current) return;
             const base64Audio = reader.result as string;
             onSend(base64Audio);
           };
@@ -49,6 +68,7 @@ export const useVoiceRecorder = (onSend: (base64Audio: string) => void) => {
       setRecordingDuration(0);
       recordingIntervalRef.current = setInterval(() => setRecordingDuration(prev => prev + 1), 1000);
     } catch (err) {
+      cleanup();
       console.error("Failed to start recording:", err);
     }
   };

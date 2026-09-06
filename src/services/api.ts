@@ -204,11 +204,11 @@ interface Room {
   unreadCount?: number;
 }
 
-class ApiService {
+export class ApiService {
   private token: string | null = null;
   private refreshToken: string | null = null;
   private refreshPromise: Promise<boolean> | null = null;
-  onTokenRefreshed: ((token: string, refreshToken: string) => void) | null = null;
+  onTokenRefreshed: ((token: string, refreshToken: string) => void | Promise<void>) | null = null;
   onAuthExpired: (() => void) | null = null;
 
   setToken(token: string | null) {
@@ -221,6 +221,10 @@ class ApiService {
 
   getToken(): string | null {
     return this.token;
+  }
+
+  getRefreshToken(): string | null {
+    return this.refreshToken;
   }
 
   async tryRefresh(): Promise<boolean> {
@@ -246,7 +250,8 @@ class ApiService {
         const data = await response.json() as RefreshResponse;
         this.token = data.token;
         this.refreshToken = data.refreshToken;
-        this.onTokenRefreshed?.(data.token, data.refreshToken);
+        // Finish persistence before callers save the same account again.
+        await this.onTokenRefreshed?.(data.token, data.refreshToken);
         return true;
       } catch {
         return false;

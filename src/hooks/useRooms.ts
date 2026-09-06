@@ -144,6 +144,9 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
   // Track which room the current messages belong to (prevents race conditions on room switch)
   const messagesRoomIdRef = useRef<string | null>(null);
+  // Invalidate asynchronous reads on navigation, including A → B → A.
+  const roomGenerationRef = useRef(0);
+  const historyRequestRef = useRef(0);
 
   // Track pending message sends to prevent duplicates from socket events
   const pendingSendsRef = useRef<Set<string>>(new Set());
@@ -196,7 +199,17 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
   // Load room details and messages when current room changes
   useEffect(() => {
-    if (!currentRoomId) return;
+    const generation = ++roomGenerationRef.current;
+    const requestId = ++historyRequestRef.current;
+    const isCurrent = () => generation === roomGenerationRef.current && requestId === historyRequestRef.current;
+    setCurrentRoom(null);
+    setMessages([]);
+    messagesRoomIdRef.current = null;
+    markedAsReadRef.current.clear();
+    if (!currentRoomId || !userId) {
+      setIsLoadingMessages(false);
+      return;
+    }
 
     const loadRoom = async () => {
       try {
@@ -210,13 +223,16 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
         setHasMoreMessages(true);
         setIsLoadingMore(false);
         const { room } = await api.getRoom(currentRoomId);
+        if (generation !== roomGenerationRef.current) return;
         setCurrentRoom(room);
 
         // Join Socket.io room
         socketService.joinRoom(currentRoomId);
 
         // Load message history with unread info
+        if (!isCurrent()) return;
         const response = await api.getUnreadMessages(currentRoomId);
+        if (!isCurrent()) return;
         const convertedMessages = response.messages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
         setMessages(convertedMessages);
         messagesRoomIdRef.current = currentRoomId;
@@ -231,13 +247,15 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       } catch (error) {
         console.error('Failed to load room:', error);
       } finally {
-        setIsLoadingMessages(false);
+        if (isCurrent()) setIsLoadingMessages(false);
       }
     };
 
     loadRoom();
 
     return () => {
+      ++roomGenerationRef.current;
+      ++historyRequestRef.current;
       if (currentRoomId) {
         socketService.leaveRoom(currentRoomId);
       }
@@ -247,8 +265,11 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Listen for new messages in current room
   useEffect(() => {
     if (!currentRoomId || !userId) return;
+    let active = true;
 
     const unsubNewMessage = socketService.on('message:new', async (data: any) => {
+      const generation = roomGenerationRef.current;
+      const isCurrent = () => active && generation === roomGenerationRef.current;
       // Note: We don't filter by userId here because the same user may send
       // messages from different devices (Android, desktop). The duplicate check
       // below (line checking serverMessageId) handles optimistic update deduplication.
@@ -268,8 +289,10 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
         // Retry logic for transient failures
         const maxRetries = 3;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          if (!isCurrent()) return;
           try {
             const { message: serverMsg } = await api.getMessage(data.messageId);
+            if (!isCurrent()) return;
             const converted = convertServerMessage(serverMsg, userId);
             setMessages(current => {
               // Check if message already exists (avoid duplicates from optimistic updates)
@@ -291,7 +314,10 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       }
     });
 
-    return () => unsubNewMessage();
+    return () => {
+      active = false;
+      unsubNewMessage();
+    };
   }, [currentRoomId, userId]);
 
   // Listen for typing indicators in current room
@@ -529,8 +555,14 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
   // Load message history
   const loadMessages = useCallback(async () => {
     if (!currentRoomId) return;
+    const generation = roomGenerationRef.current;
+    const requestId = ++historyRequestRef.current;
+    const isCurrent = () => generation === roomGenerationRef.current && requestId === historyRequestRef.current;
+    setIsLoadingMessages(true);
+    setIsLoadingMore(false);
     try {
       const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
+      if (!isCurrent()) return;
       const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
       setMessages(convertedMessages);
       messagesRoomIdRef.current = currentRoomId;
@@ -543,12 +575,17 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       setHasMoreMessages(true);
     } catch (error) {
       console.error('Failed to load messages:', error);
+    } finally {
+      if (isCurrent()) setIsLoadingMessages(false);
     }
   }, [currentRoomId, userId]);
 
   // Load older messages (pagination)
   const loadOlderMessages = useCallback(async () => {
-    if (!currentRoomId || isLoadingMore || !hasMoreMessages) return;
+    if (!currentRoomId || isLoadingMessages || isLoadingMore || !hasMoreMessages) return;
+    const generation = roomGenerationRef.current;
+    const requestId = historyRequestRef.current;
+    const isCurrent = () => generation === roomGenerationRef.current && requestId === historyRequestRef.current;
 
     const oldestMessage = messages[0];
     if (!oldestMessage) return;
@@ -558,6 +595,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     try {
       setIsLoadingMore(true);
       const { messages: serverMessages } = await api.getRoomMessages(currentRoomId, 20, beforeTimestamp);
+      if (!isCurrent()) return;
       const convertedMessages = serverMessages.map((msg: ServerMessage) => convertServerMessage(msg, userId));
 
       if (convertedMessages.length === 0) {
@@ -569,49 +607,38 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
     } catch (error) {
       console.error('Failed to load older messages:', error);
     } finally {
-      setIsLoadingMore(false);
+      if (isCurrent()) setIsLoadingMore(false);
     }
-  }, [currentRoomId, userId, messages, isLoadingMore, hasMoreMessages]);
+  }, [currentRoomId, userId, messages, isLoadingMessages, isLoadingMore, hasMoreMessages]);
 
   // Load messages around a specific timestamp (for search results)
   const loadMessagesAround = useCallback(async (timestamp: string, msgId?: string) => {
     if (!currentRoomId) return;
+    const generation = roomGenerationRef.current;
+    const requestId = ++historyRequestRef.current;
+    const isCurrent = () => generation === roomGenerationRef.current && requestId === historyRequestRef.current;
+    setIsLoadingMore(false);
     try {
       setIsLoadingMessages(true);
       const response = await api.getMessagesAround(currentRoomId, timestamp);
+      if (!isCurrent()) return;
       const convertedMessages = response.messages.map((msg: ServerMessage) =>
         convertServerMessage(msg, userId)
       );
       setMessages(convertedMessages);
+      messagesRoomIdRef.current = currentRoomId;
       setMessageMode('around');
       setHasNewerMessages(response.hasNewer);
       setTargetMessageId(msgId || response.targetMessageId);
     } catch (error) {
       console.error('Failed to load messages around timestamp:', error);
     } finally {
-      setIsLoadingMessages(false);
+      if (isCurrent()) setIsLoadingMessages(false);
     }
   }, [currentRoomId, userId]);
 
   // Return to latest messages (from search mode)
-  const returnToLatest = useCallback(async () => {
-    if (!currentRoomId) return;
-    try {
-      setIsLoadingMessages(true);
-      const { messages: serverMessages } = await api.getRoomMessages(currentRoomId);
-      const convertedMessages = serverMessages.map((msg: ServerMessage) =>
-        convertServerMessage(msg, userId)
-      );
-      setMessages(convertedMessages);
-      setMessageMode('latest');
-      setTargetMessageId(null);
-      setHasNewerMessages(false);
-    } catch (error) {
-      console.error('Failed to return to latest messages:', error);
-    } finally {
-      setIsLoadingMessages(false);
-    }
-  }, [currentRoomId, userId]);
+  const returnToLatest = loadMessages;
 
   // Send message to current room
   const sendMessage = useCallback(async (text?: string, image?: string, audio?: string, imageBlob?: Blob | null) => {
@@ -902,7 +929,11 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
 
   // Select a room
   const selectRoom = useCallback((roomId: string) => {
+    if (roomId === currentRoomId) return;
+    ++roomGenerationRef.current;
+    ++historyRequestRef.current;
     setCurrentRoomId(roomId);
+    setCurrentRoom(null);
     // Clear messages and tracking when switching rooms to prevent race conditions
     messagesRoomIdRef.current = null;
     setMessages([]);
@@ -916,7 +947,7 @@ export const useRooms = ({ userId, username }: UseRoomsOptions) => {
       hasUnreadRef.current = false;
       setTrayBadge(false);
     }
-  }, []);
+  }, [currentRoomId]);
 
   // Create a new public room
   const createRoom = useCallback(async (name: string) => {
