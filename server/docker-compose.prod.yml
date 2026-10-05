@@ -4,22 +4,22 @@ services:
     container_name: organizer-api
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      # Loopback only (2026-10-05): every client goes through
+      # https://organizer.mickaelfm.me; the public IP:3001 was plain HTTP.
+      - "127.0.0.1:3001:3001"
     environment:
-      # Derriere le proxy partage, en plus du port publie. Les deux chemins
-      # coexistent volontairement : les clients deja installes portent
-      # l'IP:3001 en dur, ils continuent de marcher pendant qu'ils migrent
-      # vers https://organizer.mickaelfm.me un par un.
       - VIRTUAL_HOST=organizer.mickaelfm.me
       - VIRTUAL_PORT=3001
       - LETSENCRYPT_HOST=organizer.mickaelfm.me
       - LETSENCRYPT_EMAIL=faivrem@gmail.com
       - NODE_ENV=production
       - PORT=3001
-      - MONGODB_URI=mongodb://organizer:73dbed3c1c89dd83ff8a057619681c69@mongodb:27017/organizer?authSource=admin&directConnection=true
+      - MONGODB_URI=${MONGODB_URI:?set in .env}
+      # was: mongodb://organizer:<password>@mongodb:27017/organizer?authSource=admin&directConnection=true
       - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
       - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
       - LOG_DIR=/app/logs
       - MCP_URL=http://localhost:3001/mcp
       - EKO_MCP_TOKEN=${EKO_MCP_TOKEN}

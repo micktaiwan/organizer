@@ -38,7 +38,7 @@ async function scrollAll(collection: string): Promise<Point[]> {
   do {
     const res = await fetch(`${QDRANT_URL}/collections/${collection}/points/scroll`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(process.env.QDRANT_API_KEY ? { 'api-key': process.env.QDRANT_API_KEY } : {}) },
       body: JSON.stringify({
         limit: 500,
         offset,
@@ -113,7 +113,7 @@ async function deletePoints(collection: string, ids: string[]): Promise<void> {
     const batch = ids.slice(i, i + BATCH);
     const res = await fetch(`${QDRANT_URL}/collections/${collection}/points/delete`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(process.env.QDRANT_API_KEY ? { 'api-key': process.env.QDRANT_API_KEY } : {}) },
       body: JSON.stringify({ points: batch }),
     });
     if (!res.ok) {

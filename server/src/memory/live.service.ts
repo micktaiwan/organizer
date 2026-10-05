@@ -36,7 +36,7 @@ interface QdrantSearchResult {
 export async function ensureLiveCollection(): Promise<void> {
   // Check if collection exists
   const response = await fetch(`${QDRANT_URL}/collections/${COLLECTION_NAME}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(process.env.QDRANT_API_KEY ? { 'api-key': process.env.QDRANT_API_KEY } : {}) },
   });
 
   if (response.ok) {

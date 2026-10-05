@@ -21,6 +21,12 @@ const loginSchema = z.object({
 
 // POST /auth/register
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
+  // Closed by default (2026-10-05): an open signup let any stranger read every
+  // user's location. Set REGISTRATION_OPEN=true to let someone new in.
+  if (process.env.REGISTRATION_OPEN !== 'true') {
+    res.status(403).json({ error: 'Registration is closed' });
+    return;
+  }
   try {
     const data = registerSchema.parse(req.body);
 

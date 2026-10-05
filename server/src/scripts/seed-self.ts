@@ -79,7 +79,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
 
 async function ensureCollection(name: string): Promise<void> {
   try {
-    const res = await fetch(`${QDRANT_URL}/collections/${name}`);
+    const res = await fetch(`${QDRANT_URL}/collections/${name}`, { headers: { ...(process.env.QDRANT_API_KEY ? { 'api-key': process.env.QDRANT_API_KEY } : {}) } });
     if (res.ok) {
       console.log(`✅ Collection ${name} exists`);
       return;
@@ -91,7 +91,7 @@ async function ensureCollection(name: string): Promise<void> {
   // Create collection
   const createRes = await fetch(`${QDRANT_URL}/collections/${name}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(process.env.QDRANT_API_KEY ? { 'api-key': process.env.QDRANT_API_KEY } : {}) },
     body: JSON.stringify({
       vectors: {
         size: 1536,
@@ -131,7 +131,7 @@ async function seedSelf(): Promise<void> {
 
     await fetch(`${QDRANT_URL}/collections/${SELF_COLLECTION}/points`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(process.env.QDRANT_API_KEY ? { 'api-key': process.env.QDRANT_API_KEY } : {}) },
       body: JSON.stringify({
         points: [{ id, vector, payload }],
       }),
@@ -160,7 +160,7 @@ async function seedGoals(): Promise<void> {
 
     await fetch(`${QDRANT_URL}/collections/${GOALS_COLLECTION}/points`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(process.env.QDRANT_API_KEY ? { 'api-key': process.env.QDRANT_API_KEY } : {}) },
       body: JSON.stringify({
         points: [{ id, vector, payload }],
       }),

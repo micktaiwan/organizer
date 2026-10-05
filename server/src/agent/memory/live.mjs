@@ -14,7 +14,7 @@ async function searchLiveContext(queryText, limit = 10) {
 
     const response = await fetch(`${QDRANT_URL}/collections/${LIVE_COLLECTION_NAME}/points/search`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(process.env.QDRANT_API_KEY ? { 'api-key': process.env.QDRANT_API_KEY } : {}) },
       body: JSON.stringify({
         vector,
         limit,

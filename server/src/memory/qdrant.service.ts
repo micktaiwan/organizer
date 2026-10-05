@@ -43,6 +43,7 @@ export async function qdrantRequest<T>(path: string, options?: RequestInit): Pro
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(process.env.QDRANT_API_KEY ? { 'api-key': process.env.QDRANT_API_KEY } : {}),
       ...options?.headers,
     },
   });
