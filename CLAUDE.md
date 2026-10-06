@@ -152,7 +152,8 @@ powershell.exe -Command "& 'C:\Users\dfm76\AppData\Local\Android\Sdk\platform-to
 **Two independent server connections** - do NOT confuse them:
 
 1. **Main app connection** (`AuthContext` + `socketService`)
-   - Always connected to PROD (`51.178.29.205:3001`)
+   - Always connected to PROD (`https://organizer.mickaelfm.me`, `PROD_URL` in `ServerConfigContext.tsx`).
+     The API container only listens on `127.0.0.1:3001` on the VPS, so `51.178.29.205:3001` is unreachable from outside.
    - Used for: chat, rooms, notes, user status
    - Controlled by: `ServerConfigContext.selectedServer`
 
