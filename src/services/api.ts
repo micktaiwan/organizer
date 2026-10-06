@@ -315,7 +315,8 @@ export class ApiService {
 
   private async uploadRequest<T>(
     endpoint: string,
-    formData: FormData
+    formData: FormData,
+    _isRetry = false
   ): Promise<T> {
     const headers: HeadersInit = {};
 
@@ -330,6 +331,18 @@ export class ApiService {
       headers,
       body: formData,
     });
+
+    // The access token lives 1h and the socket keeps working with an expired one,
+    // so an upload is often the first request to hit the expiry: refresh and retry.
+    if (response.status === 401 && !_isRetry) {
+      if (await this.tryRefresh()) {
+        return this.uploadRequest<T>(endpoint, formData, true);
+      }
+      this.onAuthExpired?.();
+      const err = new Error('Session expirée');
+      (err as Error & { status: number }).status = 401;
+      throw err;
+    }
 
     const data = await response.json();
 
@@ -545,7 +558,25 @@ export class ApiService {
     return this.uploadRequest<{ message: Message }>('/upload/video', formData);
   }
 
-  uploadVideoWithProgress(
+  async uploadVideoWithProgress(
+    roomId: string,
+    videoBlob: Blob,
+    caption: string | undefined,
+    onProgress: (progress: number) => void
+  ): Promise<{ message: Message }> {
+    try {
+      return await this.sendVideoXhr(roomId, videoBlob, caption, onProgress);
+    } catch (error) {
+      if ((error as Error & { status?: number }).status !== 401) throw error;
+      if (await this.tryRefresh()) {
+        return this.sendVideoXhr(roomId, videoBlob, caption, onProgress);
+      }
+      this.onAuthExpired?.();
+      throw error;
+    }
+  }
+
+  private sendVideoXhr(
     roomId: string,
     videoBlob: Blob,
     caption: string | undefined,
@@ -573,12 +604,15 @@ export class ApiService {
         if (xhr.status >= 200 && xhr.status < 300) {
           resolve(JSON.parse(xhr.responseText));
         } else {
+          let message = `Upload failed: ${xhr.status}`;
           try {
-            const errorData = JSON.parse(xhr.responseText);
-            reject(new Error(errorData.error || `Upload failed: ${xhr.status}`));
+            message = JSON.parse(xhr.responseText).error || message;
           } catch {
-            reject(new Error(`Upload failed: ${xhr.status}`));
+            // Non-JSON error body: keep the generic message
           }
+          const err = new Error(message);
+          (err as Error & { status: number }).status = xhr.status;
+          reject(err);
         }
       };
 
