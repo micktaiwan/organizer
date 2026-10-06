@@ -10,7 +10,7 @@
 
 ### Skill `/eko` — parler à Eko depuis Claude Code
 - **Objectif** : converser avec Eko directement depuis Claude Code, mode interactif (multi-tour)
-- **Endpoint** : `POST /agent/ask` sur prod (`51.178.29.205:3001`), body `{ "question": "..." }`
+- **Endpoint** : `POST /agent/ask` sur prod (`https://organizer.mickaelfm.me` ; `51.178.29.205:3001` est fermé depuis le 05/10/2026, le port n'écoute plus que sur 127.0.0.1), body `{ "question": "..." }`
 - **Changements faits** (commités, commit 9196cb1, deployes en prod) :
   - `server/src/routes/agent.ts` — retiré la limite de 500 chars sur le champ `question` (zod schema)
   - `server/src/middleware/auth.ts` — ajouté fallback token MCP dans `authMiddleware` : si le token commence par `mcp_`, lookup dans `McpToken` au lieu de vérifier un JWT. Pas de check `isAdmin` (contrairement à `mcpAuthMiddleware`).
