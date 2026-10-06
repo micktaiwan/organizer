@@ -2,6 +2,9 @@ services:
   api:
     build: .
     container_name: organizer-api
+    # uid 10000 has no account on the host (2026-10-06): a container escape lands
+    # on nobody, not on `ubuntu` (sudo + docker group) as uid 1000 did.
+    user: "10000:10000"
     restart: unless-stopped
     ports:
       # Loopback only (2026-10-05): every client goes through
@@ -49,7 +52,8 @@ services:
 
 networks:
   organizer-network:
-    driver: bridge
+    external: true
+    name: net-organizer
 
 volumes:
   mongodb_data:
