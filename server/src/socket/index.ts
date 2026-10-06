@@ -429,8 +429,9 @@ export function setupSocket(httpServer: HttpServer): Server {
     // ===== End Location Events =====
 
     // Déconnexion
-    socket.on('disconnect', async () => {
-      console.log(`User disconnected: ${socket.username}`);
+    socket.on('disconnect', async (reason) => {
+      // reason tells a dead client ('ping timeout') from a closed one ('transport close')
+      console.log(`User disconnected: ${socket.username} (${socket.clientType ?? 'unknown'}, ${reason})`);
 
       // Check if user has other active sockets before marking offline
       const allSockets = await io.fetchSockets();

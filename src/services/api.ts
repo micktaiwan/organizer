@@ -227,6 +227,11 @@ export class ApiService {
     return this.refreshToken;
   }
 
+  /**
+   * Resolves false only when the server rejects the refresh token (4xx): the
+   * session is really over. Throws when the server cannot answer (network down,
+   * 5xx), so callers keep the session instead of logging the user out.
+   */
   async tryRefresh(): Promise<boolean> {
     if (!this.refreshToken) return false;
 
@@ -243,6 +248,9 @@ export class ApiService {
           body: JSON.stringify({ refreshToken: this.refreshToken }),
         });
 
+        if (response.status >= 500) {
+          throw new Error(`Token refresh unavailable: ${response.status}`);
+        }
         if (!response.ok) {
           return false;
         }
@@ -253,8 +261,6 @@ export class ApiService {
         // Finish persistence before callers save the same account again.
         await this.onTokenRefreshed?.(data.token, data.refreshToken);
         return true;
-      } catch {
-        return false;
       } finally {
         this.refreshPromise = null;
       }

@@ -93,3 +93,19 @@ it('clears the previous refresh token when the target account has none', async (
   expect(api.getRefreshToken()).toBeNull();
   expect(read('auth_refresh_token')).toBeNull();
 });
+
+it('revokes and clears the session when an expired session logs out from a background request', async () => {
+  const revoked: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+    if (url.endsWith('/auth/refresh')) return ok({ error: 'Revoked' }, 401);
+    if (url.endsWith('/auth/logout')) { revoked.push(JSON.parse(init.body as string).refreshToken); return ok({ success: true }); }
+    return ok({ user: user('A') });
+  }));
+  const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+  await waitFor(() => expect(result.current.user?.id).toBe('A'));
+  await act(async () => { api.onAuthExpired?.(); });
+  await waitFor(() => expect(result.current.user).toBeNull());
+  expect(read('auth_token')).toBeNull();
+  expect(read('auth_refresh_token')).toBeNull();
+  expect(revoked).toEqual(['A-refresh']);
+});

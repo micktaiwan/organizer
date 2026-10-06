@@ -207,6 +207,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Throttlé : la reconnexion socket est illimitée, un token durablement refusé
   // enchaînerait sinon les refresh en boucle serrée.
   const lastAuthRefreshRef = useRef(0);
+  // Long-lived callbacks (socket listener, api hooks) must call the current
+  // logout: a first-render copy sees no server and no refresh token, so it
+  // neither clears the stored tokens nor revokes the session.
+  const logoutRef = useRef<() => Promise<void>>(async () => {});
   const handleSocketAuthError = useCallback(async () => {
     const now = Date.now();
     if (now - lastAuthRefreshRef.current < 10000) {
@@ -215,14 +219,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     lastAuthRefreshRef.current = now;
     console.log('[Auth] Socket auth error, attempting token refresh...');
-    const refreshed = await api.tryRefresh();
+    let refreshed: boolean;
+    try {
+      refreshed = await api.tryRefresh();
+    } catch (error) {
+      // Server unreachable: keep the session, the socket watchdog retries.
+      console.warn('[Auth] Token refresh unavailable, keeping session:', (error as Error).message);
+      return;
+    }
     if (refreshed) {
       const newToken = api.getToken()!;
       socketService.disconnect();
       socketService.connect(newToken);
     } else {
-      console.log('[Auth] Refresh failed from socket auth error, logging out');
-      logout();
+      console.log('[Auth] Refresh token rejected from socket auth error, logging out');
+      logoutRef.current();
     }
   }, []);
 
@@ -241,7 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // When refresh fails, force logout
     api.onAuthExpired = () => {
       console.log('[Auth] Auth expired, logging out');
-      logout();
+      logoutRef.current();
     };
 
     // Listen for socket auth errors
@@ -397,6 +408,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     socketService.disconnect();
   };
+  logoutRef.current = logout;
 
   const updateUser = (updatedUser: User) => {
     setUser(updatedUser);
