@@ -25,9 +25,14 @@
     "fs:default",
     "fs:allow-read-file",
     "fs:allow-write-file",
+    "fs:allow-exists",
+    "fs:allow-remove",
     {
       "identifier": "fs:scope",
-      "allow": [{ "path": "$DOWNLOAD/**" }]
+      "allow": [
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$TEMP/organizer-recording-*" }
+      ]
     },
     "store:default",
     "notification:default",

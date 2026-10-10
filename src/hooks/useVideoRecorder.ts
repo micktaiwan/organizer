@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { tempDir } from "@tauri-apps/api/path";
+import { tempDir, join } from "@tauri-apps/api/path";
 import { writeFile, remove, exists } from "@tauri-apps/plugin-fs";
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -276,7 +276,7 @@ export const useVideoRecorder = (): UseVideoRecorderReturn => {
         try {
           const ext = mimeTypeRef.current.includes('mp4') ? 'mp4' : 'webm';
           const tempPath = await tempDir();
-          const filePath = `${tempPath}organizer-recording-${Date.now()}.${ext}`;
+          const filePath = await join(tempPath, `organizer-recording-${Date.now()}.${ext}`);
           const arrayBuffer = await blob.arrayBuffer();
           await writeFile(filePath, new Uint8Array(arrayBuffer));
           tempFilePathRef.current = filePath;
