@@ -686,8 +686,11 @@ struct ServerStatusStep {
 
 #[tauri::command]
 async fn stream_server_status(app: tauri::AppHandle) -> Result<(), String> {
-    use std::io::{BufRead, BufReader};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::process::{Command, Stdio};
+
+    // The script is embedded and piped to `bash -s`, so the server needs nothing installed
+    const SCRIPT: &str = include_str!("../../server/scripts/server-status.sh");
 
     // Emit connecting step
     let _ = app.emit("server-status:step", ServerStatusStep {
@@ -696,15 +699,22 @@ async fn stream_server_status(app: tauri::AppHandle) -> Result<(), String> {
     });
 
     // Spawn SSH process
-    let child = Command::new("ssh")
-        .args(["-o", "ConnectTimeout=10", "ubuntu@51.178.29.205", "/home/ubuntu/server-status.sh"])
+    let mut child = Command::new("ssh")
+        .args(["-o", "ConnectTimeout=10", "-o", "BatchMode=yes", "ubuntu@51.178.29.205", "bash -s"])
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to spawn SSH: {}", e))?;
 
-    let stdout = child.stdout.ok_or("Failed to capture stdout")?;
+    // Dropping stdin after the write closes it, so bash sees EOF and runs the script
+    child.stdin.take().ok_or("Failed to capture stdin")?
+        .write_all(SCRIPT.as_bytes())
+        .map_err(|e| format!("Failed to send script: {}", e))?;
+
+    let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
     let reader = BufReader::new(stdout);
+    let mut done = false;
 
     for line in reader.lines() {
         let line = line.map_err(|e| format!("Read error: {}", e))?;
@@ -720,6 +730,9 @@ async fn stream_server_status(app: tauri::AppHandle) -> Result<(), String> {
             .and_then(|v| v.as_str())
             .unwrap_or("unknown")
             .to_string();
+        if step == "done" {
+            done = true;
+        }
 
         let data = parsed.get("data").cloned();
 
@@ -730,6 +743,15 @@ async fn stream_server_status(app: tauri::AppHandle) -> Result<(), String> {
         });
     }
 
+    let mut stderr = String::new();
+    if let Some(mut err) = child.stderr.take() {
+        let _ = err.read_to_string(&mut stderr);
+    }
+    let _ = child.wait();
+
+    if !done {
+        return Err(format!("Server status ended without completing: {}", stderr.trim()));
+    }
     Ok(())
 }
 

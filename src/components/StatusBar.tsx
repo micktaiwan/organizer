@@ -205,10 +205,11 @@ export function StatusBar({ onOpenAdmin, onChangeServer, serverName, currentRoom
       await invoke('stream_server_status');
     } catch (err) {
       console.error("[StatusBar] server status error:", err);
-      setServerStatusLoading(false);
-      setServerStatusStep(null);
     } finally {
       if (unlisten) unlisten();
+      // Never leave the panel spinning: without a 'done' step, the error state shows
+      setServerStatusLoading(false);
+      setServerStatusStep(null);
     }
   };
 
