@@ -5,6 +5,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.media.AudioAttributes
 import android.os.Binder
 import android.os.Build
@@ -81,6 +85,15 @@ class ChatService : Service() {
     // Cache room names for notifications
     private val roomNames = mutableMapOf<String, String>()
 
+    // Reconnect as soon as the phone gets a network back (subway exit, wifi -> 4G...)
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            if (tokenManager.getTokenSync() != null) {
+                socketManager.onNetworkAvailable()
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "ChatService onCreate")
@@ -98,6 +111,25 @@ class ChatService : Service() {
 
         // Reconnect socket when token is refreshed (e.g. after AuthInterceptor refresh)
         observeTokenRefresh()
+
+        registerNetworkCallback()
+    }
+
+    private fun registerNetworkCallback() {
+        try {
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            getSystemService(ConnectivityManager::class.java)
+                .registerNetworkCallback(request, networkCallback)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register network callback", e)
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Ask Android to restart the service if it kills it for memory
+        return START_STICKY
     }
 
     private fun getVersionCode(): Int {
@@ -259,6 +291,11 @@ class ChatService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "ChatService onDestroy")
+        try {
+            getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(networkCallback)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to unregister network callback", e)
+        }
         socketManager.disconnect()
         serviceScope.cancel()
     }

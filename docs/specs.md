@@ -122,3 +122,7 @@ Il existe deux sources de données utilisateur qui doivent rester synchronisées
 - Desktop : notification desktop quand un utilisateur (hors bots) se connecte
 - Desktop : les notifications (messages et connexion) jouent un son système
 
+
+## Connexion
+
+- Android : reconnexion automatique au serveur après une coupure (essais de plus en plus espacés jusqu'à 1 par minute, reconnexion immédiate au retour du réseau)

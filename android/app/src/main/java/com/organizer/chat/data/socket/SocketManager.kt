@@ -11,13 +11,25 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import org.json.JSONObject
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 class SocketManager(private val tokenManager: TokenManager) {
 
     companion object {
         private const val TAG = "SocketManager"
         private const val SERVER_URL = "https://organizer.mickaelfm.me"
+        private const val RECONNECT_BASE_DELAY_MS = 2_000L
+        private const val RECONNECT_MAX_DELAY_MS = 60_000L
     }
+
+    // Reconnect loop: retries forever with exponential backoff until connected
+    // or until the client explicitly disconnects
+    private val reconnectExecutor = Executors.newSingleThreadScheduledExecutor()
+    private var pendingReconnect: ScheduledFuture<*>? = null
+    private var reconnectAttempt = 0
+    @Volatile private var explicitlyDisconnected = false
 
     private var socket: Socket? = null
     private var lastVersionName: String? = null
@@ -144,6 +156,8 @@ class SocketManager(private val tokenManager: TokenManager) {
             return
         }
 
+        explicitlyDisconnected = false
+
         // Store for reconnection after token refresh
         if (versionName != null) lastVersionName = versionName
         if (versionCode != null) lastVersionCode = versionCode
@@ -185,13 +199,57 @@ class SocketManager(private val tokenManager: TokenManager) {
         } catch (e: Exception) {
             Log.e(TAG, "Socket connection error", e)
             _connectionState.tryEmit(ConnectionState.Error(e.message ?: "Unknown error"))
+            scheduleReconnect()
         }
+    }
+
+    @Synchronized
+    private fun scheduleReconnect() {
+        if (explicitlyDisconnected) return
+        if (pendingReconnect?.isDone == false) return
+
+        val delay = minOf(RECONNECT_BASE_DELAY_MS shl minOf(reconnectAttempt, 5), RECONNECT_MAX_DELAY_MS)
+        reconnectAttempt++
+        Log.d(TAG, "Scheduling reconnect #$reconnectAttempt in ${delay}ms")
+        pendingReconnect = reconnectExecutor.schedule({
+            // Clear before connecting so a fast connect_error can schedule the next attempt
+            synchronized(this) { pendingReconnect = null }
+            if (!explicitlyDisconnected && socket?.connected() != true && tokenManager.getTokenSync() != null) {
+                Log.d(TAG, "Auto-reconnecting (attempt $reconnectAttempt)...")
+                connect(lastVersionName, lastVersionCode)
+            }
+        }, delay, TimeUnit.MILLISECONDS)
+    }
+
+    @Synchronized
+    private fun cancelReconnect() {
+        pendingReconnect?.cancel(false)
+        pendingReconnect = null
+    }
+
+    /**
+     * Called when the network comes back: drop the backoff and retry right away.
+     */
+    @Synchronized
+    fun onNetworkAvailable() {
+        if (explicitlyDisconnected || socket?.connected() == true) return
+        // Only short-circuit an active retry loop: Android also fires this callback right
+        // after registration and on every extra network, while a first connect is in flight
+        if (pendingReconnect == null) return
+        Log.d(TAG, "Network available, reconnecting now")
+        cancelReconnect()
+        reconnectAttempt = 0
+        reconnectExecutor.execute { connect(lastVersionName, lastVersionCode) }
     }
 
     private fun setupListeners() {
         socket?.apply {
             on(Socket.EVENT_CONNECT) {
                 Log.d(TAG, "Socket connected")
+                synchronized(this@SocketManager) {
+                    reconnectAttempt = 0
+                    cancelReconnect()
+                }
                 _connectionState.tryEmit(ConnectionState.Connected)
             }
 
@@ -203,14 +261,7 @@ class SocketManager(private val tokenManager: TokenManager) {
                 // Auto-reconnect after server or network disconnect
                 // Skip if client explicitly called disconnect() (reason = "io client disconnect")
                 if (reason != "io client disconnect") {
-                    Log.d(TAG, "Scheduling reconnect in 2s...")
-                    Thread {
-                        Thread.sleep(2000)
-                        if (socket?.connected() != true && tokenManager.getTokenSync() != null) {
-                            Log.d(TAG, "Auto-reconnecting after disconnect...")
-                            connect(lastVersionName, lastVersionCode)
-                        }
-                    }.start()
+                    scheduleReconnect()
                 }
             }
 
@@ -232,6 +283,9 @@ class SocketManager(private val tokenManager: TokenManager) {
                             tokenManager.notifySessionExpired("Session expirée, reconnecte-toi")
                         }
                     }.start()
+                } else {
+                    // Network error (no signal, server down...): keep retrying
+                    scheduleReconnect()
                 }
             }
 
@@ -775,6 +829,8 @@ class SocketManager(private val tokenManager: TokenManager) {
     }
 
     fun disconnect() {
+        explicitlyDisconnected = true
+        cancelReconnect()
         socket?.disconnect()
         socket?.off()
         socket = null
