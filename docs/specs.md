@@ -121,6 +121,7 @@ Il existe deux sources de données utilisateur qui doivent rester synchronisées
 
 - Desktop : notification desktop quand un utilisateur (hors bots) se connecte
 - Desktop : les notifications (messages et connexion) jouent un son système
+- Desktop + Android : les notifications disparaissent d'elles-mêmes au bout de 30 secondes
 
 
 ## Connexion

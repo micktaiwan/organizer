@@ -45,6 +45,7 @@ class ChatService : Service() {
         private const val TAG = "ChatService"
         private const val SERVICE_NOTIFICATION_ID = 1
         private const val MESSAGE_NOTIFICATION_ID_BASE = 1000
+        private const val MESSAGE_NOTIFICATION_TIMEOUT_MS = 30_000L
         const val CHANNEL_SERVICE = "service"
         const val CHANNEL_MESSAGES = "messages"
     }
@@ -236,6 +237,7 @@ class ChatService : Service() {
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setTimeoutAfter(MESSAGE_NOTIFICATION_TIMEOUT_MS)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .build()

@@ -3,8 +3,16 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
+import { invoke } from "@tauri-apps/api/core";
 
 let permissionGranted = false;
+
+// Removes the notification from Notification Center after 30s (see schedule_notification_expiry)
+function scheduleExpiry(): void {
+  invoke("schedule_notification_expiry").catch((err) =>
+    console.error("Failed to schedule notification expiry:", err)
+  );
+}
 
 // Key for storing pending notification navigation
 const PENDING_NOTIFICATION_KEY = "organizer-pending-notification-roomId";
@@ -54,6 +62,7 @@ export async function showMessageNotification(
       body: preview,
       sound: "default",
     });
+    scheduleExpiry();
   } catch (err) {
     console.error("Failed to send notification:", err);
   }
@@ -73,6 +82,7 @@ export async function showPresenceNotification(displayName: string): Promise<voi
       body: `${displayName} just connected`,
       sound: "default",
     });
+    scheduleExpiry();
   } catch (err) {
     console.error("Failed to send presence notification:", err);
   }

@@ -878,6 +878,39 @@ fn get_disk_space_detailed() -> Result<DiskSpaceDetailed, String> {
     })
 }
 
+/// Seconds a desktop notification stays in Notification Center before being removed.
+const NOTIFICATION_LIFETIME_SECS: u64 = 30;
+
+/// Removes delivered notifications older than the lifetime, after waiting for it.
+/// Called right after each notification is shown, so every notification gets its own sweep.
+#[tauri::command]
+fn schedule_notification_expiry(app: AppHandle) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(NOTIFICATION_LIFETIME_SECS));
+        let _ = app.run_on_main_thread(remove_expired_notifications);
+    });
+}
+
+#[cfg(target_os = "macos")]
+#[allow(deprecated)]
+fn remove_expired_notifications() {
+    use objc2_foundation::NSUserNotificationCenter;
+    // notify-rust delivers through NSUserNotificationCenter, so this is the same center.
+    let center = NSUserNotificationCenter::defaultUserNotificationCenter();
+    for notification in center.deliveredNotifications().iter() {
+        let age = notification
+            .actualDeliveryDate()
+            .map(|date| -date.timeIntervalSinceNow());
+        // Small margin so the notification that scheduled this sweep is always included
+        if age.map_or(true, |secs| secs >= NOTIFICATION_LIFETIME_SECS as f64 - 1.0) {
+            center.removeDeliveredNotification(&notification);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn remove_expired_notifications() {}
+
 #[tauri::command]
 fn set_tray_badge(app: AppHandle, has_badge: bool) -> Result<(), String> {
     let icon_state = app
@@ -1205,7 +1238,7 @@ pub fn run() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![greet, set_tray_badge, get_disk_space, get_disk_space_detailed, get_memory_info, get_top_processes, get_process_details, stream_server_status])
+        .invoke_handler(tauri::generate_handler![greet, set_tray_badge, schedule_notification_expiry, get_disk_space, get_disk_space_detailed, get_memory_info, get_top_processes, get_process_details, stream_server_status])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
