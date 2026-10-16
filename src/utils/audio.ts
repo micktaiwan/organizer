@@ -1,13 +1,15 @@
-// Shared AudioContext for notification sounds (short-lived)
+// Shared AudioContext for notification sounds, suspended between two sounds.
+// A running AudioContext keeps an output stream open even when silent: macOS then reports
+// Organizer as playing sound around the clock (MacTools' recent sounds list did, 15/10/2026).
 let notificationAudioContext: AudioContext | null = null;
 
-export const playNotificationSound = () => {
-  // Create or resume AudioContext
+export const playNotificationSound = async () => {
   if (!notificationAudioContext || notificationAudioContext.state === 'closed') {
     notificationAudioContext = new AudioContext();
   }
   if (notificationAudioContext.state === 'suspended') {
-    notificationAudioContext.resume();
+    // Scheduling against a suspended context would use a frozen clock.
+    await notificationAudioContext.resume();
   }
 
   const oscillator = notificationAudioContext.createOscillator();
@@ -24,6 +26,9 @@ export const playNotificationSound = () => {
 
   oscillator.start(notificationAudioContext.currentTime);
   oscillator.stop(notificationAudioContext.currentTime + 0.2);
+  oscillator.onended = () => {
+    notificationAudioContext?.suspend();
+  };
 };
 
 // Ringback tone state (outgoing calls - waiting for answer)
